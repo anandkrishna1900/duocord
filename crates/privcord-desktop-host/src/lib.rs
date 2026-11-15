@@ -418,6 +418,18 @@ impl DesktopHost {
                 e.confirm_device_link(args.get("accept").and_then(Value::as_bool).unwrap_or(false)),
             ),
             "cancel_device_link" => unit(e.cancel_device_link()),
+            "request_device_removal" => unit(e.request_device_removal(text(args, "device")?)),
+            "cancel_device_removal" => unit(e.cancel_device_removal(text(args, "device")?)),
+            "remove_device_now" => unit(
+                e.remove_device_now(
+                    text(args, "device")?,
+                    text(args, "phrase")?,
+                    args.get("passphrase")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_owned(),
+                ),
+            ),
             "set_bulk_allowed" => unit(
                 e.set_bulk_allowed(args.get("allowed").and_then(Value::as_bool).unwrap_or(true)),
             ),

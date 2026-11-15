@@ -374,7 +374,7 @@ impl GroupCoordinator {
                 kind,
                 actor: own.clone(),
                 ts: now_ms,
-                deps: log.heads(),
+                deps: log.build_on(),
                 target: target.clone(),
                 card,
                 name,

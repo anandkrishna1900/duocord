@@ -138,6 +138,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         engine?.cancelDeviceLink()
     }
 
+    fun deviceRemoval(action: com.duochat.app.data.DeviceRemoval, onResult: (Result<Unit>) -> Unit) {
+        viewModelScope.launch { onResult(engine?.deviceRemoval(action) ?: Result.failure(IllegalStateException("Chat is not ready yet."))) }
+    }
+
     /** This phone was linked to an account on another device: start again as that account. */
     fun onDeviceLinked() {
         startEngine()

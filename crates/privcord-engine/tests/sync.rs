@@ -1416,3 +1416,288 @@ fn a_gap_left_by_a_device_that_is_gone_is_closed_by_the_account_and_what_came_af
     assert!(!phone.texts().contains(&"never arrives".to_owned()));
     assert!(phone.core.snapshot().sync_lost >= 1);
 }
+
+/// The mailboxes `d` posted to since `before` (counts per mailbox on the relay).
+fn posted_since(relay: &Relay, before: &HashMap<String, usize>) -> BTreeSet<String> {
+    relay
+        .boxes
+        .iter()
+        .filter(|(m, v)| v.len() > before.get(*m).copied().unwrap_or(0))
+        .map(|(m, _)| m.clone())
+        .collect()
+}
+
+fn counts(relay: &Relay) -> HashMap<String, usize> {
+    relay
+        .boxes
+        .iter()
+        .map(|(m, v)| (m.clone(), v.len()))
+        .collect()
+}
+
+#[test]
+fn a_removal_waits_a_day_can_be_taken_back_and_then_locks_the_device_out() {
+    const DAY: i64 = 24 * 60 * 60 * 1000;
+    let clock = FakeClock::at(1_700_000_000_000);
+    let mut relay = Relay::default();
+    let mut phone = Device::new("phone", &clock);
+    phone.core.create_identity().unwrap();
+    let pat = phone.core.own_uid().unwrap().clone();
+    let mut fran = Device::new("fran", &clock);
+    fran.core.create_identity().unwrap();
+    let fran_uid = fran.core.own_uid().unwrap().clone();
+    phone
+        .core
+        .add_contact(
+            &fran.core.own_card(Some("Fran")).unwrap(),
+            ContactTrust::Verified,
+        )
+        .unwrap();
+    fran.core
+        .add_contact(
+            &phone.core.own_card(Some("Pat")).unwrap(),
+            ContactTrust::Verified,
+        )
+        .unwrap();
+    phone.core.set_store_forward(true).unwrap();
+    fran.core.set_store_forward(true).unwrap();
+    let mut laptop = link_laptop(&mut phone, &mut relay, &clock);
+    let mut tablet = link_device(&mut phone, &mut relay, &clock, "tablet");
+    for d in [&mut laptop, &mut tablet] {
+        d.core.set_store_forward(true).unwrap();
+    }
+    for _ in 0..3 {
+        laptop.online(&mut relay);
+        tablet.online(&mut relay);
+        phone.online(&mut relay);
+        fran.online(&mut relay);
+    }
+    let tablet_id = tablet.core.this_device_id().unwrap().to_owned();
+    let laptop_id = laptop.core.this_device_id().unwrap().to_owned();
+    let tablet_addr = UserId::new(format!("{pat}.{tablet_id}")).unwrap();
+
+    // Not this device, and not one that is not on the list.
+    assert_eq!(
+        laptop.core.request_device_removal(&laptop_id),
+        Err(privcord_engine::ErrorCode::UnknownDevice)
+    );
+    assert_eq!(
+        laptop.core.request_device_removal("nope"),
+        Err(privcord_engine::ErrorCode::UnknownDevice)
+    );
+
+    // The laptop asks; every device shows it, and the phone takes it back.
+    laptop.core.request_device_removal(&tablet_id).unwrap();
+    for _ in 0..2 {
+        laptop.online(&mut relay);
+        phone.online(&mut relay);
+        tablet.online(&mut relay);
+    }
+    let shown = |d: &Device| {
+        d.core
+            .snapshot()
+            .devices
+            .into_iter()
+            .find(|v| v.id == tablet_id)
+            .and_then(|v| v.removal_at)
+    };
+    assert!(shown(&phone).is_some() && shown(&tablet).is_some());
+    phone.core.cancel_device_removal(&tablet_id).unwrap();
+    for _ in 0..2 {
+        phone.online(&mut relay);
+        laptop.online(&mut relay);
+    }
+    assert!(shown(&laptop).is_none());
+    clock.advance(DAY + 1);
+    phone.online(&mut relay);
+    assert!(phone
+        .core
+        .device_list()
+        .unwrap()
+        .get(&tablet_id)
+        .unwrap()
+        .active());
+
+    // Asked again: nothing happens before a day has passed, then the phone carries it out.
+    laptop.core.request_device_removal(&tablet_id).unwrap();
+    for _ in 0..2 {
+        laptop.online(&mut relay);
+        phone.online(&mut relay);
+    }
+    let tablet_boxes = tablet.subscribed.clone();
+    clock.advance(DAY - 60_000);
+    phone.online(&mut relay);
+    assert!(phone
+        .core
+        .device_list()
+        .unwrap()
+        .get(&tablet_id)
+        .unwrap()
+        .active());
+    clock.advance(120_000);
+    phone.online(&mut relay);
+    let list = phone.core.device_list().unwrap().clone();
+    assert!(!list.get(&tablet_id).unwrap().active());
+
+    // The laptop gets the new list and key; what it writes from now on goes where the tablet never listened.
+    laptop.online(&mut relay);
+    laptop.online(&mut relay);
+    assert_eq!(laptop.core.device_list(), Some(&list));
+    let before = counts(&relay);
+    laptop
+        .core
+        .send_message(&fran_uid, "after the tablet went", None)
+        .unwrap();
+    laptop.online(&mut relay);
+    let posted = posted_since(&relay, &before);
+    assert!(!posted.is_empty());
+    assert!(
+        posted.is_disjoint(&tablet_boxes),
+        "nothing goes where the tablet listens"
+    );
+    phone.online(&mut relay);
+    phone.online(&mut relay);
+    assert!(phone.texts().contains(&"after the tablet went".to_owned()));
+
+    // Fran hears of the removal: the tablet's keys are gone, and she no longer writes to it.
+    fran.online(&mut relay);
+    fran.online(&mut relay);
+    let hers = fran.core.contact_device_list(&pat).unwrap();
+    assert!(!hers.get(&tablet_id).unwrap().active());
+    assert!(fran.texts().contains(&"after the tablet went".to_owned()));
+    let before = counts(&relay);
+    fran.core
+        .send_message(&pat, "to Pat's devices", None)
+        .unwrap();
+    fran.online(&mut relay);
+    let tablet_inbox = privcord_crypto::seal::mailbox_for(tablet_addr.as_str());
+    assert!(!posted_since(&relay, &before).contains(&tablet_inbox));
+    phone.online(&mut relay);
+    laptop.online(&mut relay);
+    assert!(phone.texts().contains(&"to Pat's devices".to_owned()));
+    assert!(laptop.texts().contains(&"to Pat's devices".to_owned()));
+
+    // The tablet, back online, gets the signed wipe and erases itself.
+    tablet.online(&mut relay);
+    assert!(tablet.core.own_uid().is_none(), "the tablet erased itself");
+    assert!(tablet.texts().is_empty());
+}
+
+#[test]
+fn the_phrase_removes_a_device_at_once_and_a_request_cannot_remove_the_account_key() {
+    const DAY: i64 = 24 * 60 * 60 * 1000;
+    let clock = FakeClock::at(1_700_000_000_000);
+    let mut relay = Relay::default();
+    let mut phone = Device::new("phone", &clock);
+    let phrase = phone.core.create_identity().unwrap();
+    let mut laptop = link_laptop(&mut phone, &mut relay, &clock);
+    let mut tablet = link_device(&mut phone, &mut relay, &clock, "tablet");
+    for _ in 0..3 {
+        laptop.online(&mut relay);
+        tablet.online(&mut relay);
+        phone.online(&mut relay);
+    }
+    let phone_id = phone.core.this_device_id().unwrap().to_owned();
+    let tablet_id = tablet.core.this_device_id().unwrap().to_owned();
+
+    // A request to remove the phone (it holds the account key) waits for the phrase: the phone never carries it out.
+    tablet.core.request_device_removal(&phone_id).unwrap();
+    tablet.online(&mut relay);
+    clock.advance(DAY * 2);
+    phone.online(&mut relay);
+    phone.online(&mut relay);
+    assert!(phone
+        .core
+        .device_list()
+        .unwrap()
+        .get(&phone_id)
+        .unwrap()
+        .active());
+    assert!(phone.core.own_uid().is_some());
+
+    // A wrong phrase removes nothing; the right one, on the laptop, removes the tablet at once.
+    assert_eq!(
+        laptop
+            .core
+            .remove_device_now(&tablet_id, "not the phrase at all", ""),
+        Err(privcord_engine::ErrorCode::InvalidPhrase)
+    );
+    laptop
+        .core
+        .remove_device_now(&tablet_id, &phrase, "")
+        .unwrap();
+    assert!(!laptop
+        .core
+        .device_list()
+        .unwrap()
+        .get(&tablet_id)
+        .unwrap()
+        .active());
+    assert!(
+        !laptop.core.holds_account_key(),
+        "the account key is not kept"
+    );
+    laptop.online(&mut relay);
+    phone.online(&mut relay);
+    phone.online(&mut relay);
+    assert!(!phone
+        .core
+        .device_list()
+        .unwrap()
+        .get(&tablet_id)
+        .unwrap()
+        .active());
+    // The phone took the laptop's new key: they still sync.
+    let (card, fran) = friend(&clock);
+    phone
+        .core
+        .add_contact(&card, ContactTrust::Verified)
+        .unwrap();
+    phone.online(&mut relay);
+    laptop.online(&mut relay);
+    laptop.online(&mut relay);
+    assert!(laptop
+        .core
+        .snapshot()
+        .contacts
+        .iter()
+        .any(|c| c.uid == fran));
+    tablet.online(&mut relay);
+    assert!(tablet.core.own_uid().is_none());
+}
+
+#[test]
+fn a_device_not_heard_from_for_ninety_days_is_shown_as_stale() {
+    let clock = FakeClock::at(1_700_000_000_000);
+    let mut relay = Relay::default();
+    let mut phone = Device::new("phone", &clock);
+    phone.core.create_identity().unwrap();
+    let mut laptop = link_laptop(&mut phone, &mut relay, &clock);
+    for _ in 0..2 {
+        laptop.online(&mut relay);
+        phone.online(&mut relay);
+    }
+    let laptop_id = laptop.core.this_device_id().unwrap().to_owned();
+    let view = |p: &Device| {
+        p.core
+            .snapshot()
+            .devices
+            .into_iter()
+            .find(|v| v.id == laptop_id)
+            .unwrap()
+    };
+    assert!(!view(&phone).stale);
+    clock.advance(91 * 24 * 60 * 60 * 1000);
+    phone.online(&mut relay);
+    assert!(view(&phone).stale);
+    assert!(
+        !phone
+            .core
+            .snapshot()
+            .devices
+            .into_iter()
+            .find(|v| v.this_device)
+            .unwrap()
+            .stale
+    );
+}

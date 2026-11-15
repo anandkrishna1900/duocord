@@ -56,6 +56,10 @@ export interface ChatEngineApi {
   joinDeviceLink?(code: string, name: string): Promise<void>;
   confirmDeviceLink?(accept: boolean): Promise<void>;
   cancelDeviceLink?(): void;
+  /** Removing another device of the account: in 24 hours (any device can take it back), or now with the phrase. */
+  requestDeviceRemoval?(deviceId: string): Promise<void>;
+  cancelDeviceRemoval?(deviceId: string): Promise<void>;
+  removeDeviceNow?(deviceId: string, phrase: string): Promise<void>;
 
   joinChannel(raw: string, persist?: boolean): Promise<string>;
   leaveChannel(convId: string): void;

@@ -357,7 +357,26 @@ fun createOutgoingMessage(senderId: String, text: String, replyTo: ReplyRef? = n
 data class LegacyGroup(val oldId: String, val name: String, val memberNames: List<String>, val missing: Int)
 
 /** One device of the account. */
-data class DeviceInfo(val id: String, val name: String, val addedAt: Long, val thisDevice: Boolean)
+data class DeviceInfo(
+    val id: String,
+    val name: String,
+    val addedAt: Long,
+    val thisDevice: Boolean,
+    /** When it last wrote anything this phone has, if ever. */
+    val lastSeen: Long? = null,
+    /** Not heard from for 90 days: "Remove or reconnect". */
+    val stale: Boolean = false,
+    /** A removal was asked for: when it takes effect, unless taken back. */
+    val removalAt: Long? = null,
+)
+
+/** Removing another device of the account: in 24 hours (any device can take it back), or now with the recovery phrase. */
+sealed interface DeviceRemoval {
+    val deviceId: String
+    data class Request(override val deviceId: String) : DeviceRemoval
+    data class Cancel(override val deviceId: String) : DeviceRemoval
+    data class Now(override val deviceId: String, val phrase: String) : DeviceRemoval
+}
 
 /** Linking a device, while it happens: "code" (compare [code], the 6 digits), then "done", "failed", "cancelled" or "expired". */
 data class DeviceLinkState(val stage: String, val code: String? = null, val name: String? = null)

@@ -3645,11 +3645,31 @@ input[type='checkbox'] {
   gap: 8px;
 }
 .device-list li {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-strong);
+}
+.device-row-main {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
   gap: 12px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: var(--surface-strong);
+}
+.device-row-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+}
+.device-remove {
+  display: grid;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.device-remove p {
+  margin: 0;
 }

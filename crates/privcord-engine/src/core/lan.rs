@@ -47,8 +47,10 @@ impl Core {
     /// A beacon heard on the local network: another device of ours (still on the account's list), recent, and not this
     /// one. Anything else is `None`.
     pub fn lan_beacon_seen(&self, beacon: &str) -> Option<LanPeer> {
-        let key = self.sync.as_ref()?.sync_key()?;
-        let v = open_lan_beacon(key, beacon)?;
+        // A device still on the key before the last replacement is found too (it is given the new one over the link).
+        let s = self.sync.as_ref()?;
+        let v = open_lan_beacon(s.sync_key()?, beacon)
+            .or_else(|| open_lan_beacon(s.prev_key()?, beacon))?;
         let device = v.get("d").and_then(Value::as_str)?;
         let port = u16::try_from(v.get("p").and_then(Value::as_u64)?).ok()?;
         let at = v.get("t").and_then(Value::as_i64)?;

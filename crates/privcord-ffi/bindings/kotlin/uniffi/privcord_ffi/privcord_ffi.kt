@@ -1058,6 +1058,12 @@ internal open class UniffiVTableCallbackInterfaceTransportCallbacks(
 
 
 
+
+
+
+
+
+
 // A JNA Library to expose the extern-C FFI definitions.
 // This is an implementation detail which will be called internally by the public API.
 
@@ -1123,6 +1129,8 @@ internal interface UniffiLib : Library {
     fun uniffi_privcord_ffi_fn_method_privcordengine_ble_secret(`ptr`: Pointer,`peer`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_privcord_ffi_fn_method_privcordengine_cancel_device_link(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    fun uniffi_privcord_ffi_fn_method_privcordengine_cancel_device_removal(`ptr`: Pointer,`device`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_clear_answer(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
@@ -1190,11 +1198,15 @@ internal interface UniffiLib : Library {
     ): RustBuffer.ByValue
     fun uniffi_privcord_ffi_fn_method_privcordengine_remove_contact(`ptr`: Pointer,`uid`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    fun uniffi_privcord_ffi_fn_method_privcordengine_remove_device_now(`ptr`: Pointer,`device`: RustBuffer.ByValue,`phrase`: RustBuffer.ByValue,`passphrase`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_remove_group_member(`ptr`: Pointer,`group`: RustBuffer.ByValue,`uid`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_rename_contact(`ptr`: Pointer,`uid`: RustBuffer.ByValue,`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_rename_group(`ptr`: Pointer,`group`: RustBuffer.ByValue,`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    fun uniffi_privcord_ffi_fn_method_privcordengine_request_device_removal(`ptr`: Pointer,`device`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_reset_dial_backoff(`ptr`: Pointer,`peer`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
@@ -1430,6 +1442,8 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_cancel_device_link(
     ): Short
+    fun uniffi_privcord_ffi_checksum_method_privcordengine_cancel_device_removal(
+    ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_clear_answer(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_confirm_device_link(
@@ -1496,11 +1510,15 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_remove_contact(
     ): Short
+    fun uniffi_privcord_ffi_checksum_method_privcordengine_remove_device_now(
+    ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_remove_group_member(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_rename_contact(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_rename_group(
+    ): Short
+    fun uniffi_privcord_ffi_checksum_method_privcordengine_request_device_removal(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_reset_dial_backoff(
     ): Short
@@ -1635,6 +1653,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_cancel_device_link() != 19478.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_cancel_device_removal() != 32243.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_clear_answer() != 55739.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1734,6 +1755,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_remove_contact() != 13126.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_remove_device_now() != 12271.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_remove_group_member() != 4702.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1741,6 +1765,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_rename_group() != 8179.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_request_device_removal() != 59975.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_reset_dial_backoff() != 27923.toShort()) {
@@ -3160,6 +3187,11 @@ public interface PrivcordEngineInterface {
     
     fun `cancelDeviceLink`()
     
+    /**
+     * Take back a removal asked for.
+     */
+    fun `cancelDeviceRemoval`(`device`: kotlin.String)
+    
     fun `clearAnswer`()
     
     /**
@@ -3301,6 +3333,11 @@ public interface PrivcordEngineInterface {
      */
     fun `removeContact`(`uid`: kotlin.String)
     
+    /**
+     * Remove another device of the account at once, with the recovery phrase (not kept).
+     */
+    fun `removeDeviceNow`(`device`: kotlin.String, `phrase`: kotlin.String, `passphrase`: kotlin.String)
+    
     fun `removeGroupMember`(`group`: kotlin.String, `uid`: kotlin.String)
     
     /**
@@ -3309,6 +3346,12 @@ public interface PrivcordEngineInterface {
     fun `renameContact`(`uid`: kotlin.String, `name`: kotlin.String)
     
     fun `renameGroup`(`group`: kotlin.String, `name`: kotlin.String)
+    
+    /**
+     * Ask for another device of the account to be removed: every device shows it, and it happens in 24 hours unless
+     * taken back (a device holding the account key can only be removed with the phrase).
+     */
+    fun `requestDeviceRemoval`(`device`: kotlin.String)
     
     /**
      * Dial again at the next tick instead of waiting out the retry delay: for one friend, or for everyone not linked.
@@ -3585,6 +3628,21 @@ open class PrivcordEngine: Disposable, AutoCloseable, PrivcordEngineInterface {
     uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_cancel_device_link(
         it, _status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Take back a removal asked for.
+     */
+    @Throws(FfiException::class)override fun `cancelDeviceRemoval`(`device`: kotlin.String)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_cancel_device_removal(
+        it, FfiConverterString.lower(`device`),_status)
 }
     }
     
@@ -4075,6 +4133,21 @@ open class PrivcordEngine: Disposable, AutoCloseable, PrivcordEngineInterface {
     
 
     
+    /**
+     * Remove another device of the account at once, with the recovery phrase (not kept).
+     */
+    @Throws(FfiException::class)override fun `removeDeviceNow`(`device`: kotlin.String, `phrase`: kotlin.String, `passphrase`: kotlin.String)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_remove_device_now(
+        it, FfiConverterString.lower(`device`),FfiConverterString.lower(`phrase`),FfiConverterString.lower(`passphrase`),_status)
+}
+    }
+    
+    
+
+    
     @Throws(FfiException::class)override fun `removeGroupMember`(`group`: kotlin.String, `uid`: kotlin.String)
         = 
     callWithPointer {
@@ -4108,6 +4181,22 @@ open class PrivcordEngine: Disposable, AutoCloseable, PrivcordEngineInterface {
     uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_rename_group(
         it, FfiConverterString.lower(`group`),FfiConverterString.lower(`name`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Ask for another device of the account to be removed: every device shows it, and it happens in 24 hours unless
+     * taken back (a device holding the account key can only be removed with the phrase).
+     */
+    @Throws(FfiException::class)override fun `requestDeviceRemoval`(`device`: kotlin.String)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_request_device_removal(
+        it, FfiConverterString.lower(`device`),_status)
 }
     }
     
@@ -5606,7 +5695,19 @@ data class DeviceDto (
     var `id`: kotlin.String, 
     var `name`: kotlin.String, 
     var `addedAt`: kotlin.Long, 
-    var `thisDevice`: kotlin.Boolean
+    var `thisDevice`: kotlin.Boolean, 
+    /**
+     * When it last wrote anything this device has (milliseconds), if ever.
+     */
+    var `lastSeen`: kotlin.Long?, 
+    /**
+     * Not heard from for 90 days: offer "Remove or reconnect".
+     */
+    var `stale`: kotlin.Boolean, 
+    /**
+     * A removal was asked for: when it takes effect (milliseconds), unless taken back.
+     */
+    var `removalAt`: kotlin.Long?
 ) {
     
     companion object
@@ -5622,6 +5723,9 @@ public object FfiConverterTypeDeviceDto: FfiConverterRustBuffer<DeviceDto> {
             FfiConverterString.read(buf),
             FfiConverterLong.read(buf),
             FfiConverterBoolean.read(buf),
+            FfiConverterOptionalLong.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterOptionalLong.read(buf),
         )
     }
 
@@ -5629,7 +5733,10 @@ public object FfiConverterTypeDeviceDto: FfiConverterRustBuffer<DeviceDto> {
             FfiConverterString.allocationSize(value.`id`) +
             FfiConverterString.allocationSize(value.`name`) +
             FfiConverterLong.allocationSize(value.`addedAt`) +
-            FfiConverterBoolean.allocationSize(value.`thisDevice`)
+            FfiConverterBoolean.allocationSize(value.`thisDevice`) +
+            FfiConverterOptionalLong.allocationSize(value.`lastSeen`) +
+            FfiConverterBoolean.allocationSize(value.`stale`) +
+            FfiConverterOptionalLong.allocationSize(value.`removalAt`)
     )
 
     override fun write(value: DeviceDto, buf: ByteBuffer) {
@@ -5637,6 +5744,9 @@ public object FfiConverterTypeDeviceDto: FfiConverterRustBuffer<DeviceDto> {
             FfiConverterString.write(value.`name`, buf)
             FfiConverterLong.write(value.`addedAt`, buf)
             FfiConverterBoolean.write(value.`thisDevice`, buf)
+            FfiConverterOptionalLong.write(value.`lastSeen`, buf)
+            FfiConverterBoolean.write(value.`stale`, buf)
+            FfiConverterOptionalLong.write(value.`removalAt`, buf)
     }
 }
 
@@ -7447,6 +7557,12 @@ sealed class FfiException: kotlin.Exception() {
             get() = ""
     }
     
+    class UnknownDevice(
+        ) : FfiException() {
+        override val message
+            get() = ""
+    }
+    
     class Crypto(
         ) : FfiException() {
         override val message
@@ -7596,26 +7712,27 @@ public object FfiConverterTypeFfiError : FfiConverterRustBuffer<FfiException> {
             11 -> FfiException.UnknownMessage()
             12 -> FfiException.Storage()
             13 -> FfiException.SecureStorage()
-            14 -> FfiException.Crypto()
-            15 -> FfiException.ShuttingDown()
-            16 -> FfiException.Busy()
-            17 -> FfiException.InvalidArgument()
-            18 -> FfiException.NoSuchGroup()
-            19 -> FfiException.GroupRefused()
-            20 -> FfiException.GroupFull()
-            21 -> FfiException.BadFile()
-            22 -> FfiException.BadChannel()
-            23 -> FfiException.NotJoined()
-            24 -> FfiException.NoSignaling()
-            25 -> FfiException.InvalidInvite()
-            26 -> FfiException.InviteNotFound()
-            27 -> FfiException.OwnInvite()
-            28 -> FfiException.StillInGroup()
-            29 -> FfiException.NoRoute()
-            30 -> FfiException.BadReaction()
-            31 -> FfiException.WeakPassphrase()
-            32 -> FfiException.BackupUnreadable()
-            33 -> FfiException.BackupNotYours()
+            14 -> FfiException.UnknownDevice()
+            15 -> FfiException.Crypto()
+            16 -> FfiException.ShuttingDown()
+            17 -> FfiException.Busy()
+            18 -> FfiException.InvalidArgument()
+            19 -> FfiException.NoSuchGroup()
+            20 -> FfiException.GroupRefused()
+            21 -> FfiException.GroupFull()
+            22 -> FfiException.BadFile()
+            23 -> FfiException.BadChannel()
+            24 -> FfiException.NotJoined()
+            25 -> FfiException.NoSignaling()
+            26 -> FfiException.InvalidInvite()
+            27 -> FfiException.InviteNotFound()
+            28 -> FfiException.OwnInvite()
+            29 -> FfiException.StillInGroup()
+            30 -> FfiException.NoRoute()
+            31 -> FfiException.BadReaction()
+            32 -> FfiException.WeakPassphrase()
+            33 -> FfiException.BackupUnreadable()
+            34 -> FfiException.BackupNotYours()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -7671,6 +7788,10 @@ public object FfiConverterTypeFfiError : FfiConverterRustBuffer<FfiException> {
                 4UL
             )
             is FfiException.SecureStorage -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is FfiException.UnknownDevice -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
             )
@@ -7811,84 +7932,88 @@ public object FfiConverterTypeFfiError : FfiConverterRustBuffer<FfiException> {
                 buf.putInt(13)
                 Unit
             }
-            is FfiException.Crypto -> {
+            is FfiException.UnknownDevice -> {
                 buf.putInt(14)
                 Unit
             }
-            is FfiException.ShuttingDown -> {
+            is FfiException.Crypto -> {
                 buf.putInt(15)
                 Unit
             }
-            is FfiException.Busy -> {
+            is FfiException.ShuttingDown -> {
                 buf.putInt(16)
                 Unit
             }
-            is FfiException.InvalidArgument -> {
+            is FfiException.Busy -> {
                 buf.putInt(17)
                 Unit
             }
-            is FfiException.NoSuchGroup -> {
+            is FfiException.InvalidArgument -> {
                 buf.putInt(18)
                 Unit
             }
-            is FfiException.GroupRefused -> {
+            is FfiException.NoSuchGroup -> {
                 buf.putInt(19)
                 Unit
             }
-            is FfiException.GroupFull -> {
+            is FfiException.GroupRefused -> {
                 buf.putInt(20)
                 Unit
             }
-            is FfiException.BadFile -> {
+            is FfiException.GroupFull -> {
                 buf.putInt(21)
                 Unit
             }
-            is FfiException.BadChannel -> {
+            is FfiException.BadFile -> {
                 buf.putInt(22)
                 Unit
             }
-            is FfiException.NotJoined -> {
+            is FfiException.BadChannel -> {
                 buf.putInt(23)
                 Unit
             }
-            is FfiException.NoSignaling -> {
+            is FfiException.NotJoined -> {
                 buf.putInt(24)
                 Unit
             }
-            is FfiException.InvalidInvite -> {
+            is FfiException.NoSignaling -> {
                 buf.putInt(25)
                 Unit
             }
-            is FfiException.InviteNotFound -> {
+            is FfiException.InvalidInvite -> {
                 buf.putInt(26)
                 Unit
             }
-            is FfiException.OwnInvite -> {
+            is FfiException.InviteNotFound -> {
                 buf.putInt(27)
                 Unit
             }
-            is FfiException.StillInGroup -> {
+            is FfiException.OwnInvite -> {
                 buf.putInt(28)
                 Unit
             }
-            is FfiException.NoRoute -> {
+            is FfiException.StillInGroup -> {
                 buf.putInt(29)
                 Unit
             }
-            is FfiException.BadReaction -> {
+            is FfiException.NoRoute -> {
                 buf.putInt(30)
                 Unit
             }
-            is FfiException.WeakPassphrase -> {
+            is FfiException.BadReaction -> {
                 buf.putInt(31)
                 Unit
             }
-            is FfiException.BackupUnreadable -> {
+            is FfiException.WeakPassphrase -> {
                 buf.putInt(32)
                 Unit
             }
-            is FfiException.BackupNotYours -> {
+            is FfiException.BackupUnreadable -> {
                 buf.putInt(33)
+                Unit
+            }
+            is FfiException.BackupNotYours -> {
+                buf.putInt(34)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -8253,6 +8378,38 @@ public object FfiConverterOptionalUByte: FfiConverterRustBuffer<kotlin.UByte?> {
         } else {
             buf.put(1)
             FfiConverterUByte.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalLong: FfiConverterRustBuffer<kotlin.Long?> {
+    override fun read(buf: ByteBuffer): kotlin.Long? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterLong.read(buf)
+    }
+
+    override fun allocationSize(value: kotlin.Long?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterLong.allocationSize(value)
+        }
+    }
+
+    override fun write(value: kotlin.Long?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterLong.write(value, buf)
         }
     }
 }

@@ -111,7 +111,15 @@ impl Core {
             .kv(KV_DEVICE_LIST)?
             .and_then(|b| String::from_utf8(b).ok())
             .and_then(|t| DeviceList::from_json(&t).ok())
-            .filter(|l| l.verify(&sign, &dh).is_ok() && l.get(&id).is_some_and(|d| d.active()));
+            .filter(|l| l.verify(&sign, &dh).is_ok());
+        if stored
+            .as_ref()
+            .is_some_and(|l| l.get(&id).is_some_and(|d| !d.active()))
+        {
+            // The account removed this device.
+            self.removed_from_account = true;
+        }
+        let stored = stored.filter(|l| l.get(&id).is_some_and(|d| d.active()));
         let list = match (stored, self.identity.as_ref()) {
             (Some(l), _) => l,
             (None, None) => {
@@ -161,12 +169,13 @@ impl Core {
         UserId::new(format!("{uid}{ADDR_SEP}{device}")).ok()
     }
 
-    /// Where a friend is reached: each of their devices once we know their list has more than one, else their account.
+    /// Where a friend is reached: each of their devices once their list has had more than one (also after removals
+    /// leave one: the account address may belong to a removed device), else their account.
     pub(super) fn addresses_of(&self, uid: &UserId) -> Vec<UserId> {
         let many = self
             .contact_keys(uid)
             .and_then(|k| k.list().cloned())
-            .filter(|l| l.active().count() > 1);
+            .filter(|l| l.devices.len() > 1);
         match many {
             Some(l) => l
                 .active()
@@ -260,13 +269,14 @@ impl Core {
         self.old_version = true;
     }
 
-    /// How we present ourselves by default: as this device once the account has more than one, else as the account.
+    /// How we present ourselves by default: as this device once the account has had more than one, else as the
+    /// account.
     pub(super) fn own_address(&self) -> Option<UserId> {
         let uid = self.uid.as_ref()?;
         let many = self
             .device_list
             .as_ref()
-            .is_some_and(|l| l.active().count() > 1);
+            .is_some_and(|l| l.devices.len() > 1);
         match (&self.device_id, many) {
             (Some(d), true) => Self::device_address(uid, d),
             _ => Some(uid.clone()),
@@ -471,6 +481,8 @@ impl Core {
                 key: Self::contact_list_key(uid),
                 value: list.to_json().into_bytes(),
             }]);
+            // Devices it removed: their keys go (their links close on the next tick).
+            self.drop_device_keys(uid, list);
         }
     }
 

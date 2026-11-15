@@ -89,6 +89,7 @@ fun SettingsDialog(
     onStartDeviceLink: ((Result<String>) -> Unit) -> Unit = { it(Result.failure(IllegalStateException("Not available."))) },
     onConfirmDeviceLink: (Boolean) -> Unit = {},
     onCancelDeviceLink: () -> Unit = {},
+    onDeviceRemoval: (com.duochat.app.data.DeviceRemoval, (Result<Unit>) -> Unit) -> Unit = { _, done -> done(Result.failure(IllegalStateException("Not available."))) },
 ) {
     var linking by remember { mutableStateOf(false) }
     var displayName by remember { mutableStateOf(settings.displayName) }
@@ -192,7 +193,7 @@ fun SettingsDialog(
                 Spacer(Modifier.height(20.dp))
 
                 SectionTitle("Devices")
-                DevicesSection(state, onLinkNew = { linking = true })
+                DevicesSection(state, onLinkNew = { linking = true }, onRemoval = onDeviceRemoval)
                 if (linking) {
                     LinkHostDialog(
                         state = state,

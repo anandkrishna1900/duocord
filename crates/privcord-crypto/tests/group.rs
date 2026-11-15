@@ -503,4 +503,29 @@ fn a_device_on_the_members_list_changes_the_group_and_a_removed_one_stops_at_its
     // ...and what it did before stands.
     assert!(log.is_effective(add_bob["eventId"].as_str().unwrap()));
     assert!(!roster(&log).contains(&cat.uid().unwrap().to_string()));
+
+    // Dating a change before its removal does not help it: nothing that counts built on it, so it does nothing, and the
+    // next change is not built on it either.
+    let backdated = event(
+        &as_laptop,
+        &gid,
+        EventType::Add,
+        4000,
+        head(),
+        Some(&cat),
+        None,
+    );
+    let backdated_id = backdated["eventId"].as_str().unwrap().to_owned();
+    log.add(&backdated);
+    assert!(!log.is_effective(&backdated_id));
+    assert!(!roster(&log).contains(&cat.uid().unwrap().to_string()));
+    assert!(!log.build_on().contains(&backdated_id));
+    // A change it made before the removal, which Ann built on then, stood all along (it is anchored).
+    let mut fresh = GroupLog::new(&gid);
+    for e in [&create, &add_bob, &rename, &backdated, &late] {
+        fresh.add(e);
+    }
+    assert!(fresh.is_effective(add_bob["eventId"].as_str().unwrap()));
+    assert!(!fresh.is_effective(&backdated_id));
+    assert_eq!(roster(&fresh), roster(&log));
 }

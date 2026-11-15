@@ -63,6 +63,8 @@ pub enum FfiError {
     Storage,
     #[error("secure storage failed")]
     SecureStorage,
+    #[error("unknown device")]
+    UnknownDevice,
     #[error("cryptography failed")]
     Crypto,
     #[error("shutting down")]
@@ -121,6 +123,7 @@ impl From<ErrorCode> for FfiError {
             ErrorCode::UnknownMessage => Self::UnknownMessage,
             ErrorCode::Storage => Self::Storage,
             ErrorCode::SecureStorage => Self::SecureStorage,
+            ErrorCode::UnknownDevice => Self::UnknownDevice,
             ErrorCode::Crypto => Self::Crypto,
             ErrorCode::ShuttingDown => Self::ShuttingDown,
             ErrorCode::Busy => Self::Busy,
@@ -631,6 +634,12 @@ pub struct DeviceDto {
     pub name: String,
     pub added_at: i64,
     pub this_device: bool,
+    /// When it last wrote anything this device has (milliseconds), if ever.
+    pub last_seen: Option<i64>,
+    /// Not heard from for 90 days: offer "Remove or reconnect".
+    pub stale: bool,
+    /// A removal was asked for: when it takes effect (milliseconds), unless taken back.
+    pub removal_at: Option<i64>,
 }
 
 /// A group from before protocol v2: its name and who was in it (their names, for friends who are still friends).
@@ -1403,6 +1412,34 @@ impl PrivcordEngine {
         Ok(())
     }
 
+    /// Ask for another device of the account to be removed: every device shows it, and it happens in 24 hours unless
+    /// taken back (a device holding the account key can only be removed with the phrase).
+    pub fn request_device_removal(&self, device: String) -> Result<(), FfiError> {
+        pollster::block_on(self.handle.op(Op::RequestDeviceRemoval(device)))?;
+        Ok(())
+    }
+
+    /// Take back a removal asked for.
+    pub fn cancel_device_removal(&self, device: String) -> Result<(), FfiError> {
+        pollster::block_on(self.handle.op(Op::CancelDeviceRemoval(device)))?;
+        Ok(())
+    }
+
+    /// Remove another device of the account at once, with the recovery phrase (not kept).
+    pub fn remove_device_now(
+        &self,
+        device: String,
+        phrase: String,
+        passphrase: String,
+    ) -> Result<(), FfiError> {
+        pollster::block_on(self.handle.op(Op::RemoveDeviceNow {
+            device,
+            phrase,
+            passphrase,
+        }))?;
+        Ok(())
+    }
+
     /// The beacon to broadcast on the local network now (this device listens on `port`), or `None` when there is no other
     /// device of the account to find.
     pub fn lan_beacon(&self, port: u16) -> Result<Option<String>, FfiError> {
@@ -1638,6 +1675,9 @@ impl PrivcordEngine {
                     name: d.name.clone(),
                     added_at: d.added_at,
                     this_device: d.this_device,
+                    last_seen: d.last_seen,
+                    stale: d.stale,
+                    removal_at: d.removal_at,
                 })
                 .collect(),
             holds_account_key: s.holds_account_key,

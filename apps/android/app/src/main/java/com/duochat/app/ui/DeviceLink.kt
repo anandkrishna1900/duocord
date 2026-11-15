@@ -34,7 +34,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.duochat.app.data.ChatState
+import com.duochat.app.data.DeviceInfo
 import com.duochat.app.data.DeviceLinkState
+import com.duochat.app.data.DeviceRemoval
 import java.text.DateFormat
 import java.util.Date
 
@@ -46,7 +48,12 @@ import java.util.Date
 
 /** The account's devices, in Settings, with "Link a new device" on the device that holds the account key. */
 @Composable
-fun DevicesSection(state: ChatState, onLinkNew: () -> Unit) {
+fun DevicesSection(
+    state: ChatState,
+    onLinkNew: () -> Unit,
+    onRemoval: (DeviceRemoval, (Result<Unit>) -> Unit) -> Unit = { _, done -> done(Result.success(Unit)) },
+) {
+    var removing by remember { mutableStateOf<DeviceInfo?>(null) }
     Text(
         if (state.holdsAccountKey) {
             "Your chats stay in step on every device you link, with no server in between. Your account key stays on this phone."
@@ -72,6 +79,27 @@ fun DevicesSection(state: ChatState, onLinkNew: () -> Unit) {
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        val removalAt = d.removalAt
+                        if (removalAt != null) {
+                            Text(
+                                "Will be removed " + DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(removalAt)),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        } else if (d.stale && !d.thisDevice) {
+                            Text(
+                                "Not seen for 90 days. Remove it, or open the app on it to reconnect.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    if (!d.thisDevice) {
+                        if (d.removalAt != null) {
+                            TextButton(onClick = { onRemoval(DeviceRemoval.Cancel(d.id)) {} }) { Text("Keep it") }
+                        } else {
+                            TextButton(onClick = { removing = d }) { Text("Remove") }
+                        }
                     }
                 }
             }
@@ -90,6 +118,65 @@ fun DevicesSection(state: ChatState, onLinkNew: () -> Unit) {
         Spacer(Modifier.height(10.dp))
         Button(onClick = onLinkNew) { Text("Link a new device") }
     }
+    removing?.let { d -> RemoveDeviceDialog(d, onRemoval, onClose = { removing = null }) }
+}
+
+/** Removing a device: in 24 hours (every device sees it and can take it back), or at once with the recovery phrase. */
+@Composable
+private fun RemoveDeviceDialog(
+    device: DeviceInfo,
+    onRemoval: (DeviceRemoval, (Result<Unit>) -> Unit) -> Unit,
+    onClose: () -> Unit,
+) {
+    var phrase by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val run = { action: DeviceRemoval ->
+        busy = true
+        error = null
+        onRemoval(action) { r ->
+            busy = false
+            r.onSuccess { onClose() }.onFailure { error = it.message }
+        }
+    }
+    AlertDialog(
+        onDismissRequest = { if (!busy) onClose() },
+        title = { Text("Remove ${device.name}?") },
+        text = {
+            Column {
+                Text(
+                    "It stops getting your messages and is told to erase everything on it the next time it connects " +
+                        "(that cannot be guaranteed if it never does). Your chats on your other devices stay as they are.",
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Every device sees the request and can take it back for a day, so a stolen device cannot quietly " +
+                        "remove the others. To remove it right away, enter your recovery phrase (it is not kept).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                DuoTextField(
+                    value = phrase,
+                    onValueChange = { phrase = it },
+                    label = { Text("Recovery phrase (optional)") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                error?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            val withPhrase = phrase.trim().split(Regex("\\s+")).size >= 12
+            Button(
+                enabled = !busy,
+                onClick = { run(if (withPhrase) DeviceRemoval.Now(device.id, phrase) else DeviceRemoval.Request(device.id)) },
+            ) { Text(if (withPhrase) "Remove now" else "Remove in 24 hours") }
+        },
+        dismissButton = { TextButton(enabled = !busy, onClick = onClose) { Text("Cancel") } },
+    )
 }
 
 /** On the device holding the account key: the code for the new device, then the 6 digits to confirm. */

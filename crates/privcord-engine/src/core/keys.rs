@@ -273,6 +273,19 @@ impl Core {
         }
     }
 
+    /// Forget every key exchanged with these addresses (devices their account removed).
+    pub(super) fn forget_keys_of(&mut self, addrs: &[UserId]) {
+        let mut changed = false;
+        for a in addrs {
+            changed |= self.keys.theirs.remove(a).is_some();
+            changed |= self.keys.issued.remove(a).is_some();
+            changed |= self.keys.confirmed.remove(a);
+        }
+        if changed {
+            self.save_keys();
+        }
+    }
+
     /// The keys exchanged with one address of a friend belong to another (their account address turned out to be one
     /// of their devices). Moved only where the new address has none yet.
     pub(super) fn move_keys(&mut self, from: &UserId, to: &UserId) {

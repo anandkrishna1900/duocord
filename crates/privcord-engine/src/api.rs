@@ -166,6 +166,12 @@ pub struct DeviceView {
     /// When it was linked (milliseconds).
     pub added_at: i64,
     pub this_device: bool,
+    /// When it last wrote anything this device has (milliseconds), if ever.
+    pub last_seen: Option<i64>,
+    /// Not heard from for 90 days: "Remove or reconnect".
+    pub stale: bool,
+    /// A removal was asked for: when it takes effect (milliseconds), unless taken back.
+    pub removal_at: Option<i64>,
 }
 
 /// Something that happened. Each has a number; numbers rise by one, so a gap means events were missed.

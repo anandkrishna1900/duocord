@@ -59,6 +59,8 @@ pub enum ErrorCode {
     BackupUnreadable,
     #[error("That backup belongs to a different identity.")]
     BackupNotYours,
+    #[error("That device is not on your account's list.")]
+    UnknownDevice,
     #[error("Storage failed; nothing was changed.")]
     Storage,
     #[error("Secure storage failed.")]

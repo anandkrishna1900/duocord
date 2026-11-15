@@ -53,6 +53,17 @@ const KV_SYNC_KEY: &str = "sync.key";
 const ASK_KEY_EVERY_MS: i64 = 10 * 60 * 1000;
 /// Set on an install that restored an existing account from its recovery phrase.
 const KV_JOINED: &str = "sync.joined";
+/// The first sync key (version 0), kept after it is replaced: see `SyncState::first_key`.
+const KV_FIRST_KEY: &str = "sync.key0";
+
+/// What the account signs for a sync key after the first: its version and a hash of it.
+pub(super) fn key_body(key: &SyncKey) -> Value {
+    json!({
+        "t": "sync-key",
+        "v": key.version,
+        "hash": privcord_crypto::kdf::sha256_hex(&key.to_bytes()),
+    })
+}
 /// Contacts and groups are not merge-rule kinds of the log; the engine applies them (unknown kinds pass through).
 const KIND_CONTACT: &str = "contact";
 /// One group's signed events (membership, name): merged event by event, each one checked again.
@@ -198,6 +209,13 @@ pub(super) struct SyncState {
     group_counts: BTreeMap<String, usize>,
     /// The account's sync key; `None` on a linked device until another device of the account hands it over.
     key: Option<SyncKey>,
+    /// The account's signature over the key (every key after the first, which comes from the account key itself).
+    key_sig: Option<String>,
+    /// The key before the last replacement (a device still on it is found on the local network, and given the new one).
+    prev_key: Option<SyncKey>,
+    /// The first key (derived from the account key): an install set up from the recovery phrase starts on it, so every
+    /// device keeps listening there for device lists only, and hands the current key to a device it did not know.
+    first_key: Option<SyncKey>,
     /// This device's inbox (where the sync key is handed over) is being listened on.
     inbox: Option<String>,
     last_ask: i64,
@@ -276,12 +294,22 @@ impl SyncState {
         self.key.as_ref()
     }
 
-    /// The account's device list changed (a device was linked): its devices write entries this device accepts.
+    /// The account's device list changed (a device was linked or removed): its devices write entries this device
+    /// accepts.
     pub(super) fn devices_changed(&mut self, list: &DeviceList) {
         self.replica.set_devices(list.clone());
         let own = self.writer.device.clone();
         self.others
             .extend(list.active().map(|d| d.id.clone()).filter(|d| d != &own));
+        self.others.retain(|d| {
+            list.get(d)
+                .is_none_or(privcord_crypto::devices::DeviceEntry::active)
+        });
+    }
+
+    /// The key before the last replacement, if any.
+    pub(super) fn prev_key(&self) -> Option<&SyncKey> {
+        self.prev_key.as_ref()
     }
 }
 
@@ -351,7 +379,11 @@ impl Core {
         }
         let pushed = self.kv_json(KV_PUSHED).unwrap_or(0);
         // The sync key: stored, or (a holder of the account key) derived; a linked device waits to be given it.
-        let mut key = self.kv_json::<Value>(KV_SYNC_KEY).and_then(|v| {
+        let stored = self.kv_json::<Value>(KV_SYNC_KEY);
+        let key_sig = stored
+            .as_ref()
+            .and_then(|v| v.get("sig")?.as_str().map(str::to_owned));
+        let mut key = stored.and_then(|v| {
             let version = u32::try_from(v.get("v")?.as_u64()?).ok()?;
             SyncKey::from_bytes(
                 version,
@@ -361,10 +393,17 @@ impl Core {
         if key.is_none() {
             if let Some(account) = &self.identity {
                 let derived = SyncKey::from_account(account)?;
-                Self::store_key(&*self.ports.storage, &derived);
+                Self::store_key(&*self.ports.storage, &derived, None);
                 key = Some(derived);
             }
         }
+        let first_key = match &self.identity {
+            Some(account) => Some(SyncKey::from_account(account)?),
+            None => key
+                .clone()
+                .filter(|k| k.version == 0)
+                .or_else(|| Self::load_key(&*self.ports.storage, KV_FIRST_KEY)),
+        };
         // The other devices of this account's own list.
         if let Some(list) = &self.device_list {
             others.extend(list.active().map(|d| d.id.clone()).filter(|d| d != &id));
@@ -387,6 +426,9 @@ impl Core {
             pushed,
             group_counts,
             key,
+            key_sig,
+            prev_key: None,
+            first_key,
             inbox: None,
             last_ask: i64::MIN / 2,
             link_told: BTreeMap::new(),
@@ -394,13 +436,75 @@ impl Core {
         Ok(())
     }
 
-    fn store_key(storage: &dyn privcord_ports::Storage, key: &SyncKey) {
-        let value =
+    fn store_key(storage: &dyn privcord_ports::Storage, key: &SyncKey, sig: Option<&str>) {
+        let mut value =
             json!({ "v": key.version, "key": privcord_domain::codec::encode(&key.to_bytes()) });
-        let _ = storage.apply(&[StorageOp::SetKv {
+        if let (Some(s), Some(o)) = (sig, value.as_object_mut()) {
+            o.insert("sig".into(), json!(s));
+        }
+        let mut ops = vec![StorageOp::SetKv {
             key: KV_SYNC_KEY.into(),
             value: value.to_string().into_bytes(),
-        }]);
+        }];
+        if key.version == 0 {
+            ops.push(StorageOp::SetKv {
+                key: KV_FIRST_KEY.into(),
+                value: value.to_string().into_bytes(),
+            });
+        }
+        let _ = storage.apply(&ops);
+    }
+
+    fn load_key(storage: &dyn privcord_ports::Storage, at: &str) -> Option<SyncKey> {
+        let v: Value = serde_json::from_slice(&storage.kv(at).ok()??).ok()?;
+        let version = u32::try_from(v.get("v")?.as_u64()?).ok()?;
+        SyncKey::from_bytes(
+            version,
+            &privcord_domain::codec::decode(v.get("key")?.as_str()?)?,
+        )
+    }
+
+    /// Takes a sync key (a replacement, already checked): stored, used from now on, the old one kept for the local
+    /// network.
+    pub(super) fn take_sync_key(&mut self, key: SyncKey, sig: Option<String>) {
+        Self::store_key(&*self.ports.storage, &key, sig.as_deref());
+        if let Some(s) = self.sync.as_mut() {
+            if key.version == 0 && s.first_key.is_none() {
+                s.first_key = Some(key.clone());
+            }
+            s.prev_key = s.key.replace(key);
+            s.key_sig = sig;
+            // Listen on the new key's mailbox from the next tick.
+            s.subscribed.clear();
+        }
+    }
+
+    /// The sync key, for another device of the account: with the list, the account's signature, and the first key.
+    pub(super) fn sync_key_message(&self, list: &DeviceList) -> Value {
+        let Some(s) = self.sync.as_ref() else {
+            return Value::Null;
+        };
+        let Some(key) = s.key.as_ref() else {
+            return Value::Null;
+        };
+        let mut m = json!({
+            "t": "sync-key",
+            "v": key.version,
+            "key": privcord_domain::codec::encode(&key.to_bytes()),
+            "list": list.to_json(),
+        });
+        if let Some(o) = m.as_object_mut() {
+            if let Some(sig) = &s.key_sig {
+                o.insert("sig".into(), json!(sig));
+            }
+            if let Some(k0) = s.first_key.as_ref().filter(|_| key.version > 0) {
+                o.insert(
+                    "k0".into(),
+                    json!(privcord_domain::codec::encode(&k0.to_bytes())),
+                );
+            }
+        }
+        m
     }
 
     /// The account's public keys, which every device has (device lists and posts are checked against them).
@@ -598,11 +702,29 @@ impl Core {
             .is_ok()
     }
 
+    /// An install on the first sync key while the account's list shows a removed device: the key was replaced when that
+    /// device was removed (it is replaced only then), and the removed device still has the first one. Nothing is posted
+    /// until the current key arrives.
+    fn waiting_for_key(&self) -> bool {
+        let rotated = self
+            .device_list
+            .as_ref()
+            .is_some_and(|l| l.devices.iter().any(|d| !d.active()));
+        rotated
+            && self
+                .sync
+                .as_ref()
+                .is_none_or(|s| s.key.as_ref().is_none_or(|k| k.version == 0))
+    }
+
     /// Posts entries in batches that fit a relay event.
     fn post_entries(&mut self, entries: Vec<Entry>) -> bool {
         let Some(list) = self.device_list.as_ref().map(DeviceList::to_json) else {
             return false;
         };
+        if self.waiting_for_key() {
+            return false;
+        }
         let mut batch: Vec<Value> = Vec::new();
         let mut size = 0;
         let mut ok = true;
@@ -659,7 +781,7 @@ impl Core {
         }
         let now = self.now();
         self.tick_inbox(now);
-        let labels: Vec<String> = match self
+        let mut labels: Vec<String> = match self
             .sync
             .as_ref()
             .and_then(|s| s.key.as_ref())
@@ -668,6 +790,7 @@ impl Core {
             Some(Ok(boxes)) => boxes.iter().map(|b| b.label.clone()).collect(),
             _ => return,
         };
+        labels.extend(self.rendezvous_labels(now));
         let mut fresh = false;
         for label in &labels {
             let known = self
@@ -804,6 +927,18 @@ impl Core {
                     .unwrap_or_default();
                 self.take_entries(entries, now);
             }
+            Some("inbox") => {
+                let sender = Self::device_of(peer).and_then(|d| {
+                    self.device_list
+                        .as_ref()
+                        .and_then(|l| l.get(d))
+                        .filter(|e| e.active())
+                        .cloned()
+                });
+                if let (Some(sender), Some(payload)) = (sender, frame.get("payload")) {
+                    self.device_message(&sender, &payload.clone());
+                }
+            }
             _ => {}
         }
     }
@@ -815,11 +950,71 @@ impl Core {
         })
     }
 
+    /// The first key's mailboxes, once the key was replaced (see `SyncState::first_key`).
+    fn rendezvous_labels(&self, now: i64) -> Vec<String> {
+        self.sync
+            .as_ref()
+            .filter(|s| s.key.as_ref().is_some_and(|k| k.version > 0))
+            .and_then(|s| s.first_key.as_ref())
+            .and_then(|k| SelfBox::current(k, now).ok())
+            .map(|b| b.iter().map(|b| b.label.clone()).collect())
+            .unwrap_or_default()
+    }
+
+    /// A post on the first key's mailbox after the key was replaced: only the device list it carries counts (that key
+    /// is known to removed devices). A device we did not know (an install set up from the phrase) is given the key.
+    fn rendezvous_blob(&mut self, mailbox: &str, blob: &SealedBlob, now: i64) {
+        let Some(k0) = self.sync.as_ref().and_then(|s| s.first_key.clone()) else {
+            return;
+        };
+        let Some(payload) = SelfBox::current(&k0, now)
+            .ok()
+            .and_then(|boxes| boxes.into_iter().find(|b| b.label == mailbox))
+            .and_then(|b| b.open(blob))
+        else {
+            return;
+        };
+        let Some((sign, dh)) = self.account_public() else {
+            return;
+        };
+        let Some(text) = payload.get("list").and_then(Value::as_str) else {
+            return;
+        };
+        let Ok(list) = DeviceList::from_json(text) else {
+            return;
+        };
+        if list.verify(&sign, &dh).is_err() {
+            return;
+        }
+        let author = payload
+            .get("device")
+            .and_then(Value::as_str)
+            .and_then(|d| list.get(d));
+        if !author.is_some_and(|d| d.active() && signed_by(blob, d)) {
+            return;
+        }
+        if self.learn_list(&list, text) {
+            let Some(ours) = self.device_list.clone() else {
+                return;
+            };
+            let message = self.sync_key_message(&ours);
+            let own = self.device_id.clone().unwrap_or_default();
+            let others: Vec<_> = ours.active().filter(|d| d.id != own).cloned().collect();
+            for d in others {
+                self.send_to_device(&d, &message);
+            }
+        }
+    }
+
     /// A blob arrived on our self-mailbox.
     pub(super) fn sync_blob(&mut self, mailbox: &str, blob: &SealedBlob) {
         let now = self.now();
         if self.sync.as_ref().and_then(|s| s.inbox.as_deref()) == Some(mailbox) {
             self.inbox_blob(blob);
+            return;
+        }
+        if self.rendezvous_labels(now).iter().any(|l| l == mailbox) {
+            self.rendezvous_blob(mailbox, blob, now);
             return;
         }
         let Some(key) = self.sync.as_ref().and_then(|s| s.key.clone()) else {
@@ -1020,9 +1215,7 @@ impl Core {
                 value: next.to_json().into_bytes(),
             }]);
             if let Some(s) = self.sync.as_mut() {
-                s.replica.set_devices(next.clone());
-                s.others
-                    .extend(next.active().map(|d| d.id.clone()).filter(|d| d != &own));
+                s.devices_changed(&next);
             }
             self.device_list = Some(next);
         }
@@ -1052,10 +1245,11 @@ impl Core {
                 s.inbox = Some(label);
             }
         }
+        let waiting = self.waiting_for_key();
         let asking = self
             .sync
             .as_ref()
-            .is_some_and(|s| s.key.is_none() && now - s.last_ask >= ASK_KEY_EVERY_MS);
+            .is_some_and(|s| (s.key.is_none() || waiting) && now - s.last_ask >= ASK_KEY_EVERY_MS);
         if !asking {
             return;
         }
@@ -1066,6 +1260,29 @@ impl Core {
         let payload = json!({ "t": "need-key", "list": list.to_json() });
         for d in list.active().filter(|d| d.id != own) {
             self.put_to_device(d, &payload);
+        }
+    }
+
+    /// Something for one other device of ours: over a direct link when there is one, and sealed to its inbox.
+    pub(super) fn send_to_device(
+        &mut self,
+        to: &privcord_crypto::devices::DeviceEntry,
+        payload: &Value,
+    ) {
+        if let Some(addr) = self
+            .uid
+            .as_ref()
+            .and_then(|u| UserId::new(format!("{u}.{}", to.id)).ok())
+        {
+            if self.peers.get(&addr).is_some_and(super::Peer::ready) {
+                self.send_secure(
+                    &addr,
+                    &json!({ "v": 1, "kind": "sync", "t": "inbox", "payload": payload }),
+                );
+            }
+        }
+        if self.ports.transport.signal_available() {
+            self.put_to_device(to, payload);
         }
     }
 
@@ -1105,48 +1322,110 @@ impl Core {
         else {
             return;
         };
+        self.device_message(&sender, &payload);
+    }
+
+    /// Something another device of ours sent this one (sealed to its inbox, or over a direct link with it).
+    fn device_message(&mut self, sender: &privcord_crypto::devices::DeviceEntry, payload: &Value) {
+        // A list it carries (signed by the account) is learned first: a removal, or a device added since.
+        let carried = payload
+            .get("list")
+            .and_then(Value::as_str)
+            .and_then(|t| DeviceList::from_json(t).ok().map(|l| (l, t.to_owned())));
+        if let (Some((list, text)), Some((sign, dh))) = (&carried, self.account_public()) {
+            if list.verify(&sign, &dh).is_ok() {
+                self.learn_list(list, text);
+            }
+        }
+        // Still on the list, by what we know now.
+        if !self
+            .device_list
+            .as_ref()
+            .and_then(|l| l.get(&sender.id))
+            .is_some_and(privcord_crypto::devices::DeviceEntry::active)
+        {
+            return;
+        }
         match payload.get("t").and_then(Value::as_str) {
             Some("need-key") => {
-                let Some(key) = self.sync.as_ref().and_then(|s| s.key.clone()) else {
+                let Some(list) = self.device_list.clone() else {
                     return;
                 };
-                let reply = json!({
-                    "t": "sync-key",
-                    "v": key.version,
-                    "key": privcord_domain::codec::encode(&key.to_bytes()),
-                    "list": list.to_json(),
-                });
-                self.put_to_device(&sender, &reply);
-            }
-            Some("sync-key") => {
-                let version = payload
-                    .get("v")
-                    .and_then(Value::as_u64)
-                    .and_then(|v| u32::try_from(v).ok());
-                let bytes = payload
-                    .get("key")
-                    .and_then(Value::as_str)
-                    .and_then(privcord_domain::codec::decode);
-                let Some(key) = version
-                    .zip(bytes)
-                    .and_then(|(v, b)| SyncKey::from_bytes(v, &b))
-                else {
-                    return;
-                };
-                let newer = self
-                    .sync
-                    .as_ref()
-                    .is_some_and(|s| s.key.as_ref().is_none_or(|k| k.version < key.version));
-                if newer {
-                    Self::store_key(&*self.ports.storage, &key);
-                    if let Some(s) = self.sync.as_mut() {
-                        s.key = Some(key);
-                        // Listen on the new key's mailbox from the next tick.
-                        s.subscribed.clear();
-                    }
+                let reply = self.sync_key_message(&list);
+                if !reply.is_null() {
+                    self.send_to_device(sender, &reply);
                 }
             }
+            Some("sync-key") => self.offered_key(payload),
+            // The account removed this device: everything on it is erased (the tick does it once the list says so; the
+            // list came with this message and was learned above).
+            Some("wipe") => {}
             _ => {}
+        }
+    }
+
+    /// A sync key from another device of ours. The first key (version 0) is the one derived from the account key and
+    /// is taken while this device has none; every later key must carry the account's signature, so a device cannot
+    /// hand out a key of its own. A newer version replaces ours; two different keys of the same version (two installs
+    /// holding the account key replaced it at once) settle on the one with the lower hash.
+    fn offered_key(&mut self, payload: &Value) {
+        let version = payload
+            .get("v")
+            .and_then(Value::as_u64)
+            .and_then(|v| u32::try_from(v).ok());
+        let bytes = payload
+            .get("key")
+            .and_then(Value::as_str)
+            .and_then(privcord_domain::codec::decode);
+        let Some(key) = version
+            .zip(bytes)
+            .and_then(|(v, b)| SyncKey::from_bytes(v, &b))
+        else {
+            return;
+        };
+        let k0 = payload
+            .get("k0")
+            .and_then(Value::as_str)
+            .and_then(privcord_domain::codec::decode)
+            .and_then(|b| SyncKey::from_bytes(0, &b));
+        if let Some(k0) = k0 {
+            if self.sync.as_ref().is_some_and(|s| s.first_key.is_none()) {
+                let value =
+                    json!({ "v": 0, "key": privcord_domain::codec::encode(&k0.to_bytes()) });
+                let _ = self.ports.storage.apply(&[StorageOp::SetKv {
+                    key: KV_FIRST_KEY.into(),
+                    value: value.to_string().into_bytes(),
+                }]);
+                if let Some(s) = self.sync.as_mut() {
+                    s.first_key = Some(k0);
+                }
+            }
+        }
+        let sig = payload
+            .get("sig")
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+        if key.version > 0 {
+            let Some((account, _)) = self.account_public() else {
+                return;
+            };
+            let mut body = key_body(&key);
+            if let (Some(s), Some(o)) = (&sig, body.as_object_mut()) {
+                o.insert("accountSig".into(), json!(s));
+            }
+            if !privcord_crypto::synclog::ruling_valid(&body, &account) {
+                return;
+            }
+        }
+        let hash = |k: &SyncKey| privcord_crypto::kdf::sha256_hex(&k.to_bytes());
+        let take = self.sync.as_ref().is_some_and(|s| match &s.key {
+            None => true,
+            Some(cur) => {
+                cur.version < key.version || (cur.version == key.version && hash(&key) < hash(cur))
+            }
+        });
+        if take {
+            self.take_sync_key(key, sig);
         }
     }
 

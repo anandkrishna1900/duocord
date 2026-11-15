@@ -1014,7 +1014,9 @@ class RustChatEngine(
                 },
                 invite = s.invite?.let { inv -> ActiveInvite(inv.words, inv.expiresAt) },
                 requests = s.requests.map { r -> InviteRequest(r.uid, r.name, r.safetyNumber) },
-                devices = s.devices.map { d -> com.duochat.app.data.DeviceInfo(d.id, d.name, d.addedAt, d.thisDevice) },
+                devices = s.devices.map { d ->
+                    com.duochat.app.data.DeviceInfo(d.id, d.name, d.addedAt, d.thisDevice, d.lastSeen, d.stale, d.removalAt)
+                },
                 holdsAccountKey = s.holdsAccountKey,
                 syncLost = s.syncLost.toLong(),
                 legacyGroups = s.legacyGroups.map { g ->
@@ -1065,6 +1067,8 @@ class RustChatEngine(
         is uniffi.privcord_ffi.FfiException.WeakPassphrase -> "Use a longer backup passphrase: at least 12 characters."
         is uniffi.privcord_ffi.FfiException.BackupUnreadable -> "That backup could not be opened. Check the passphrase, or that it is a DuoCord backup."
         is uniffi.privcord_ffi.FfiException.BackupNotYours -> "That backup belongs to a different account (another recovery phrase)."
+        is uniffi.privcord_ffi.FfiException.InvalidPhrase -> "That is not your account's recovery phrase."
+        is uniffi.privcord_ffi.FfiException.UnknownDevice -> "That device is not on your account's list any more."
         else -> t.message ?: "That did not work."
     }
 
@@ -1224,6 +1228,14 @@ class RustChatEngine(
         _state.update { it.copy(deviceLink = null) }
         val e = engine ?: return
         scope.launch(Dispatchers.IO) { runCatching { e.cancelDeviceLink() } }
+    }
+
+    override suspend fun deviceRemoval(action: com.duochat.app.data.DeviceRemoval): Result<Unit> = call {
+        when (action) {
+            is com.duochat.app.data.DeviceRemoval.Request -> requestDeviceRemoval(action.deviceId)
+            is com.duochat.app.data.DeviceRemoval.Cancel -> cancelDeviceRemoval(action.deviceId)
+            is com.duochat.app.data.DeviceRemoval.Now -> removeDeviceNow(action.deviceId, action.phrase.trim(), "")
+        }
     }
 
     private fun isGroup(id: String): Boolean = last?.groups?.any { it.id == id } == true

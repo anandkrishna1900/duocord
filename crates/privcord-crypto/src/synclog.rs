@@ -296,6 +296,11 @@ pub struct State {
     /// Snapshots announced (by id), and which devices hold each.
     snapshots: BTreeMap<String, Value>,
     haves: BTreeMap<String, BTreeSet<String>>,
+    /// Removals asked for (device → when each request was made), and the requests taken back (`device@at`).
+    #[serde(default)]
+    removals: BTreeMap<String, BTreeSet<i64>>,
+    #[serde(default)]
+    cancelled: BTreeSet<String>,
 }
 
 /// The kinds this version understands. Anything else is kept in the log as it is.
@@ -320,11 +325,30 @@ pub mod kind {
     pub const LOST: &str = "lost";
     /// Signed by the account: an entry a buggy release wrote is replaced (or voided); entries never change (risk 123).
     pub const CORRECTION: &str = "correction";
+    /// A device of the account is to be removed: `{ device, at }`. It takes effect a day later unless taken back.
+    pub const REMOVE: &str = "remove";
+    /// A removal taken back: `{ device, at }` (the `at` of the request it cancels).
+    pub const REMOVE_CANCEL: &str = "remove-cancel";
 
     /// Every kind this version understands. A snapshot is made only when nothing else is in the log (risk 47).
     pub const ALL: &[&str] = &[
-        MESSAGE, EDIT, DELETE, HIDE, SEEN, REACT, READ, SETTING, TICK, CONTACT, GROUP, SNAPSHOT,
-        HAVE, LOST, CORRECTION,
+        MESSAGE,
+        EDIT,
+        DELETE,
+        HIDE,
+        SEEN,
+        REACT,
+        READ,
+        SETTING,
+        TICK,
+        CONTACT,
+        GROUP,
+        SNAPSHOT,
+        HAVE,
+        LOST,
+        CORRECTION,
+        REMOVE,
+        REMOVE_CANCEL,
     ];
 }
 
@@ -439,6 +463,16 @@ impl State {
             }
             // Handled by the replica (they need the account's key); nothing to merge.
             kind::LOST | kind::CORRECTION => {}
+            kind::REMOVE => {
+                let device = id_field(b, "device")?.to_owned();
+                let at = b.get("at").and_then(Value::as_i64).ok_or("missing at")?;
+                self.removals.entry(device).or_default().insert(at);
+            }
+            kind::REMOVE_CANCEL => {
+                let device = id_field(b, "device")?;
+                let at = b.get("at").and_then(Value::as_i64).ok_or("missing at")?;
+                self.cancelled.insert(format!("{device}@{at}"));
+            }
             kind::SETTING => {
                 let key = id_field(b, "key")?.to_owned();
                 let value = b.get("value").cloned().ok_or("missing value")?;
@@ -519,6 +553,19 @@ impl State {
     /// How far one of our messages got: 1 delivered, 2 read.
     pub fn tick(&self, message: &str) -> Option<u8> {
         self.ticks.get(message).copied()
+    }
+
+    /// Removals asked for and not taken back: device → when asked (the earliest request still standing, so a later
+    /// one cannot push a removal back).
+    pub fn pending_removals(&self) -> BTreeMap<String, i64> {
+        self.removals
+            .iter()
+            .filter_map(|(d, ats)| {
+                ats.iter()
+                    .find(|at| !self.cancelled.contains(&format!("{d}@{at}")))
+                    .map(|at| (d.clone(), *at))
+            })
+            .collect()
     }
 
     /// Every message, as written (its body), by id.
@@ -657,6 +704,8 @@ pub enum Outcome {
 #[derive(Debug, Clone, Default)]
 struct Stream {
     have: u64,
+    /// The newest wall-clock time of an entry taken from this stream.
+    last_wall: i64,
     last_hash: String,
     pending: BTreeMap<u64, Entry>,
 }
@@ -738,7 +787,8 @@ pub fn account_ruling(account: &Identity, body: &Value) -> Result<Value, CryptoE
     Ok(out)
 }
 
-fn ruling_valid(body: &Value, account: &crate::devices::PublicJwkAlias) -> bool {
+/// Whether `body` carries a valid `accountSig` (see [`account_ruling`]).
+pub fn ruling_valid(body: &Value, account: &crate::devices::PublicJwkAlias) -> bool {
     let Some(sig) = body
         .get("accountSig")
         .and_then(Value::as_str)
@@ -933,6 +983,15 @@ impl Replica {
         for key in keys {
             self.drain(&key, now);
         }
+    }
+
+    /// When a device last wrote anything this replica took (by the entries' clocks), if ever.
+    pub fn last_heard(&self, device: &str) -> Option<i64> {
+        self.streams
+            .iter()
+            .filter(|((d, _), s)| d == device && s.last_wall > 0)
+            .map(|(_, s)| s.last_wall)
+            .max()
     }
 
     /// Gaps entries are waiting on: `(device, series, first missing, last missing)` per stream.
@@ -1135,6 +1194,7 @@ impl Replica {
         }
         stream.have = e.seq;
         stream.last_hash = hash.clone();
+        stream.last_wall = stream.last_wall.max(e.hlc.wall);
         self.clock = self.clock.observe(e.hlc, now);
         if !kind::ALL.contains(&e.kind.as_str()) {
             self.unknown += 1;

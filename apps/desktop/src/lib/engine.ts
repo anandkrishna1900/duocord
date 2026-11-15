@@ -221,6 +221,12 @@ export interface DeviceInfo {
   name: string;
   addedAt: number;
   thisDevice: boolean;
+  /** When it last wrote anything this device has, if ever. */
+  lastSeen?: number;
+  /** Not heard from for 90 days: "Remove or reconnect". */
+  stale?: boolean;
+  /** A removal was asked for: when it takes effect, unless taken back. */
+  removalAt?: number;
 }
 
 /** Linking a device, while it happens: the 6 digits to compare ("code"), then how it ended. */

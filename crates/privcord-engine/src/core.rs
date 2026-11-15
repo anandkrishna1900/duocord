@@ -68,6 +68,7 @@ mod legacy_groups;
 mod linking;
 mod media;
 mod privacy;
+mod removal;
 mod signaling;
 mod snapshots;
 mod social;
@@ -270,6 +271,8 @@ pub struct Core {
     /// Tests only: behave like an app from before device lists (accepts only account signatures, says nothing of
     /// devices), to check that such friends are still reached.
     old_version: bool,
+    /// The account's list (signed by the account) removed this install: it erases itself on the next tick.
+    removed_from_account: bool,
     /// The name on our invite cards.
     display_name: Option<String>,
 }
@@ -333,6 +336,7 @@ impl Core {
             muted: BTreeSet::new(),
             relay_inbound: false,
             old_version: false,
+            removed_from_account: false,
             display_name: None,
         };
         if let Some(secrets) = core.ports.secure.load_identity()? {
@@ -1779,6 +1783,11 @@ impl Core {
         self.tick_invites();
         // Before the store-and-forward pass: a message's sync copy goes up no later than the message does.
         self.tick_sync();
+        self.tick_removals();
+        if self.uid.is_none() {
+            // This install was removed from the account and erased itself.
+            return;
+        }
         self.tick_link();
         self.tick_device_notices();
         self.tick_key_handover();
@@ -2934,6 +2943,7 @@ impl Core {
     /* ---------------------------------------------------------------- state */
 
     pub fn snapshot(&self) -> Snapshot {
+        let removals = self.pending_removals();
         // Safety numbers cover the account key, which every device of the account knows.
         let own = self.account.as_ref().map(|(sign, _)| sign);
         let contacts = self
@@ -3054,11 +3064,22 @@ impl Core {
                 .as_ref()
                 .map(|l| {
                     l.active()
-                        .map(|d| crate::api::DeviceView {
-                            id: d.id.clone(),
-                            name: d.name.clone(),
-                            added_at: d.added_at,
-                            this_device: self.device_id.as_deref() == Some(d.id.as_str()),
+                        .map(|d| {
+                            let last_seen = self.device_last_seen(&d.id);
+                            let now = self.now();
+                            crate::api::DeviceView {
+                                id: d.id.clone(),
+                                name: d.name.clone(),
+                                added_at: d.added_at,
+                                this_device: self.device_id.as_deref() == Some(d.id.as_str()),
+                                last_seen,
+                                stale: now - last_seen.unwrap_or(d.added_at)
+                                    >= removal::STALE_AFTER_MS,
+                                removal_at: removals
+                                    .iter()
+                                    .find(|(r, _)| r == &d.id)
+                                    .map(|(_, at)| at + removal::REMOVE_AFTER_MS),
+                            }
                         })
                         .collect()
                 })

@@ -10,6 +10,7 @@ import { config, isTauri } from '../config';
 import { Modal } from './Modal';
 import { NetworkSettings } from './NetworkSettings';
 import { DeviceLinkDialog } from './DeviceLinkDialog';
+import { DeviceRow } from './DeviceRow';
 import { AlertIcon, CheckIcon, KeyIcon, TrashIcon } from './Icons';
 
 export type SettingsSection = 'profile' | 'devices' | 'appearance' | 'connection' | 'security' | 'about';
@@ -343,13 +344,7 @@ export function SettingsDialog({
             {state.devices && state.devices.length > 0 ? (
               <ul className="device-list" aria-label="Your devices">
                 {state.devices.map((d) => (
-                  <li key={d.id}>
-                    <span>
-                      {d.name}
-                      {d.thisDevice ? <span className="muted small"> (this device)</span> : null}
-                    </span>
-                    <span className="muted small">since {new Date(d.addedAt).toLocaleDateString()}</span>
-                  </li>
+                  <DeviceRow key={d.id} device={d} engine={engine} />
                 ))}
               </ul>
             ) : (

@@ -366,6 +366,27 @@ export class HostedChatEngine implements ChatEngineApi {
     this.scheduleRefresh();
   }
 
+  async requestDeviceRemoval(deviceId: string): Promise<void> {
+    await this.deviceCall('request_device_removal', { device: deviceId });
+  }
+
+  async cancelDeviceRemoval(deviceId: string): Promise<void> {
+    await this.deviceCall('cancel_device_removal', { device: deviceId });
+  }
+
+  async removeDeviceNow(deviceId: string, phrase: string): Promise<void> {
+    await this.deviceCall('remove_device_now', { device: deviceId, phrase, passphrase: '' });
+  }
+
+  private async deviceCall(command: string, args: Record<string, unknown>): Promise<void> {
+    try {
+      await this.engine.call(command, args);
+      this.scheduleRefresh();
+    } catch (e) {
+      throw new Error(friendly(e));
+    }
+  }
+
   /* ------------------------------------------------------------------ identity and friends */
 
   myInvite(): string {

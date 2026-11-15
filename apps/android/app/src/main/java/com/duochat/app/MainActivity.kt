@@ -347,6 +347,7 @@ private fun RootScreen(viewModel: AppViewModel) {
                     onStartDeviceLink = viewModel::startDeviceLink,
                     onConfirmDeviceLink = viewModel::confirmDeviceLink,
                     onCancelDeviceLink = viewModel::cancelDeviceLink,
+                    onDeviceRemoval = viewModel::deviceRemoval,
                 )
             }
 

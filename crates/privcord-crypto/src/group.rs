@@ -27,6 +27,9 @@ pub const MAX_GROUP_NAME: usize = 60;
 pub const MAX_EVENTS_PER_GROUP: usize = 5000;
 pub const MAX_PENDING_EVENTS: usize = 300;
 const MAX_DEPS: usize = 64;
+/// How many times the log is folded at most while the events anchored by others settle (each round can only add
+/// anchors that the previous one made effective; real logs settle in two).
+const MAX_ANCHOR_ROUNDS: usize = 8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EventType {
@@ -415,6 +418,29 @@ impl GroupLog {
         out
     }
 
+    /// What a new event builds on: the heads among the events that took effect (building on an event is what anchors
+    /// a removed device's change, so one that did not count is not built on). Falls back to every head when none took
+    /// effect.
+    pub fn build_on(&self) -> Vec<String> {
+        let referenced: BTreeSet<&String> = self
+            .events
+            .values()
+            .filter(|e| self.valid.contains(&e.event_id))
+            .flat_map(|e| e.deps.iter())
+            .collect();
+        let mut out: Vec<String> = self
+            .valid
+            .iter()
+            .filter(|id| !referenced.contains(id))
+            .cloned()
+            .collect();
+        if out.is_empty() {
+            return self.heads();
+        }
+        out.sort_by(|a, b| cmp_utf16(a, b));
+        out
+    }
+
     pub fn all(&self) -> Vec<GroupEvent> {
         self.order()
     }
@@ -582,12 +608,15 @@ impl GroupLog {
 
     /// Whether `e` was signed for its actor (whose card is `card`): by the account key, or by a device on the list the
     /// event carries. A device that the newest list in the log has removed counts only for events dated before its
-    /// removal.
+    /// removal, and only for events something else in the log built on (`anchored`): a removed device that kept its
+    /// key could otherwise date new changes before its removal. Events signed by a removed device go in `by_removed`.
     fn verify_sig(
         &mut self,
         e: &GroupEvent,
         card: &ContactCard,
         newest: &mut HashMap<String, Option<DeviceList>>,
+        anchored: &BTreeSet<String>,
+        by_removed: &mut BTreeSet<String>,
     ) -> bool {
         if self.cached_sig(e, &card.sign) {
             return true;
@@ -613,12 +642,56 @@ impl GroupLog {
             .as_ref()
             .and_then(|l| l.get(&device))
             .and_then(|d| d.removed_at);
-        removed_at.is_none_or(|r| e.ts < r)
+        match removed_at {
+            None => true,
+            Some(r) => {
+                by_removed.insert(e.event_id.clone());
+                e.ts < r && anchored.contains(&e.event_id)
+            }
+        }
     }
 
+    /// Folds the log until the events anchored by others settle: an event of a removed device counts once an event
+    /// that counts, and is not itself a removed device's, builds on it (directly or through others). Every member holds
+    /// the same events and so reaches the same result.
     fn refold(&mut self) {
+        let mut anchored = BTreeSet::new();
+        for _ in 0..MAX_ANCHOR_ROUNDS {
+            let (state, valid, by_removed) = self.fold(&anchored);
+            let next = self.ancestors_of(valid.difference(&by_removed));
+            self.current = state;
+            self.valid = valid;
+            if next == anchored {
+                return;
+            }
+            anchored = next;
+        }
+    }
+
+    /// Every event that `from` builds on, directly or through others.
+    fn ancestors_of<'a>(&self, from: impl Iterator<Item = &'a String>) -> BTreeSet<String> {
+        let mut out = BTreeSet::new();
+        let mut todo: Vec<String> = from
+            .filter_map(|id| self.events.get(id))
+            .flat_map(|e| e.deps.iter().cloned())
+            .collect();
+        while let Some(id) = todo.pop() {
+            if out.insert(id.clone()) {
+                if let Some(e) = self.events.get(&id) {
+                    todo.extend(e.deps.iter().cloned());
+                }
+            }
+        }
+        out
+    }
+
+    fn fold(
+        &mut self,
+        anchored: &BTreeSet<String>,
+    ) -> (Option<GroupState>, BTreeSet<String>, BTreeSet<String>) {
         let mut state: Option<GroupState> = None;
         let mut valid = BTreeSet::new();
+        let mut by_removed = BTreeSet::new();
         let mut newest: HashMap<String, Option<DeviceList>> = HashMap::new();
         for e in self.order() {
             if e.kind == EventType::Create {
@@ -628,7 +701,9 @@ impl GroupLog {
                 if state.is_some() || !e.deps.is_empty() || e.group_id != e.event_id {
                     continue;
                 }
-                if !card_is_valid(card, &e.actor) || !self.verify_sig(&e, card, &mut newest) {
+                if !card_is_valid(card, &e.actor)
+                    || !self.verify_sig(&e, card, &mut newest, anchored, &mut by_removed)
+                {
                     continue;
                 }
                 let mut members = BTreeMap::new();
@@ -654,7 +729,7 @@ impl GroupLog {
             let Some(author) = s.members.get(&e.actor).cloned() else {
                 continue;
             };
-            if !self.verify_sig(&e, &author.card, &mut newest) {
+            if !self.verify_sig(&e, &author.card, &mut newest, anchored, &mut by_removed) {
                 continue;
             }
             let target = e.target.clone().unwrap_or_default();
@@ -698,7 +773,6 @@ impl GroupLog {
                 EventType::Create => {}
             }
         }
-        self.current = state;
-        self.valid = valid;
+        (state, valid, by_removed)
     }
 }

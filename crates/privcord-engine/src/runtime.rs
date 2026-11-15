@@ -174,6 +174,16 @@ pub enum Op {
     },
     ConfirmDeviceLink(bool),
     CancelDeviceLink,
+    /// Ask for a device of the account to be removed (in 24 hours, unless taken back).
+    RequestDeviceRemoval(String),
+    /// Take back a removal asked for.
+    CancelDeviceRemoval(String),
+    /// Remove a device at once, with the recovery phrase.
+    RemoveDeviceNow {
+        device: String,
+        phrase: String,
+        passphrase: String,
+    },
     /// Whether bulk work (media between devices) may run now.
     SetBulkAllowed(bool),
     /// The local-network beacon to send, saying this device listens on this port.
@@ -371,6 +381,17 @@ fn pump(core: &mut Core, cmd: Command) -> bool {
                     core.cancel_device_link();
                     Ok(Answer::Done)
                 }
+                Op::RequestDeviceRemoval(d) => {
+                    core.request_device_removal(&d).map(|()| Answer::Done)
+                }
+                Op::CancelDeviceRemoval(d) => core.cancel_device_removal(&d).map(|()| Answer::Done),
+                Op::RemoveDeviceNow {
+                    device,
+                    phrase,
+                    passphrase,
+                } => core
+                    .remove_device_now(&device, &phrase, &passphrase)
+                    .map(|()| Answer::Done),
                 Op::LanBeacon(port) => Ok(Answer::Maybe(core.lan_beacon(port))),
                 Op::LanBeaconSeen(text) => Ok(Answer::Lan(core.lan_beacon_seen(&text))),
                 Op::SetBulkAllowed(allowed) => {

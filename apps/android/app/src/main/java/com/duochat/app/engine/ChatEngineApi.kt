@@ -60,6 +60,9 @@ interface ChatEngineApi {
     /** On the device holding the account key: the 6 digits match (or not). */
     suspend fun confirmDeviceLink(accept: Boolean): Result<Unit>
     fun cancelDeviceLink()
+
+    /** Removing another device of the account (see [com.duochat.app.data.DeviceRemoval]). */
+    suspend fun deviceRemoval(action: com.duochat.app.data.DeviceRemoval): Result<Unit>
     suspend fun send(conversationId: String, rawText: String, replyToId: String? = null): Result<Unit>
     suspend fun sendFile(conversationId: String, rawName: String, mime: String, bytes: ByteArray, replyToId: String? = null): Result<Unit>
     suspend fun getFile(messageId: String): Pair<FileMeta, ByteArray>?

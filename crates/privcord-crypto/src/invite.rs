@@ -4,11 +4,11 @@
 use crate::{
     aead,
     card::{Contact, ContactCard},
+    devices::{AccountKeys, Author, DeviceList},
     error::CryptoError,
-    identity::Identity,
     kdf::{hkdf_sha256, pbkdf2_sha256, sha256_hex},
     rng::{random_array, Entropy},
-    seal::{placeholder_epk, sign_blob, verify_blob_signature},
+    seal::{placeholder_epk, signed_by, signed_part},
 };
 use privcord_domain::{blob::SealedBlob, codec};
 use serde_json::{json, Value};
@@ -109,19 +109,21 @@ impl InviteKind {
 pub struct InviteMessage {
     pub kind: InviteKind,
     pub contact: Contact,
+    /// The account's device list, when a device (not the account key) sent it.
+    pub list: Option<DeviceList>,
 }
 
+/// `card` is the account's own contact card; `author` signs (the account key, or this device with the account's list).
 pub fn seal_invite(
     rendezvous: &Rendezvous,
     kind: InviteKind,
-    identity: &Identity,
-    name: Option<&str>,
+    author: &Author<'_>,
+    card: &ContactCard,
     entropy: &mut dyn Entropy,
 ) -> Result<SealedBlob, CryptoError> {
-    let card = ContactCard::of(identity, name)?;
-    let uid = identity.uid()?;
+    let uid = author.uid;
     let iv: [u8; 12] = random_array(entropy)?;
-    let body = json!({ "t": kind.tag(), "card": card.encode()? });
+    let body = author.payload(&json!({ "t": kind.tag(), "card": card.encode()? }));
     let ct = aead::encrypt(
         &*rendezvous.key,
         &iv,
@@ -139,7 +141,7 @@ pub fn seal_invite(
         kem: None,
         key: None,
     };
-    blob.sig = sign_blob(identity, &blob)?;
+    blob.sig = codec::encode(&author.sign(&signed_part(&blob)?));
     Ok(blob)
 }
 
@@ -162,8 +164,19 @@ pub fn open_invite(rendezvous: &Rendezvous, blob: &Value) -> Option<InviteMessag
         _ => return None,
     };
     let contact = ContactCard::decode(body.get("card")?.as_str()?)?;
-    if contact.uid.as_str() != blob.from || !verify_blob_signature(&blob, &contact.card.sign) {
+    if contact.uid.as_str() != blob.from {
         return None;
     }
-    Some(InviteMessage { kind, contact })
+    let keys = AccountKeys::new(
+        contact.uid.clone(),
+        contact.card.sign.clone(),
+        contact.card.dh.clone(),
+        None,
+    );
+    let opened = signed_by(&blob, &keys, body)?;
+    Some(InviteMessage {
+        kind,
+        contact,
+        list: opened.list,
+    })
 }

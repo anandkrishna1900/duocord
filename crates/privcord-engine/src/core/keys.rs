@@ -11,7 +11,11 @@
 
 use super::{Core, StorageOp};
 use crate::error::ErrorCode;
-use privcord_crypto::prekeys::{open_v2, seal_v2, OwnKey, PeerKey};
+use privcord_crypto::{
+    devices::AccountKeys,
+    prekeys::{open_v2, seal_v2, OwnKey, PeerKey},
+    seal::Opened,
+};
 use privcord_domain::{
     blob::{PublicJwk, SealedBlob},
     UserId,
@@ -215,12 +219,21 @@ impl Core {
             Some(t) => Some(t.standing.clone()),
             None => None,
         };
-        let identity = self.identity.as_ref().ok_or(ErrorCode::NoIdentity)?;
+        let author = Self::author_of(
+            self.uid.as_ref(),
+            self.identity.as_ref(),
+            self.sync.as_ref(),
+            self.device_list.as_ref(),
+        )?;
         let blob = match &key {
-            Some(k) => seal_v2(identity, peer, k, payload, &mut *self.ports.entropy)?,
-            None => {
-                privcord_crypto::seal::seal(identity, peer, dh, payload, &mut *self.ports.entropy)?
-            }
+            Some(k) => seal_v2(&author, peer, k, payload, &mut *self.ports.entropy)?,
+            None => privcord_crypto::seal::seal_as(
+                &author,
+                peer,
+                dh,
+                payload,
+                &mut *self.ports.entropy,
+            )?,
         };
         if one_time && key.is_some() {
             // The one-time key is used: never again.
@@ -231,21 +244,31 @@ impl Core {
 
     /// Open a blob from a contact: v2 with the key it names (a one-time key is erased once used); v1 only from someone
     /// we have never exchanged keys with.
+    ///
+    /// A device list the blob carries (it came from one of their devices) is learned.
     pub(super) fn open_from_contact(
         &mut self,
         blob: &SealedBlob,
-        from: &UserId,
-        sign: &PublicJwk,
+        keys: &AccountKeys,
     ) -> Option<Value> {
+        let opened = self.open_sealed(blob, keys)?;
+        if let Some(list) = &opened.list {
+            self.learn_contact_list(&keys.uid, list);
+        }
+        Some(opened.payload)
+    }
+
+    fn open_sealed(&mut self, blob: &SealedBlob, keys: &AccountKeys) -> Option<Opened> {
         let own_uid = self.uid.clone()?;
+        let from = &keys.uid;
         if blob.v == 2 {
             let id = blob.key.as_deref()?;
             if let Some(k) = self.keys.standing.iter().find(|k| k.id == id) {
-                return open_v2(blob, &own_uid, k, sign, from);
+                return open_v2(blob, &own_uid, k, keys);
             }
             let list = self.keys.issued.get_mut(from)?;
             let at = list.iter().position(|k| k.id == id)?;
-            let opened = open_v2(blob, &own_uid, list.get(at)?, sign, from)?;
+            let opened = open_v2(blob, &own_uid, list.get(at)?, keys)?;
             list.remove(at);
             self.save_keys();
             return Some(opened);
@@ -254,6 +277,6 @@ impl Core {
             return None;
         }
         let identity = self.identity.as_ref()?;
-        privcord_crypto::seal::open(blob, &own_uid, identity, sign, from)
+        privcord_crypto::seal::open(blob, &own_uid, identity, keys)
     }
 }

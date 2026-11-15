@@ -7,6 +7,7 @@
 use crate::{
     aead,
     canonical::canonical_json,
+    devices::{AccountKeys, Author, DeviceList, Signer, LIST_FIELD},
     error::CryptoError,
     identity::{jwk_of, public_key_from_jwk, thumb, verify_signature, Identity},
     kdf::{hkdf_sha256, sha256_hex},
@@ -48,7 +49,7 @@ pub fn mailbox_for(uid: &str) -> String {
     sha256_hex(format!("{MAILBOX_PREFIX}{uid}").as_bytes())
 }
 
-/// Seal `payload` for one contact, signed by `identity`.
+/// Seal `payload` for one contact, signed by `identity` (the account key).
 pub fn seal(
     identity: &Identity,
     to: &UserId,
@@ -56,7 +57,25 @@ pub fn seal(
     payload: &Value,
     entropy: &mut dyn Entropy,
 ) -> Result<SealedBlob, CryptoError> {
-    let from = identity.uid()?;
+    let uid = identity.uid()?;
+    seal_as(
+        &Author::account(&uid, identity),
+        to,
+        to_dh,
+        payload,
+        entropy,
+    )
+}
+
+/// Seal `payload` for one contact, from the account, signed by `author` (the account key or one of its devices).
+pub fn seal_as(
+    author: &Author<'_>,
+    to: &UserId,
+    to_dh: &PublicJwk,
+    payload: &Value,
+    entropy: &mut dyn Entropy,
+) -> Result<SealedBlob, CryptoError> {
+    let from = author.uid;
     let ephemeral = random_secret_key(entropy)?;
     let peer = public_key_from_jwk(to_dh)?;
     let shared = diffie_hellman(ephemeral.to_nonzero_scalar(), peer.as_affine());
@@ -66,7 +85,8 @@ pub fn seal(
         format!("{to}|{from}").as_bytes(),
     )?;
     let iv: [u8; 12] = random_array(entropy)?;
-    let plaintext = serde_json::to_vec(payload).map_err(|_| CryptoError::Invalid)?;
+    let plaintext =
+        serde_json::to_vec(&author.payload(payload)).map_err(|_| CryptoError::Invalid)?;
     let ct = aead::encrypt(&key, &iv, &plaintext, format!("{to}|{from}").as_bytes())?;
     let mut blob = SealedBlob {
         v: 1,
@@ -79,7 +99,7 @@ pub fn seal(
         kem: None,
         key: None,
     };
-    blob.sig = codec::encode(&identity.sign_message(&signed_part(&blob)?));
+    blob.sig = codec::encode(&author.sign(&signed_part(&blob)?));
     if blob.encode().encode_utf16().count() > MAX_SEALED_BLOB_BYTES {
         return Err(CryptoError::TooLarge);
     }
@@ -100,69 +120,91 @@ pub fn verify_blob_signature(blob: &SealedBlob, sign_pub: &PublicJwk) -> bool {
     verify_signature(sign_pub, &sig, &part)
 }
 
-/// The payload, or `None` for anything not addressed to us, not from the pinned sender, or changed in transit.
-pub fn open(
+/// A blob opened: what it said, who of the account signed it, and the device list it carried (for the caller to
+/// [`AccountKeys::learn`]; [`LIST_FIELD`] is taken out of the payload).
+#[derive(Debug, Clone)]
+pub struct Opened {
+    pub payload: Value,
+    pub signer: Signer,
+    pub list: Option<DeviceList>,
+}
+
+/// Checks who of `keys`' account signed `blob`, given its decrypted payload, and takes the carried list out of it.
+pub(crate) fn signed_by(
     blob: &SealedBlob,
-    own_uid: &UserId,
-    own: &Identity,
-    sender_sign: &PublicJwk,
-    sender_uid: &UserId,
-) -> Option<Value> {
-    if blob.v != 1 || blob.to != own_uid.as_str() || blob.from != sender_uid.as_str() {
-        return None;
+    keys: &AccountKeys,
+    mut payload: Value,
+) -> Option<Opened> {
+    let list = AccountKeys::carried(&payload);
+    let signer = keys.signer(
+        &codec::decode(&blob.sig)?,
+        &signed_part(blob).ok()?,
+        list.as_ref(),
+    )?;
+    if let Some(o) = payload.as_object_mut() {
+        o.remove(LIST_FIELD);
     }
-    if !verify_blob_signature(blob, sender_sign) {
-        return None;
-    }
+    Some(Opened {
+        payload,
+        signer,
+        list,
+    })
+}
+
+fn decrypt(blob: &SealedBlob, own: &Identity) -> Option<Value> {
     let shared = own.agree(&blob.epk).ok()?;
-    let key = hkdf_sha256::<32>(
-        &*shared,
-        &seal_salt(),
-        format!("{}|{}", blob.to, blob.from).as_bytes(),
-    )
-    .ok()?;
+    let aad = format!("{}|{}", blob.to, blob.from);
+    let key = hkdf_sha256::<32>(&*shared, &seal_salt(), aad.as_bytes()).ok()?;
     let plain = aead::decrypt(
         &key,
         &codec::decode(&blob.iv)?,
         &codec::decode(&blob.ct)?,
-        format!("{}|{}", blob.to, blob.from).as_bytes(),
+        aad.as_bytes(),
     )
     .ok()?;
     serde_json::from_slice(&plain).ok()
 }
 
+/// The payload, or `None` for anything not addressed to us, not signed for the pinned sender (by their account key or
+/// one of their devices), or changed in transit.
+pub fn open(
+    blob: &SealedBlob,
+    own_uid: &UserId,
+    own: &Identity,
+    from: &AccountKeys,
+) -> Option<Opened> {
+    if blob.v != 1 || blob.to != own_uid.as_str() || blob.from != from.uid.as_str() {
+        return None;
+    }
+    signed_by(blob, from, decrypt(blob, own)?)
+}
+
 /// Open a blob from someone who is not a contact yet: a friend request after they added us from our card (a QR code).
 /// The payload must carry their contact card under `"card"`. Their identity is taken from that card (its proof binds the
 /// signing key to the key the uid comes from) and must be the blob's sender; only then is the signature checked with the
-/// card's own key. So a request can only come from whoever holds that identity's private keys.
+/// card's own key (or a device on the account list the payload carries). So a request can only come from whoever holds
+/// that identity's private keys, or a device they listed.
 pub fn open_from_stranger(
     blob: &SealedBlob,
     own_uid: &UserId,
     own: &Identity,
-) -> Option<(crate::card::Contact, Value)> {
+) -> Option<(crate::card::Contact, Opened)> {
     if blob.v != 1 || blob.to != own_uid.as_str() {
         return None;
     }
-    let shared = own.agree(&blob.epk).ok()?;
-    let key = hkdf_sha256::<32>(
-        &*shared,
-        &seal_salt(),
-        format!("{}|{}", blob.to, blob.from).as_bytes(),
-    )
-    .ok()?;
-    let plain = aead::decrypt(
-        &key,
-        &codec::decode(&blob.iv)?,
-        &codec::decode(&blob.ct)?,
-        format!("{}|{}", blob.to, blob.from).as_bytes(),
-    )
-    .ok()?;
-    let payload: Value = serde_json::from_slice(&plain).ok()?;
+    let payload = decrypt(blob, own)?;
     let contact = crate::card::ContactCard::decode(payload.get("card")?.as_str()?)?;
-    if contact.uid.as_str() != blob.from || !verify_blob_signature(blob, &contact.card.sign) {
+    if contact.uid.as_str() != blob.from {
         return None;
     }
-    Some((contact, payload))
+    let keys = AccountKeys::new(
+        contact.uid.clone(),
+        contact.card.sign.clone(),
+        contact.card.dh.clone(),
+        None,
+    );
+    let opened = signed_by(blob, &keys, payload)?;
+    Some((contact, opened))
 }
 
 /// A fresh throwaway key whose public half fills the `epk` slot of blobs that are not ECDH-sealed (invites, channels),
@@ -173,7 +215,7 @@ pub(crate) fn placeholder_epk(entropy: &mut dyn Entropy) -> Result<PublicJwk, Cr
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
+    #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
     use super::*;
     use crate::{identity::Identity, rng::SeededEntropy};
 
@@ -198,5 +240,81 @@ mod tests {
         let mut other = blob.clone();
         other.ct.push('A');
         assert_ne!(replay_id(&blob), replay_id(&other));
+    }
+
+    #[test]
+    fn a_friend_accepts_a_listed_device_and_nothing_else() {
+        let mut rng = SeededEntropy::new("devices-seal");
+        let id = |rng: &mut SeededEntropy| Identity::generate(rng).unwrap();
+        let (account, phone, laptop, bob, eve) = (
+            id(&mut rng),
+            id(&mut rng),
+            id(&mut rng),
+            id(&mut rng),
+            id(&mut rng),
+        );
+        let (au, bu) = (account.uid().unwrap(), bob.uid().unwrap());
+        let one = DeviceList::first(&account, &phone, "Phone", 1).unwrap();
+        let two = one
+            .with_added(
+                &account,
+                crate::devices::DeviceEntry::new(&laptop, "Laptop", 2).unwrap(),
+            )
+            .unwrap();
+        let laptop_id =
+            crate::devices::device_id(&laptop.sign_public(), &laptop.dh_public()).unwrap();
+        let fresh =
+            || AccountKeys::new(au.clone(), account.sign_public(), account.dh_public(), None);
+        let payload = json!({ "t": "msg", "text": "from the laptop" });
+        let from_laptop = |list: &DeviceList, rng: &mut SeededEntropy| {
+            seal_as(
+                &Author::device(&au, &laptop, list),
+                &bu,
+                &bob.dh_public(),
+                &payload,
+                rng,
+            )
+            .unwrap()
+        };
+
+        // A friend who never saw the list checks the one the blob carries, and learns it.
+        let mut keys = fresh();
+        let opened = open(&from_laptop(&two, &mut rng), &bu, &bob, &keys).unwrap();
+        assert_eq!(opened.signer, Signer::Device(laptop_id.clone()));
+        assert_eq!(opened.payload, payload);
+        assert!(keys.learn(opened.list.as_ref().unwrap()));
+        assert!(!keys.learn(&one), "an older list changes nothing");
+
+        // The account key still counts on its own.
+        let plain = seal(&account, &bu, &bob.dh_public(), &payload, &mut rng).unwrap();
+        assert_eq!(
+            open(&plain, &bu, &bob, &keys).unwrap().signer,
+            Signer::Account
+        );
+
+        // A device the list does not have: refused, whatever list it carries.
+        let stranger = seal_as(
+            &Author::device(&au, &eve, &two),
+            &bu,
+            &bob.dh_public(),
+            &payload,
+            &mut rng,
+        )
+        .unwrap();
+        assert!(open(&stranger, &bu, &bob, &fresh()).is_none());
+        // A list for another account does not vouch for anyone here.
+        let eves = DeviceList::first(&eve, &laptop, "Laptop", 1).unwrap();
+        assert!(open(&from_laptop(&eves, &mut rng), &bu, &bob, &fresh()).is_none());
+        // A list changed in transit does not verify.
+        let mut forged = two.clone();
+        forged.devices[1].name = "Not a laptop".into();
+        assert!(open(&from_laptop(&forged, &mut rng), &bu, &bob, &fresh()).is_none());
+
+        // Once the friend knows the laptop was removed, an old list it still carries does not bring it back.
+        let three = two.with_removed(&account, &laptop_id, 3).unwrap();
+        assert!(keys.learn(&three));
+        assert!(open(&from_laptop(&two, &mut rng), &bu, &bob, &keys).is_none());
+        // And the blob is still only for Bob.
+        assert!(open(&from_laptop(&two, &mut rng), &au, &account, &fresh()).is_none());
     }
 }

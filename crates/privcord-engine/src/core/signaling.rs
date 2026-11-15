@@ -91,7 +91,7 @@ impl Core {
 
     /// Seal `payload` to a contact and send it: through signaling if it is up, else (for live signaling only) through
     /// mutual contacts.
-    fn put_sealed(
+    pub(super) fn put_sealed(
         &mut self,
         peer: &UserId,
         payload: &Value,
@@ -208,16 +208,12 @@ impl Core {
         ) else {
             return;
         };
-        let Some(sign) = self
-            .contacts
-            .get(&from)
-            .map(|c| c.contact.card.sign.clone())
-        else {
+        let Some(keys) = self.contact_keys(&from) else {
             // Not a contact: the only thing a stranger may send is a friend request after adding us from our card.
             self.on_friend_request(&blob);
             return;
         };
-        let Some(Value::Object(payload)) = self.open_from_contact(&blob, &from, &sign) else {
+        let Some(Value::Object(payload)) = self.open_from_contact(&blob, &keys) else {
             return;
         };
         let text = |k: &str| payload.get(k).and_then(Value::as_str);
@@ -356,6 +352,7 @@ impl Core {
                     _ => {}
                 }
             }
+            Some("devices") => self.on_device_notice(&from, payload.get("list")),
             Some("ack") => {
                 if let Some(id) = text("id") {
                     self.on_ack(&from, &json!({ "messageId": id, "state": "DELIVERED" }));

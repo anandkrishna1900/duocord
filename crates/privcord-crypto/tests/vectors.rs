@@ -11,21 +11,68 @@ use privcord_crypto::{
     backup::{open_backup, seal_backup, BACKUP_PREFIX},
     canonical::canonical_json,
     card::ContactCard,
-    channel::{derive_channel, open_channel_message, seal_channel_message},
+    channel::{derive_channel, open_channel_message},
     identity::{
         derive_key_material, derive_seed, generate_recovery_phrase, validate_recovery_phrase,
         verify_identity_proof, Identity, Purpose,
     },
-    invite::{
-        derive_invite, new_invite_words, open_invite, parse_invite_words, seal_invite, InviteKind,
-    },
+    invite::{derive_invite, new_invite_words, open_invite, parse_invite_words, InviteKind},
     rng::{Entropy, SeededEntropy},
     safety::derive_safety_number,
-    seal::{mailbox_for, open, open_from_stranger, seal, signed_part, verify_blob_signature},
+    seal::{mailbox_for, open_from_stranger, seal, signed_part, verify_blob_signature},
     CryptoError,
 };
 use privcord_domain::{blob::SealedBlob, codec};
 use serde_json::{json, Value};
+
+/// The calls as they were before device signing: the account key signs, and only the account key is checked.
+fn open(
+    blob: &SealedBlob,
+    own_uid: &privcord_domain::UserId,
+    own: &Identity,
+    sign: &privcord_domain::blob::PublicJwk,
+    from: &privcord_domain::UserId,
+) -> Option<Value> {
+    let keys =
+        privcord_crypto::devices::AccountKeys::new(from.clone(), sign.clone(), sign.clone(), None);
+    privcord_crypto::seal::open(blob, own_uid, own, &keys).map(|o| o.payload)
+}
+
+fn seal_invite(
+    rv: &privcord_crypto::invite::Rendezvous,
+    kind: InviteKind,
+    who: &Identity,
+    name: Option<&str>,
+    rng: &mut dyn Entropy,
+) -> Result<SealedBlob, CryptoError> {
+    let uid = who.uid()?;
+    privcord_crypto::invite::seal_invite(
+        rv,
+        kind,
+        &privcord_crypto::devices::Author::account(&uid, who),
+        &ContactCard::of(who, name)?,
+        rng,
+    )
+}
+
+fn seal_channel_message(
+    keys: &privcord_crypto::channel::ChannelKeys,
+    who: &Identity,
+    name: Option<&str>,
+    text: &str,
+    at: i64,
+    rng: &mut dyn Entropy,
+) -> Result<SealedBlob, CryptoError> {
+    let uid = who.uid()?;
+    privcord_crypto::channel::seal_channel_message(
+        keys,
+        &privcord_crypto::devices::Author::account(&uid, who),
+        &ContactCard::of(who, name)?,
+        text,
+        at,
+        rng,
+    )
+}
 
 fn load(name: &str) -> Value {
     let root = env!("CARGO_MANIFEST_DIR");
@@ -737,9 +784,9 @@ fn a_friend_request_opens_only_from_the_identity_on_its_card() {
     // Ann added Bob from his QR code; Bob does not know her yet.
     let hello = json!({ "t": "hello", "card": ann_card });
     let blob = seal(&ann, &bob_uid, &bob.dh_public(), &hello, &mut rng).unwrap();
-    let (contact, payload) = open_from_stranger(&blob, &bob_uid, &bob).unwrap();
+    let (contact, opened) = open_from_stranger(&blob, &bob_uid, &bob).unwrap();
     assert_eq!(contact.uid, ann.uid().unwrap());
-    assert_eq!(payload["t"], "hello");
+    assert_eq!(opened.payload["t"], "hello");
 
     // Eve signs her own request but puts Ann's card in it: the card is not the sender, so it is refused.
     let forged = seal(&eve, &bob_uid, &bob.dh_public(), &hello, &mut rng).unwrap();

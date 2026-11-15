@@ -1062,7 +1062,15 @@ fn answers_to_our_words_cannot_flood_the_request_list() {
     let mut entropy = SeededEntropy::new("flood");
     for _ in 0..25 {
         let id = Identity::generate(&mut entropy).unwrap();
-        let blob = seal_invite(&rv, InviteKind::Reply, &id, None, &mut entropy).unwrap();
+        let uid = id.uid().unwrap();
+        let blob = seal_invite(
+            &rv,
+            InviteKind::Reply,
+            &privcord_crypto::devices::Author::account(&uid, &id),
+            &privcord_crypto::card::ContactCard::of(&id, None).unwrap(),
+            &mut entropy,
+        )
+        .unwrap();
         a.core.signal_blob(&rv.mailbox, &blob.encode());
     }
     assert_eq!(a.core.snapshot().requests.len(), 20);

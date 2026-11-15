@@ -203,6 +203,11 @@ impl FileSource for NoFiles {
 }
 
 impl SyncState {
+    /// This device's own keys.
+    pub(super) fn device_key(&self) -> &Identity {
+        &self.device
+    }
+
     /// The account's device list changed (a device was linked): its devices write entries this device accepts.
     pub(super) fn devices_changed(&mut self, list: &DeviceList) {
         self.replica.set_devices(list.clone());

@@ -565,3 +565,70 @@ fn a_wrong_code_links_nothing() {
     }
     assert!(stranger.core.own_uid().is_none());
 }
+
+#[test]
+fn friends_hear_of_a_linked_device_once_and_keep_the_newest_list() {
+    let clock = FakeClock::at(1_700_000_000_000);
+    let mut relay = Relay::default();
+    let mut phone = Device::new("phone", &clock);
+    phone.core.create_identity().unwrap();
+    let mut fran = Device::new("fran", &clock);
+    fran.core.create_identity().unwrap();
+    let fran_uid = fran.core.own_uid().unwrap().clone();
+    let phone_uid = phone.core.own_uid().unwrap().clone();
+    phone
+        .core
+        .add_contact(
+            &fran.core.own_card(Some("Fran")).unwrap(),
+            ContactTrust::Verified,
+        )
+        .unwrap();
+    fran.core
+        .add_contact(
+            &phone.core.own_card(Some("Pat")).unwrap(),
+            ContactTrust::Verified,
+        )
+        .unwrap();
+    phone.online(&mut relay);
+    fran.online(&mut relay);
+    // One device only: friends are told nothing.
+    assert!(fran.core.contact_device_list(&phone_uid).is_none());
+    let fran_box = privcord_crypto::seal::mailbox_for(fran_uid.as_str());
+    let posted_before = relay.boxes.get(&fran_box).map_or(0, Vec::len);
+    assert_eq!(posted_before, 0);
+
+    let mut laptop = Device::new("laptop", &clock);
+    let code = phone.core.start_device_link().unwrap();
+    laptop.core.join_device_link(&code, "Laptop").unwrap();
+    for _ in 0..3 {
+        laptop.online(&mut relay);
+        phone.online(&mut relay);
+    }
+    phone.core.confirm_device_link(true).unwrap();
+    for _ in 0..4 {
+        laptop.online(&mut relay);
+        phone.online(&mut relay);
+    }
+    assert_eq!(phone.core.device_list().unwrap().active().count(), 2);
+
+    // The phone told Fran (sealed to her mailbox), once, and she keeps the list it vouches for.
+    fran.online(&mut relay);
+    let known = fran
+        .core
+        .contact_device_list(&phone_uid)
+        .expect("Fran knows the devices");
+    assert_eq!(&known, phone.core.device_list().unwrap());
+    let laptop_id = laptop.core.this_device_id().unwrap().to_owned();
+    assert!(known.get(&laptop_id).is_some_and(|d| d.active()));
+    phone.online(&mut relay);
+    phone.online(&mut relay);
+    assert_eq!(
+        relay.boxes.get(&fran_box).map_or(0, Vec::len),
+        1,
+        "told once"
+    );
+
+    // Removing the friend forgets their devices too.
+    fran.core.remove_contact(&phone_uid).unwrap();
+    assert!(fran.core.contact_device_list(&phone_uid).is_none());
+}

@@ -17,7 +17,7 @@ use crate::{
     identity::{uid_from_keys, verify_signature, Identity},
     kdf::sha256,
 };
-use privcord_domain::{blob::PublicJwk, codec};
+use privcord_domain::{blob::PublicJwk, codec, ids::UserId};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -288,6 +288,133 @@ impl DeviceList {
     /// Parses a list; it still has to be [`verify`](Self::verify)-ed against the account.
     pub fn from_json(text: &str) -> Result<Self, DeviceError> {
         serde_json::from_str(text).map_err(|_| DeviceError::Malformed)
+    }
+}
+
+/// Who signed something for an account.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Signer {
+    /// The account key itself (an install holding it: the first device, or one restored from the phrase).
+    Account,
+    /// A device on the account's list, by id.
+    Device(String),
+}
+
+/// Who signs what this install sends: the account key, or this device's own key with the account's list (which every
+/// device-signed message carries, so a friend who has not seen the list yet can still check it).
+#[derive(Debug, Clone, Copy)]
+pub struct Author<'a> {
+    pub uid: &'a UserId,
+    pub key: &'a Identity,
+    pub list: Option<&'a DeviceList>,
+}
+
+impl<'a> Author<'a> {
+    pub fn account(uid: &'a UserId, key: &'a Identity) -> Self {
+        Self {
+            uid,
+            key,
+            list: None,
+        }
+    }
+
+    pub fn device(uid: &'a UserId, key: &'a Identity, list: &'a DeviceList) -> Self {
+        Self {
+            uid,
+            key,
+            list: Some(list),
+        }
+    }
+
+    pub fn sign(&self, message: &[u8]) -> [u8; 64] {
+        self.key.sign_message(message)
+    }
+
+    /// The payload as sent: a device adds the account's list under [`LIST_FIELD`].
+    pub fn payload(&self, payload: &serde_json::Value) -> serde_json::Value {
+        let mut out = payload.clone();
+        if let (Some(list), Some(o)) = (self.list, out.as_object_mut()) {
+            if let Ok(v) = serde_json::to_value(list) {
+                o.insert(LIST_FIELD.into(), v);
+            }
+        }
+        out
+    }
+}
+
+/// Where a device-signed payload carries the account's device list.
+pub const LIST_FIELD: &str = "deviceList";
+
+/// What a friend knows about an account: its two public keys (from the contact card) and the newest device list of it
+/// they have seen. A signature counts if the account key made it, or a device active on that list.
+#[derive(Debug, Clone)]
+pub struct AccountKeys {
+    pub uid: UserId,
+    pub sign: PublicJwk,
+    pub dh: PublicJwk,
+    list: Option<DeviceList>,
+}
+
+impl AccountKeys {
+    /// `list` is what was stored for them; it is kept only if it verifies for this account.
+    pub fn new(uid: UserId, sign: PublicJwk, dh: PublicJwk, list: Option<DeviceList>) -> Self {
+        let list = list.filter(|l| l.verify(&sign, &dh).is_ok() && l.account == uid.as_str());
+        Self {
+            uid,
+            sign,
+            dh,
+            list,
+        }
+    }
+
+    pub fn list(&self) -> Option<&DeviceList> {
+        self.list.as_ref()
+    }
+
+    /// Takes a list that arrived for this account. `true` when it replaced the one known (the caller stores it): the
+    /// first valid list, or one that extends the known one. An older list, or a fork, changes nothing.
+    pub fn learn(&mut self, list: &DeviceList) -> bool {
+        let take = match &self.list {
+            None => list.verify(&self.sign, &self.dh).is_ok(),
+            Some(known) => known.accepts(list, &self.sign, &self.dh).is_ok(),
+        };
+        if take {
+            self.list = Some(list.clone());
+        }
+        take
+    }
+
+    /// The list a payload carries, if any (not yet checked).
+    pub fn carried(payload: &serde_json::Value) -> Option<DeviceList> {
+        serde_json::from_value(payload.get(LIST_FIELD)?.clone()).ok()
+    }
+
+    /// Who made `sig` over `message`: the account key, or a device active on the known list, or on `carried` (a list
+    /// that came with the message: it must verify, and a device the known list has removed stays removed, so an old list
+    /// cannot bring one back).
+    pub fn signer(
+        &self,
+        sig: &[u8],
+        message: &[u8],
+        carried: Option<&DeviceList>,
+    ) -> Option<Signer> {
+        if verify_signature(&self.sign, sig, message) {
+            return Some(Signer::Account);
+        }
+        let removed = |id: &str| {
+            self.list
+                .as_ref()
+                .and_then(|l| l.get(id))
+                .is_some_and(|d| !d.active())
+        };
+        let carried = carried
+            .filter(|l| l.account == self.uid.as_str() && l.verify(&self.sign, &self.dh).is_ok());
+        self.list
+            .iter()
+            .chain(carried)
+            .flat_map(DeviceList::active)
+            .find(|d| !removed(&d.id) && verify_signature(&d.sign, sig, message))
+            .map(|d| Signer::Device(d.id.clone()))
     }
 }
 

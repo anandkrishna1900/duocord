@@ -194,13 +194,16 @@ pub fn open_from_device(
     own_entry: &DeviceEntry,
     from: &DeviceEntry,
 ) -> Option<Value> {
-    open(
-        blob,
-        &device_uid(own_entry).ok()?,
-        own,
-        &from.sign,
-        &device_uid(from).ok()?,
-    )
+    let sender = crate::devices::AccountKeys::new(
+        device_uid(from).ok()?,
+        from.sign.clone(),
+        from.dh.clone(),
+        None,
+    );
+    let opened = open(blob, &device_uid(own_entry).ok()?, own, &sender)?;
+    // A device signs these with its own key, as itself: never as another device.
+    (opened.signer == crate::devices::Signer::Account && opened.list.is_none())
+        .then_some(opened.payload)
 }
 
 #[cfg(test)]

@@ -4,6 +4,7 @@ use crate::{
     backup::seal_backup_v1,
     card::ContactCard,
     channel::{derive_channel, seal_channel_message},
+    devices::Author,
     e2ee::{
         accept_initial_envelope, create_bundle, create_one_time_prekey, create_signed_prekey,
         decrypt_envelope, encrypt_to_envelope, initiate_session, serialize_session,
@@ -43,14 +44,25 @@ pub fn build() -> Result<Value, crate::CryptoError> {
         .map(|s| (*s).to_owned())
         .collect();
     let rv = derive_invite(&words)?;
-    let invite_card = seal_invite(&rv, InviteKind::Card, &ann, Some("Ann"), &mut rng)?;
-    let invite_reply = seal_invite(&rv, InviteKind::Reply, &bob, Some("Bob"), &mut rng)?;
+    let (ann_author, bob_author) = (
+        Author::account(&ann_uid, &ann),
+        Author::account(&bob_uid, &bob),
+    );
+    let ann_card = ContactCard::of(&ann, Some("Ann"))?;
+    let invite_card = seal_invite(&rv, InviteKind::Card, &ann_author, &ann_card, &mut rng)?;
+    let invite_reply = seal_invite(
+        &rv,
+        InviteKind::Reply,
+        &bob_author,
+        &ContactCard::of(&bob, Some("Bob"))?,
+        &mut rng,
+    )?;
 
     let general = derive_channel("general")?;
     let channel_blob = seal_channel_message(
         &general,
-        &ann,
-        Some("Ann"),
+        &ann_author,
+        &ann_card,
         "hello from Rust",
         1_700_000_000_123,
         &mut rng,

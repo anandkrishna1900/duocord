@@ -10,10 +10,14 @@
 use super::{Core, StorageOp};
 use crate::error::ErrorCode;
 use privcord_crypto::{
-    devices::DeviceList,
+    card::ContactCard,
+    devices::{AccountKeys, Author, DeviceList},
     identity::{Identity, StoredSecrets},
 };
-use privcord_domain::blob::PublicJwk;
+use privcord_domain::signaling::PutKind;
+use privcord_domain::{blob::PublicJwk, UserId};
+use serde_json::{json, Value};
+use std::collections::BTreeMap;
 use zeroize::Zeroizing;
 
 pub(super) const KV_DEVICE_KEYS: &str = "devices.self";
@@ -24,6 +28,12 @@ const FIRST_NAME: &str = "This device";
 pub(super) const KV_ACCOUNT_PUBLIC: &str = "account.public";
 /// On a device linked by QR code: the account's contact card, as the account signed it when the device was linked.
 pub(super) const KV_ACCOUNT_CARD: &str = "account.card";
+/// A friend's device list, the newest seen (`devices.of.<uid>`).
+const KV_CONTACT_LIST: &str = "devices.of";
+/// Which version of our list each friend has been sent (`{ uid: version }`).
+const KV_TOLD: &str = "devices.told";
+/// How long a list notice waits on the relays for a friend who is offline.
+const NOTICE_TTL_SEC: u32 = 7 * 24 * 3600;
 
 impl Core {
     fn device_keys_key(&self) -> Option<String> {
@@ -126,6 +136,177 @@ impl Core {
             self.ensure_sync(device)?;
         }
         Ok(())
+    }
+
+    /// Who signs what this install sends to friends: the account key where this install holds it, else this device's
+    /// own key with the account's list. (A free function over the fields, so the caller can still lend out entropy.)
+    pub(super) fn author_of<'a>(
+        uid: Option<&'a UserId>,
+        identity: Option<&'a Identity>,
+        sync: Option<&'a super::sync::SyncState>,
+        list: Option<&'a DeviceList>,
+    ) -> Result<Author<'a>, ErrorCode> {
+        let uid = uid.ok_or(ErrorCode::NoIdentity)?;
+        if let Some(id) = identity {
+            return Ok(Author::account(uid, id));
+        }
+        match (sync, list) {
+            (Some(s), Some(l)) => Ok(Author::device(uid, s.device_key(), l)),
+            _ => Err(ErrorCode::NoIdentity),
+        }
+    }
+
+    /// The account's card with `name` on it (the name is not part of what the account key signs, so a linked device
+    /// can put the current one on the card it was given).
+    pub(super) fn own_contact_card(&self, name: Option<&str>) -> Result<ContactCard, ErrorCode> {
+        if let Some(id) = &self.identity {
+            return Ok(ContactCard::of(id, name)?);
+        }
+        let (_, card) = self
+            .stored_account_card()
+            .ok_or_else(|| self.identity().err().unwrap_or(ErrorCode::NoIdentity))?;
+        let named = ContactCard {
+            name: name.map(str::to_owned),
+            ..card
+        };
+        // Through the text form, so the name is cut the way every card's is.
+        ContactCard::decode(&named.encode()?)
+            .map(|c| c.card)
+            .ok_or(ErrorCode::Crypto)
+    }
+
+    fn contact_list_key(uid: &UserId) -> String {
+        format!("{KV_CONTACT_LIST}.{uid}")
+    }
+
+    /// What we know of a friend's account: the keys on their card and the newest device list of theirs we have seen.
+    pub(super) fn contact_keys(&self, uid: &UserId) -> Option<AccountKeys> {
+        let card = &self.contacts.get(uid)?.contact.card;
+        let list = self
+            .ports
+            .storage
+            .kv(&Self::contact_list_key(uid))
+            .ok()
+            .flatten()
+            .and_then(|b| String::from_utf8(b).ok())
+            .and_then(|t| DeviceList::from_json(&t).ok());
+        Some(AccountKeys::new(
+            uid.clone(),
+            card.sign.clone(),
+            card.dh.clone(),
+            list,
+        ))
+    }
+
+    /// A friend's device list arrived (with something one of their devices sent, or as a notice): kept if it is the
+    /// first we have or extends the one we have.
+    pub(super) fn learn_contact_list(&mut self, uid: &UserId, list: &DeviceList) {
+        let Some(mut keys) = self.contact_keys(uid) else {
+            return;
+        };
+        if keys.learn(list) {
+            let _ = self.ports.storage.apply(&[StorageOp::SetKv {
+                key: Self::contact_list_key(uid),
+                value: list.to_json().into_bytes(),
+            }]);
+        }
+    }
+
+    /// A friend's device list as a notice (a frame on a link, or sealed to our mailbox).
+    pub(super) fn on_device_notice(&mut self, uid: &UserId, list: Option<&Value>) {
+        if let Some(list) = list.and_then(|v| serde_json::from_value::<DeviceList>(v.clone()).ok())
+        {
+            self.learn_contact_list(uid, &list);
+        }
+    }
+
+    /// Forget what we knew of a friend's devices (they were removed).
+    pub(super) fn forget_contact_devices(&mut self, uid: &UserId) {
+        let mut told = self.told();
+        told.remove(uid.as_str());
+        let _ = self.ports.storage.apply(&[
+            StorageOp::SetKv {
+                key: Self::contact_list_key(uid),
+                value: Vec::new(),
+            },
+            Self::told_op(&told),
+        ]);
+    }
+
+    fn told(&self) -> BTreeMap<String, u64> {
+        self.ports
+            .storage
+            .kv(KV_TOLD)
+            .ok()
+            .flatten()
+            .and_then(|b| serde_json::from_slice(&b).ok())
+            .unwrap_or_default()
+    }
+
+    fn told_op(told: &BTreeMap<String, u64>) -> StorageOp {
+        StorageOp::SetKv {
+            key: KV_TOLD.into(),
+            value: serde_json::to_vec(told).unwrap_or_default(),
+        }
+    }
+
+    /// Our list, when friends need to hear of it: once the account has more than one device. (Only an install holding
+    /// the account key tells them for now; a linked device reaches friends from per-device delivery on.)
+    fn list_to_tell(&self) -> Option<DeviceList> {
+        self.identity.as_ref()?;
+        self.device_list.clone().filter(|l| l.devices.len() > 1)
+    }
+
+    /// A link to a friend is up: hand them our list if they have not had this version.
+    pub(super) fn tell_devices_on_link(&mut self, peer: &UserId) {
+        let Some(list) = self.list_to_tell() else {
+            return;
+        };
+        let mut told = self.told();
+        if told.get(peer.as_str()).is_some_and(|v| *v >= list.version) {
+            return;
+        }
+        let frame = json!({ "v": privcord_domain::limits::PROTOCOL_VERSION, "kind": "devices", "list": list });
+        if self.send_secure(peer, &frame) {
+            told.insert(peer.to_string(), list.version);
+            let _ = self.ports.storage.apply(&[Self::told_op(&told)]);
+        }
+    }
+
+    /// Friends who have not had our newest list get it sealed to their mailbox (so they hear of a new device even
+    /// before it ever writes to them, and of a removed one as soon as they are online).
+    pub(super) fn tick_device_notices(&mut self) {
+        let Some(list) = self.list_to_tell() else {
+            return;
+        };
+        if !self.ports.transport.signal_available() {
+            return;
+        }
+        let mut told = self.told();
+        let due: Vec<UserId> = self
+            .contacts
+            .keys()
+            .filter(|u| told.get(u.as_str()).is_none_or(|v| *v < list.version))
+            .cloned()
+            .collect();
+        if due.is_empty() {
+            return;
+        }
+        let notice = json!({ "t": "devices", "list": list });
+        for uid in due {
+            if self
+                .put_sealed(&uid, &notice, PutKind::Msg, NOTICE_TTL_SEC)
+                .is_ok()
+            {
+                told.insert(uid.to_string(), list.version);
+            }
+        }
+        let _ = self.ports.storage.apply(&[Self::told_op(&told)]);
+    }
+
+    /// A friend's device list, the newest we have seen (`None` until one of their devices was linked).
+    pub fn contact_device_list(&self, uid: &UserId) -> Option<DeviceList> {
+        self.contact_keys(uid)?.list().cloned()
     }
 
     /// This install's device id, once it has an identity.

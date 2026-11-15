@@ -48,7 +48,20 @@ fn main() {
     time(
         "open a message (verify + ECDH + HKDF + AES-GCM)",
         200,
-        || open(&blob, &bu, &bob, &ann.sign_public(), &au).unwrap(),
+        || {
+            open(
+                &blob,
+                &bu,
+                &bob,
+                &privcord_crypto::devices::AccountKeys::new(
+                    au.clone(),
+                    ann.sign_public(),
+                    ann.dh_public(),
+                    None,
+                ),
+            )
+            .unwrap()
+        },
     );
     let mut a = SecureChannel::new(au.as_str(), bu.as_str(), bob.sign_public(), &mut rng).unwrap();
     let mut b = SecureChannel::new(bu.as_str(), au.as_str(), ann.sign_public(), &mut rng).unwrap();

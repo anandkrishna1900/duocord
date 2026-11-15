@@ -536,18 +536,11 @@ impl Core {
 
     /// The `DUOID1:` text to hand to a friend.
     pub fn own_card(&self, name: Option<&str>) -> Result<String, ErrorCode> {
-        if let Some(id) = &self.identity {
-            return Ok(ContactCard::of(id, name)?.encode()?);
-        }
-        // A linked device shares the card the account made when it was linked (the name on it is the one from then;
-        // a new name needs the device holding the account key, which signs cards).
-        self.stored_account_card()
-            .map(|(text, _)| text)
-            .ok_or_else(|| self.identity().err().unwrap_or(ErrorCode::NoIdentity))
+        Ok(self.own_contact_card(name)?.encode()?)
     }
 
     /// The account's card as stored on a linked device: its text, and the card itself (checked against our uid).
-    fn stored_account_card(&self) -> Option<(String, ContactCard)> {
+    pub(super) fn stored_account_card(&self) -> Option<(String, ContactCard)> {
         let text =
             String::from_utf8(self.ports.storage.kv(devices::KV_ACCOUNT_CARD).ok()??).ok()?;
         let contact = ContactCard::decode(&text).filter(|c| Some(&c.uid) == self.uid.as_ref())?;
@@ -1033,6 +1026,7 @@ impl Core {
         }
         self.step(peer, ConnectionEvent::Established(path));
         self.keys_on_link(peer);
+        self.tell_devices_on_link(peer);
         self.send_privacy(peer);
         self.send_group_hello(peer);
         self.sync_social(peer);
@@ -1155,7 +1149,7 @@ impl Core {
     }
 
     /// Send one frame to a peer: inside the post-quantum channel, which must be up (protocol v2 sends nothing plain).
-    fn send_secure(&mut self, peer: &UserId, frame: &Value) -> bool {
+    pub(super) fn send_secure(&mut self, peer: &UserId, frame: &Value) -> bool {
         let wrapped = match self.peers.get_mut(peer).and_then(|p| p.pq.as_mut()) {
             Some(c) if c.ready() => match c.encrypt(frame) {
                 Ok(d) => d.to_value(),
@@ -1211,6 +1205,7 @@ impl Core {
             Some("react") => self.on_react_frame(peer, frame),
             Some("file_offer") => self.on_file_offer(peer, frame),
             Some("file_chunk") => self.on_file_chunk(peer, frame),
+            Some("devices") => self.on_device_notice(peer, frame.get("list")),
             Some("privacy") => {
                 if let Some(g) = frame.get("groupOnly").and_then(Value::as_bool) {
                     if let Some(p) = self.peers.get_mut(peer) {
@@ -1727,6 +1722,7 @@ impl Core {
         // Before the store-and-forward pass: a message's sync copy goes up no later than the message does.
         self.tick_sync();
         self.tick_link();
+        self.tick_device_notices();
         self.tick_sealed();
         self.tick_group_mesh();
         self.tick_channels();
@@ -2666,23 +2662,22 @@ impl Core {
         let own = self.uid.clone().ok_or(ErrorCode::NoIdentity)?;
         let name = normalize_channel_name(raw).ok_or(ErrorCode::BadChannel)?;
         let now = self.now();
-        let (Some(keys), Some(identity)) = (self.channels.get(&name), self.identity.as_ref())
-        else {
+        let card = self.own_contact_card(self.display_name.as_deref())?;
+        let author = Self::author_of(
+            self.uid.as_ref(),
+            self.identity.as_ref(),
+            self.sync.as_ref(),
+            self.device_list.as_ref(),
+        )?;
+        let Some(keys) = self.channels.get(&name) else {
             return Err(ErrorCode::NotJoined);
         };
         let mailbox = keys.mailbox.clone();
-        let blob = seal_channel_message(
-            keys,
-            identity,
-            self.display_name.as_deref(),
-            text,
-            now,
-            &mut *self.ports.entropy,
-        )
-        .map_err(|e| match e {
-            CryptoError::EmptyMessage => ErrorCode::EmptyMessage,
-            other => ErrorCode::from(other),
-        })?;
+        let blob = seal_channel_message(keys, &author, &card, text, now, &mut *self.ports.entropy)
+            .map_err(|e| match e {
+                CryptoError::EmptyMessage => ErrorCode::EmptyMessage,
+                other => ErrorCode::from(other),
+            })?;
         let id = MessageId::new(privcord_domain::mesh::packet_id(&blob))
             .map_err(|_| ErrorCode::Crypto)?;
         let text: String = privcord_domain::text::js_trim(text)

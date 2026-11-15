@@ -216,14 +216,24 @@ impl Core {
     }
 
     fn publish_invite(&mut self) -> Result<(), ErrorCode> {
+        if self.invites.active.is_none() {
+            return Ok(());
+        }
+        let card = self.own_contact_card(self.display_name.as_deref())?;
+        let author = Self::author_of(
+            self.uid.as_ref(),
+            self.identity.as_ref(),
+            self.sync.as_ref(),
+            self.device_list.as_ref(),
+        )?;
         let Some(a) = &self.invites.active else {
             return Ok(());
         };
         let blob = seal_invite(
             &a.rv,
             InviteKind::Card,
-            self.identity.as_ref().ok_or(ErrorCode::NoIdentity)?,
-            self.display_name.as_deref(),
+            &author,
+            &card,
             &mut *self.ports.entropy,
         )?;
         self.put_everywhere(&a.rv.mailbox, &blob)
@@ -357,11 +367,12 @@ impl Core {
         let (Some(own_uid), Some(identity)) = (self.uid.clone(), self.identity.as_ref()) else {
             return;
         };
-        let Some((contact, payload)) =
+        let Some((contact, opened)) =
             privcord_crypto::seal::open_from_stranger(blob, &own_uid, identity)
         else {
             return;
         };
+        let payload = opened.payload;
         if payload.get("t").and_then(serde_json::Value::as_str) != Some("hello")
             || contact.uid == own_uid
         {
@@ -407,11 +418,18 @@ impl Core {
     }
 
     fn send_reply(&mut self, rv: &Rendezvous) -> Result<(), ErrorCode> {
+        let card = self.own_contact_card(self.display_name.as_deref())?;
+        let author = Self::author_of(
+            self.uid.as_ref(),
+            self.identity.as_ref(),
+            self.sync.as_ref(),
+            self.device_list.as_ref(),
+        )?;
         let blob = seal_invite(
             rv,
             InviteKind::Reply,
-            self.identity.as_ref().ok_or(ErrorCode::NoIdentity)?,
-            self.display_name.as_deref(),
+            &author,
+            &card,
             &mut *self.ports.entropy,
         )?;
         self.put_everywhere(&rv.mailbox, &blob)
@@ -673,6 +691,7 @@ impl Core {
             ))),
             StorageOp::DeleteContact(uid.clone()),
         ])?;
+        self.forget_contact_devices(uid);
         self.link_down(uid);
         self.ports.transport.close(uid);
         self.peers.remove(uid);

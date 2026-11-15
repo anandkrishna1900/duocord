@@ -1857,7 +1857,13 @@ pub fn self_test() -> String {
         );
         let payload = serde_json_probe();
         let blob = seal::seal(&a, &bu, &b.dh_public(), &payload, &mut rng).map_err(|_| "seal")?;
-        let opened = seal::open(&blob, &bu, &b, &a.sign_public(), &au).ok_or("open")?;
+        let keys = privcord_crypto::devices::AccountKeys::new(
+            au.clone(),
+            a.sign_public(),
+            a.dh_public(),
+            None,
+        );
+        let opened = seal::open(&blob, &bu, &b, &keys).ok_or("open")?.payload;
         if opened != payload {
             return Err("roundtrip");
         }

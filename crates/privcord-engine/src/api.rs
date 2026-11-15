@@ -150,6 +150,20 @@ pub struct Snapshot {
     pub files: Vec<(MessageId, privcord_ports::FileInfo)>,
     /// Groups from before protocol v2, waiting to be made again or dismissed.
     pub legacy_groups: Vec<LegacyGroupView>,
+    /// The account's devices (active ones), this one included.
+    pub devices: Vec<DeviceView>,
+    /// Whether this install holds the account key (it can link other devices and change groups).
+    pub holds_account_key: bool,
+}
+
+/// One device of the account.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeviceView {
+    pub id: String,
+    pub name: String,
+    /// When it was linked (milliseconds).
+    pub added_at: i64,
+    pub this_device: bool,
 }
 
 /// Something that happened. Each has a number; numbers rise by one, so a gap means events were missed.

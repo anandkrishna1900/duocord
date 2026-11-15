@@ -604,6 +604,20 @@ pub struct SnapshotDto {
     pub channel_people: Vec<ChannelPersonDto>,
     /// Groups from before protocol v2 that can be made again with one tap.
     pub legacy_groups: Vec<LegacyGroupDto>,
+    /// The account's devices, this one included.
+    pub devices: Vec<DeviceDto>,
+    /// Whether this install holds the account key (it can link other devices and change groups).
+    pub holds_account_key: bool,
+}
+
+/// One device of the account.
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct DeviceDto {
+    pub id: String,
+    pub name: String,
+    pub added_at: i64,
+    pub this_device: bool,
 }
 
 /// A group from before protocol v2: its name and who was in it (their names, for friends who are still friends).
@@ -1576,6 +1590,17 @@ impl PrivcordEngine {
                     }
                 })
                 .collect(),
+            devices: s
+                .devices
+                .iter()
+                .map(|d| DeviceDto {
+                    id: d.id.clone(),
+                    name: d.name.clone(),
+                    added_at: d.added_at,
+                    this_device: d.this_device,
+                })
+                .collect(),
+            holds_account_key: s.holds_account_key,
         })
     }
 

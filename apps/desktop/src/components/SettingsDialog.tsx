@@ -9,12 +9,14 @@ import { ensureNotificationPermission } from '../lib/notifications';
 import { config, isTauri } from '../config';
 import { Modal } from './Modal';
 import { NetworkSettings } from './NetworkSettings';
+import { DeviceLinkDialog } from './DeviceLinkDialog';
 import { AlertIcon, CheckIcon, KeyIcon, TrashIcon } from './Icons';
 
-export type SettingsSection = 'profile' | 'appearance' | 'connection' | 'security' | 'about';
+export type SettingsSection = 'profile' | 'devices' | 'appearance' | 'connection' | 'security' | 'about';
 
 const SECTIONS: Array<{ id: SettingsSection; label: string }> = [
   { id: 'profile', label: 'Profile' },
+  { id: 'devices', label: 'Devices' },
   { id: 'appearance', label: 'Look' },
   { id: 'connection', label: 'Connection' },
   { id: 'security', label: 'Security' },
@@ -269,6 +271,7 @@ export function SettingsDialog({
   const [section, setSection] = useState<SettingsSection>(initialSection);
   const [displayName, setDisplayName] = useState(settings.displayName);
   const [saved, setSaved] = useState(false);
+  const [linking, setLinking] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -332,6 +335,39 @@ export function SettingsDialog({
             ) : (
               <p className="muted small">Shown on your invite. There are no accounts: your identity lives on this device.</p>
             )}
+          </section>
+        ) : null}
+
+        {section === 'devices' ? (
+          <section className="settings-section">
+            {state.devices && state.devices.length > 0 ? (
+              <ul className="device-list" aria-label="Your devices">
+                {state.devices.map((d) => (
+                  <li key={d.id}>
+                    <span>
+                      {d.name}
+                      {d.thisDevice ? <span className="muted small"> (this device)</span> : null}
+                    </span>
+                    <span className="muted small">since {new Date(d.addedAt).toLocaleDateString()}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="muted small">Only this device so far.</p>
+            )}
+            {engine?.startDeviceLink && state.holdsAccountKey ? (
+              <div className="button-row">
+                <button type="button" className="button primary" onClick={() => setLinking(true)}>
+                  Link a new device
+                </button>
+              </div>
+            ) : null}
+            <p className="muted small">
+              {state.holdsAccountKey
+                ? 'Your chats stay in step on every device you link, with no server in between. Your account key stays on this device.'
+                : 'This device was linked to your account. Linking more devices, and changing groups, is done from the device that holds your account key.'}
+            </p>
+            <DeviceLinkDialog open={linking} mode="host" engine={engine} state={state} onClose={() => setLinking(false)} />
           </section>
         ) : null}
 

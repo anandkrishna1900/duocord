@@ -86,7 +86,11 @@ fun SettingsDialog(
     onBluetoothPermissionResult: () -> Unit = {},
     onExportBackup: (String, (Result<String>) -> Unit) -> Unit = { _, _ -> },
     onImportBackup: (String, String, (Result<String>) -> Unit) -> Unit = { _, _, _ -> },
+    onStartDeviceLink: ((Result<String>) -> Unit) -> Unit = { it(Result.failure(IllegalStateException("Not available."))) },
+    onConfirmDeviceLink: (Boolean) -> Unit = {},
+    onCancelDeviceLink: () -> Unit = {},
 ) {
+    var linking by remember { mutableStateOf(false) }
     var displayName by remember { mutableStateOf(settings.displayName) }
     var nameStatus by remember { mutableStateOf<String?>(null) }
     var advanced by remember { mutableStateOf(false) }
@@ -183,6 +187,20 @@ fun SettingsDialog(
                 nameStatus?.let {
                     Spacer(Modifier.height(6.dp))
                     Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+
+                Spacer(Modifier.height(20.dp))
+
+                SectionTitle("Devices")
+                DevicesSection(state, onLinkNew = { linking = true })
+                if (linking) {
+                    LinkHostDialog(
+                        state = state,
+                        onStart = onStartDeviceLink,
+                        onConfirm = onConfirmDeviceLink,
+                        onCancel = onCancelDeviceLink,
+                        onClose = { linking = false },
+                    )
                 }
 
                 Spacer(Modifier.height(20.dp))

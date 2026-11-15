@@ -493,6 +493,10 @@ class RustChatEngine(
             }
             is EventDto.FileQueued -> senders[event.peer]?.beginTransfer(event.messageId, event.frames.toLong())
             is EventDto.PeerStateChanged -> requestRefresh()
+            is EventDto.DeviceLink -> {
+                _state.update { it.copy(deviceLink = com.duochat.app.data.DeviceLinkState(event.stage, event.code, event.name)) }
+                requestRefresh()
+            }
             else -> requestRefresh()
         }
     }
@@ -979,6 +983,8 @@ class RustChatEngine(
                 },
                 invite = s.invite?.let { inv -> ActiveInvite(inv.words, inv.expiresAt) },
                 requests = s.requests.map { r -> InviteRequest(r.uid, r.name, r.safetyNumber) },
+                devices = s.devices.map { d -> com.duochat.app.data.DeviceInfo(d.id, d.name, d.addedAt, d.thisDevice) },
+                holdsAccountKey = s.holdsAccountKey,
                 legacyGroups = s.legacyGroups.map { g ->
                     com.duochat.app.data.LegacyGroup(g.oldId, g.name, g.members.map { m -> nameOf(s, m) }, g.missing.toInt())
                 },
@@ -1169,6 +1175,24 @@ class RustChatEngine(
 
     override suspend fun dismissLegacyGroup(oldId: String): Result<Unit> = call { dismissLegacyGroup(oldId) }
     override suspend fun renameGroup(groupId: String, name: String): Result<Unit> = call { renameGroup(groupId, name) }
+
+    override suspend fun startDeviceLink(): Result<String> {
+        _state.update { it.copy(deviceLink = null) }
+        return call { startDeviceLink() }
+    }
+
+    override suspend fun joinDeviceLink(code: String, name: String): Result<Unit> {
+        _state.update { it.copy(deviceLink = null) }
+        return call { joinDeviceLink(code.trim(), name.trim().ifEmpty { "Phone" }) }
+    }
+
+    override suspend fun confirmDeviceLink(accept: Boolean): Result<Unit> = call { confirmDeviceLink(accept) }
+
+    override fun cancelDeviceLink() {
+        _state.update { it.copy(deviceLink = null) }
+        val e = engine ?: return
+        scope.launch(Dispatchers.IO) { runCatching { e.cancelDeviceLink() } }
+    }
 
     private fun isGroup(id: String): Boolean = last?.groups?.any { it.id == id } == true
 

@@ -2988,6 +2988,21 @@ impl Core {
                 .collect(),
             files,
             legacy_groups: self.legacy_groups.clone(),
+            devices: self
+                .device_list
+                .as_ref()
+                .map(|l| {
+                    l.active()
+                        .map(|d| crate::api::DeviceView {
+                            id: d.id.clone(),
+                            name: d.name.clone(),
+                            added_at: d.added_at,
+                            this_device: self.device_id.as_deref() == Some(d.id.as_str()),
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+            holds_account_key: self.identity.is_some(),
         }
     }
 

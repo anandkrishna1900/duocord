@@ -120,6 +120,29 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /* ---- linking another device of the account ---- */
+
+    fun startDeviceLink(onResult: (Result<String>) -> Unit) {
+        viewModelScope.launch { onResult(engine?.startDeviceLink() ?: Result.failure(IllegalStateException("Chat is not ready yet."))) }
+    }
+
+    fun joinDeviceLink(code: String, name: String, onResult: (Result<Unit>) -> Unit) {
+        viewModelScope.launch { onResult(engine?.joinDeviceLink(code, name) ?: Result.failure(IllegalStateException("Chat is not ready yet."))) }
+    }
+
+    fun confirmDeviceLink(accept: Boolean) {
+        viewModelScope.launch { engine?.confirmDeviceLink(accept) }
+    }
+
+    fun cancelDeviceLink() {
+        engine?.cancelDeviceLink()
+    }
+
+    /** This phone was linked to an account on another device: start again as that account. */
+    fun onDeviceLinked() {
+        startEngine()
+    }
+
     /** (Re)starts the chat engine. Also used by the "Try again" button. */
     fun startEngine() {
         stopEngine()

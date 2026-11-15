@@ -215,7 +215,27 @@ export interface LegacyGroup {
   missing: number;
 }
 
+/** One device of the account (hosted engine only). */
+export interface DeviceInfo {
+  id: string;
+  name: string;
+  addedAt: number;
+  thisDevice: boolean;
+}
+
+/** Linking a device, while it happens: the 6 digits to compare ("code"), then how it ended. */
+export interface DeviceLinkState {
+  stage: 'code' | 'done' | 'failed' | 'cancelled' | 'expired';
+  code?: string;
+  /** On the device holding the account key: the new device's name. */
+  name?: string;
+}
+
 export interface ChatState {
+  /** The account's devices, and whether this one holds the account key (hosted engine only). */
+  devices?: DeviceInfo[];
+  holdsAccountKey?: boolean;
+  deviceLink?: DeviceLinkState | null;
   channels: ChannelView[];
   answer: InviteAnswer | null;
   /** Our current six-word invite, if one is being shown. */

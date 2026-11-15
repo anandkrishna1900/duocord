@@ -51,6 +51,12 @@ export interface ChatEngineApi {
   dismissLegacyGroup?(oldId: string): Promise<void>;
   renameGroup(groupId: string, name: string): Promise<void>;
 
+  /** Linking another device of the account (hosted engine only). */
+  startDeviceLink?(): Promise<string>;
+  joinDeviceLink?(code: string, name: string): Promise<void>;
+  confirmDeviceLink?(accept: boolean): Promise<void>;
+  cancelDeviceLink?(): void;
+
   joinChannel(raw: string, persist?: boolean): Promise<string>;
   leaveChannel(convId: string): void;
   muteSender(uid: string): void;

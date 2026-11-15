@@ -5486,6 +5486,49 @@ public object FfiConverterTypeConversationDto: FfiConverterRustBuffer<Conversati
 
 
 /**
+ * One device of the account.
+ */
+data class DeviceDto (
+    var `id`: kotlin.String, 
+    var `name`: kotlin.String, 
+    var `addedAt`: kotlin.Long, 
+    var `thisDevice`: kotlin.Boolean
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeDeviceDto: FfiConverterRustBuffer<DeviceDto> {
+    override fun read(buf: ByteBuffer): DeviceDto {
+        return DeviceDto(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: DeviceDto) = (
+            FfiConverterString.allocationSize(value.`id`) +
+            FfiConverterString.allocationSize(value.`name`) +
+            FfiConverterLong.allocationSize(value.`addedAt`) +
+            FfiConverterBoolean.allocationSize(value.`thisDevice`)
+    )
+
+    override fun write(value: DeviceDto, buf: ByteBuffer) {
+            FfiConverterString.write(value.`id`, buf)
+            FfiConverterString.write(value.`name`, buf)
+            FfiConverterLong.write(value.`addedAt`, buf)
+            FfiConverterBoolean.write(value.`thisDevice`, buf)
+    }
+}
+
+
+
+/**
  * What the platform knows about the device right now.
  */
 data class DeviceStateDto (
@@ -6190,7 +6233,15 @@ data class SnapshotDto (
     /**
      * Groups from before protocol v2 that can be made again with one tap.
      */
-    var `legacyGroups`: List<LegacyGroupDto>
+    var `legacyGroups`: List<LegacyGroupDto>, 
+    /**
+     * The account's devices, this one included.
+     */
+    var `devices`: List<DeviceDto>, 
+    /**
+     * Whether this install holds the account key (it can link other devices and change groups).
+     */
+    var `holdsAccountKey`: kotlin.Boolean
 ) {
     
     companion object
@@ -6216,6 +6267,8 @@ public object FfiConverterTypeSnapshotDto: FfiConverterRustBuffer<SnapshotDto> {
             FfiConverterULong.read(buf),
             FfiConverterSequenceTypeChannelPersonDto.read(buf),
             FfiConverterSequenceTypeLegacyGroupDto.read(buf),
+            FfiConverterSequenceTypeDeviceDto.read(buf),
+            FfiConverterBoolean.read(buf),
         )
     }
 
@@ -6233,7 +6286,9 @@ public object FfiConverterTypeSnapshotDto: FfiConverterRustBuffer<SnapshotDto> {
             FfiConverterBoolean.allocationSize(value.`lookupPending`) +
             FfiConverterULong.allocationSize(value.`queued`) +
             FfiConverterSequenceTypeChannelPersonDto.allocationSize(value.`channelPeople`) +
-            FfiConverterSequenceTypeLegacyGroupDto.allocationSize(value.`legacyGroups`)
+            FfiConverterSequenceTypeLegacyGroupDto.allocationSize(value.`legacyGroups`) +
+            FfiConverterSequenceTypeDeviceDto.allocationSize(value.`devices`) +
+            FfiConverterBoolean.allocationSize(value.`holdsAccountKey`)
     )
 
     override fun write(value: SnapshotDto, buf: ByteBuffer) {
@@ -6251,6 +6306,8 @@ public object FfiConverterTypeSnapshotDto: FfiConverterRustBuffer<SnapshotDto> {
             FfiConverterULong.write(value.`queued`, buf)
             FfiConverterSequenceTypeChannelPersonDto.write(value.`channelPeople`, buf)
             FfiConverterSequenceTypeLegacyGroupDto.write(value.`legacyGroups`, buf)
+            FfiConverterSequenceTypeDeviceDto.write(value.`devices`, buf)
+            FfiConverterBoolean.write(value.`holdsAccountKey`, buf)
     }
 }
 
@@ -8430,6 +8487,34 @@ public object FfiConverterSequenceTypeConversationDto: FfiConverterRustBuffer<Li
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeConversationDto.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeDeviceDto: FfiConverterRustBuffer<List<DeviceDto>> {
+    override fun read(buf: ByteBuffer): List<DeviceDto> {
+        val len = buf.getInt()
+        return List<DeviceDto>(len) {
+            FfiConverterTypeDeviceDto.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<DeviceDto>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeDeviceDto.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<DeviceDto>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeDeviceDto.write(it, buf)
         }
     }
 }

@@ -6,11 +6,13 @@ import { useSettings } from './hooks/useSettings';
 import { ChatLayout } from './components/ChatLayout';
 import { RecoveryDialog } from './components/RecoveryDialogs';
 import { BrandMark } from './components/Avatar';
+import { DeviceLinkDialog } from './components/DeviceLinkDialog';
 
 export default function App() {
   const { settings, update } = useSettings();
   const { state, engine, fatal, needsIdentity, reload } = useChatEngine();
   const [locked, setLocked] = useState(() => isLockEnabled());
+  const [linking, setLinking] = useState(false);
   const unlocked = useCallback(() => setLocked(false), []);
 
   // Lock again when the window has been out of sight for a while, and on request (Settings > Security).
@@ -39,7 +41,25 @@ export default function App() {
           <h1>DuoCord</h1>
           <p className="muted">Create your private identity to begin.</p>
         </div>
-        <RecoveryDialog open required mode="backup" onClose={() => undefined} onIdentityReady={reload} />
+        <RecoveryDialog
+          open={!linking}
+          required
+          mode="backup"
+          onClose={() => undefined}
+          onIdentityReady={reload}
+          onLinkDevice={engine?.joinDeviceLink ? () => setLinking(true) : undefined}
+        />
+        <DeviceLinkDialog
+          open={linking}
+          mode="join"
+          engine={engine}
+          state={state}
+          onClose={() => setLinking(false)}
+          onLinked={() => {
+            setLinking(false);
+            reload();
+          }}
+        />
       </main>
     );
   }

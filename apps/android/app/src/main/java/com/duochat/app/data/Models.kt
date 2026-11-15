@@ -227,6 +227,10 @@ data class ChatState(
     val requests: List<InviteRequest> = emptyList(),
     /** Groups from before the protocol update, which can be made again with one tap. */
     val legacyGroups: List<LegacyGroup> = emptyList(),
+    /** The account's devices, this one included, and whether this one holds the account key. */
+    val devices: List<DeviceInfo> = emptyList(),
+    val holdsAccountKey: Boolean = false,
+    val deviceLink: DeviceLinkState? = null,
     val answer: InviteAnswer? = null,
     val channels: List<ChannelView> = emptyList(),
     /** Phones currently linked over the Bluetooth mesh (0 when the mesh is off). */
@@ -349,3 +353,9 @@ fun createOutgoingMessage(senderId: String, text: String, replyTo: ReplyRef? = n
 
 /** A group from before the protocol update: its name, the friends who will be in it again, and how many others were. */
 data class LegacyGroup(val oldId: String, val name: String, val memberNames: List<String>, val missing: Int)
+
+/** One device of the account. */
+data class DeviceInfo(val id: String, val name: String, val addedAt: Long, val thisDevice: Boolean)
+
+/** Linking a device, while it happens: "code" (compare [code], the 6 digits), then "done", "failed", "cancelled" or "expired". */
+data class DeviceLinkState(val stage: String, val code: String? = null, val name: String? = null)

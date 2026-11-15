@@ -195,7 +195,13 @@ private fun RootScreen(viewModel: AppViewModel) {
 
         shown == "loading" -> LoadingScreen("Opening your encrypted local data…")
 
-        shown == "setup" -> OnboardingScreen(onCreate = viewModel::createIdentity)
+        shown == "setup" -> OnboardingScreen(
+            onCreate = viewModel::createIdentity,
+            state = state,
+            onJoinDevice = viewModel::joinDeviceLink,
+            onCancelDeviceLink = viewModel::cancelDeviceLink,
+            onDeviceLinked = viewModel::onDeviceLinked,
+        )
 
         shown == "error" -> FatalScreen(
             message = state?.error ?: "The chat engine could not start.",
@@ -338,6 +344,9 @@ private fun RootScreen(viewModel: AppViewModel) {
                     onBluetoothPermissionResult = viewModel::refreshBluetooth,
                     onExportBackup = viewModel::exportBackup,
                     onImportBackup = viewModel::importBackup,
+                    onStartDeviceLink = viewModel::startDeviceLink,
+                    onConfirmDeviceLink = viewModel::confirmDeviceLink,
+                    onCancelDeviceLink = viewModel::cancelDeviceLink,
                 )
             }
 

@@ -50,6 +50,16 @@ interface ChatEngineApi {
     /** Stop offering a group from before the protocol update. */
     suspend fun dismissLegacyGroup(oldId: String): Result<Unit>
     suspend fun renameGroup(groupId: String, name: String): Result<Unit>
+
+    /** On the device holding the account key: a code (shown as a QR code) for a new device. */
+    suspend fun startDeviceLink(): Result<String>
+
+    /** On a new device: join the account with the code from the other device. */
+    suspend fun joinDeviceLink(code: String, name: String): Result<Unit>
+
+    /** On the device holding the account key: the 6 digits match (or not). */
+    suspend fun confirmDeviceLink(accept: Boolean): Result<Unit>
+    fun cancelDeviceLink()
     suspend fun send(conversationId: String, rawText: String, replyToId: String? = null): Result<Unit>
     suspend fun sendFile(conversationId: String, rawName: String, mime: String, bytes: ByteArray, replyToId: String? = null): Result<Unit>
     suspend fun getFile(messageId: String): Pair<FileMeta, ByteArray>?

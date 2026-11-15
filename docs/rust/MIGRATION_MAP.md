@@ -11,10 +11,10 @@ Status meanings: **Ported, tested** = the Rust implementation exists and is chec
 | Ported, tested | 66 | 9787 |
 | Partly ported | 1 | 2173 |
 | Not yet ported | 0 | 0 |
-| Stays (UI) | 59 | 12901 |
-| Stays (platform adapter) | 54 | 10717 |
+| Stays (UI) | 59 | 12907 |
+| Stays (platform adapter) | 54 | 10956 |
 | Replaced by a library | 4 | 333 |
-| **All mapped files** | **184** | **35911** |
+| **All mapped files** | **184** | **36156** |
 
 Ported does not mean retired: the TypeScript and Kotlin versions stay in production until the apps call the Rust engine (M7 desktop, M8 Android) and the compatibility gates pass (PRD section 16).
 
@@ -83,7 +83,7 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 | `apps/desktop/src/components/RequestDialog.tsx` | 57 | `RequestDialog` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/SettingsDialog.tsx` | 567 | `SettingsSection`, `SettingsDialog` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/config.ts` | 14 | `config`, `isTauri` | App shell | UI | UI | Stays (UI) | Stays | n/a |
-| `apps/desktop/src/hooks/useChatEngine.ts` | 78 | `UseChatEngine`, `useChatEngine` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
+| `apps/desktop/src/hooks/useChatEngine.ts` | 82 | `UseChatEngine`, `useChatEngine` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/hooks/useSettings.ts` | 33 | `useSettings` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/lib/appLock.ts` | 141 | `isLockEnabled`, `lockSupported`, `enableLock`, `disableLock`, `unlock`, `RELOCK_AFTER_MS` | WebAuthn app lock | UI/adapter (stays) | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/desktop/src/lib/ble.test.ts` | 128 | (none) | WebRTC peer connection and BLE link on the desktop | Transport adapters (stay); link policy moves to engine | Adapter | Stays (platform adapter) | Stays | n/a |
@@ -103,17 +103,17 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 | `apps/desktop/src/lib/hosted/enable.ts` | 13 | `hostedEngineAvailable`, `hostedEngineEnabled` | The desktop chat engine on the Rust engine: commands, state, identity migration, the on/off switch | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; opt-in until M9 | n/a |
 | `apps/desktop/src/lib/hosted/hostedEngine.ts` | 705 | `HostedDeps`, `ENGINE_IDENTITY_KEY`, `friendly`, `HostedChatEngine` | The desktop chat engine on the Rust engine: commands, state, identity migration, the on/off switch | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; opt-in until M9 | n/a |
 | `apps/desktop/src/lib/hosted/legacyIdentity.ts` | 29 | `legacySecretsHex`, `seedEngineIdentity` | The desktop chat engine on the Rust engine: commands, state, identity migration, the on/off switch | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; opt-in until M9 | n/a |
-| `apps/desktop/src/lib/hosted/runtime.test.ts` | 287 | (none) | WebRTC and relay adapters for the hosted engine | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays | n/a |
-| `apps/desktop/src/lib/hosted/runtime.ts` | 583 | `LinkTransport`, `BleLike`, `RelayHub`, `RuntimeOptions`, `HostedRuntime` | WebRTC and relay adapters for the hosted engine | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays | n/a |
+| `apps/desktop/src/lib/hosted/runtime.test.ts` | 308 | (none) | WebRTC and relay adapters for the hosted engine | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays | n/a |
+| `apps/desktop/src/lib/hosted/runtime.ts` | 600 | `LinkTransport`, `BleLike`, `RelayHub`, `RuntimeOptions`, `HostedRuntime` | WebRTC and relay adapters for the hosted engine | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/desktop/src/lib/hosted/shape.test.ts` | 116 | (none) | Shapes the Rust engine's snapshot into the screens' state | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; tested on a real engine snapshot | n/a |
 | `apps/desktop/src/lib/hosted/shape.ts` | 388 | `LinkStateJson`, `PathKindJson`, `DeliveryJson`, `ContactJson`, `MessageJson`, `ConversationJson` +7 | Shapes the Rust engine's snapshot into the screens' state | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; tested on a real engine snapshot | n/a |
-| `apps/desktop/src/lib/hosted/start.ts` | 29 | `startHostedEngine` | The desktop chat engine on the Rust engine: commands, state, identity migration, the on/off switch | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; opt-in until M9 | n/a |
+| `apps/desktop/src/lib/hosted/start.ts` | 36 | `startHostedEngine` | The desktop chat engine on the Rust engine: commands, state, identity migration, the on/off switch | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; opt-in until M9 | n/a |
 | `apps/desktop/src/lib/identity.ts` | 182 | `LOCAL_ID`, `DeviceIdentity`, `localDeviceId`, `createIdentityFromPhrase`, `loadIdentity`, `contactCardOf` +6 | Identity load and create | crypto::identity + engine | Engine | Ported, tested | M7 | n/a |
 | `apps/desktop/src/lib/killSwitch.test.ts` | 263 | (none) | Emergency erase steps for the webview (local storage, IndexedDB, files, Tauri commands) | engine::core::privacy runs the plan and the report; these files only call web and OS APIs | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/desktop/src/lib/killSwitch.ts` | 270 | `KillSwitchTargets`, `WebStorageLike`, `DesktopKillSwitchDeps`, `KILL_SWITCH_REPORT_KEY`, `createAppKillSwitchExecutor`, `createConversationKillSwitchExecutor` +3 | Emergency erase steps for the webview (local storage, IndexedDB, files, Tauri commands) | engine::core::privacy runs the plan and the report; these files only call web and OS APIs | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/desktop/src/lib/killSwitchFactory.ts` | 60 | `buildKillSwitchDeps`, `clearPersistedKillSwitchReport` | Emergency erase steps for the webview (local storage, IndexedDB, files, Tauri commands) | engine::core::privacy runs the plan and the report; these files only call web and OS APIs | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/desktop/src/lib/localDb.ts` | 423 | `OutboxRow`, `FileMeta`, `StoredMessage`, `LocalStore` | Desktop SQLite schema, encrypted columns, file store | storage::SqliteStorage; privcord-import (desktop importer) | Storage | Ported, tested | M7: after the importer has run on every install | importer and migration tests on generated fixtures (docs/legacy-fixtures.json); the browser file store stays in the adapter |
-| `apps/desktop/src/lib/network.ts` | 65 | `BUILTIN_TURN`, `loadTorMode`, `torModeActive`, `setTorMode`, `loadNetworkConfig`, `saveNetworkConfig` +1 | WebRTC peer connection and BLE link on the desktop | Transport adapters (stay); link policy moves to engine | Adapter | Stays (platform adapter) | Stays | n/a |
+| `apps/desktop/src/lib/network.ts` | 86 | `BUILTIN_TURN`, `loadTorMode`, `torModeActive`, `setTorMode`, `loadNetworkConfig`, `saveNetworkConfig` +2 | WebRTC peer connection and BLE link on the desktop | Transport adapters (stay); link policy moves to engine | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/desktop/src/lib/notifications.ts` | 44 | `ensureNotificationPermission`, `notifyIncoming` | Presentation helpers, UI settings, themes, notifications bridge | UI / adapter (stays) | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/lib/outbox.test.ts` | 15 | (none) | Retry/outbox policy | engine::core delivery | Engine | Ported, tested | M7 | engine tests |
 | `apps/desktop/src/lib/outbox.ts` | 6 | `needsDelivery` | Retry/outbox policy | engine::core delivery | Engine | Ported, tested | M7 | engine tests |
@@ -121,7 +121,7 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 | `apps/desktop/src/lib/peerLink.ts` | 445 | `LinkState`, `LinkContact`, `LinkEnv`, `DEAD_LINK_MS`, `PeerLink` | WebRTC peer connection and BLE link on the desktop | Transport adapters (stay); link policy moves to engine | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/desktop/src/lib/secureStore.ts` | 42 | `usingOsSecureStorage`, `secretGet`, `secretSet`, `secretDelete` | Secure storage and at-rest encryption helpers | SecureStore adapter (Tauri keyring) | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/desktop/src/lib/settings.test.ts` | 34 | (none) | Presentation helpers, UI settings, themes, notifications bridge | UI / adapter (stays) | UI | Stays (UI) | Stays | n/a |
-| `apps/desktop/src/lib/settings.ts` | 121 | `ThemeMode`, `AppSettings`, `ACCENTS`, `parseSettings`, `loadSettings`, `saveSettings` +3 | Presentation helpers, UI settings, themes, notifications bridge | UI / adapter (stays) | UI | Stays (UI) | Stays | n/a |
+| `apps/desktop/src/lib/settings.ts` | 123 | `ThemeMode`, `AppSettings`, `ACCENTS`, `parseSettings`, `loadSettings`, `saveSettings` +3 | Presentation helpers, UI settings, themes, notifications bridge | UI / adapter (stays) | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/lib/signaling/hub.ts` | 57 | `transportsFor`, `SignalingHub` | Nostr events (BIP-340), relay client, signaling hub | engine::signaling::{relay,nostr,hub} (state machines) + crypto::nostr; a socket adapter of a few lines remains | Engine/Adapter | Ported, tested | M7: replace with the socket adapter that feeds SignalingHub | relay client against the real relay (tests/real_relay.rs); fake relays for backoff, timeouts, dedupe, Nostr rules |
 | `apps/desktop/src/lib/signaling/nostr.ts` | 187 | `NOSTR_KIND_SIGNAL`, `NOSTR_KIND_MESSAGE`, `NostrEvent`, `eventId`, `makeEvent`, `verifyEvent` +1 | Nostr events (BIP-340), relay client, signaling hub | engine::signaling::{relay,nostr,hub} (state machines) + crypto::nostr; a socket adapter of a few lines remains | Engine/Adapter | Ported, tested | M7: replace with the socket adapter that feeds SignalingHub | relay client against the real relay (tests/real_relay.rs); fake relays for backoff, timeouts, dedupe, Nostr rules |
 | `apps/desktop/src/lib/signaling/relayClient.ts` | 146 | `RelayClient` | Nostr events (BIP-340), relay client, signaling hub | engine::signaling::{relay,nostr,hub} (state machines) + crypto::nostr; a socket adapter of a few lines remains | Engine/Adapter | Ported, tested | M7: replace with the socket adapter that feeds SignalingHub | relay client against the real relay (tests/real_relay.rs); fake relays for backoff, timeouts, dedupe, Nostr rules |
@@ -137,10 +137,10 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 | File | Lines | Main symbols | Current responsibility | Destination | Class | Status | Removal condition | Tests |
 |---|---:|---|---|---|---|---|---|---|
 | `apps/desktop/src-tauri/src/ble.rs` | 168 | `BleEvent`, `BleLink`, `max_chunk`, `write`, `disconnect`, `payload_size` +3 | Native BLE central | BLE adapter | Adapter | Stays (platform adapter) | Stays | n/a |
-| `apps/desktop/src-tauri/src/engine_host.rs` | 333 | `hex`, `unhex`, `KeyringSecure`, `load_identity`, `save_identity`, `delete_identity` +22 | Hosts the Rust engine in the shell: keyring secret store, events to the page | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; M7 seam (page not rewired yet) | n/a |
-| `apps/desktop/src-tauri/src/lib.rs` | 248 | `page_entry`, `secret_get`, `secret_set`, `secret_delete`, `BleState`, `unhex` +10 | Tauri shell: commands, keyring, notifications | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; hosts the engine from M7 | n/a |
+| `apps/desktop/src-tauri/src/engine_host.rs` | 476 | `hex`, `unhex`, `KeyringSecure`, `load_identity`, `save_identity`, `delete_identity` +31 | Hosts the Rust engine in the shell: keyring secret store, events to the page | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; M7 seam (page not rewired yet) | n/a |
+| `apps/desktop/src-tauri/src/lib.rs` | 288 | `page_entry`, `secret_get`, `secret_set`, `secret_delete`, `BleState`, `unhex` +10 | Tauri shell: commands, keyring, notifications | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; hosts the engine from M7 | n/a |
 | `apps/desktop/src-tauri/src/main.rs` | 5 | `main` | Tauri shell: commands, keyring, notifications | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; hosts the engine from M7 | n/a |
-| `apps/desktop/src-tauri/src/tray.rs` | 125 | `flag`, `set_flag`, `has_flag`, `close_to_tray`, `show_main`, `install` +4 | Tray icon, close to tray, start at login, one instance | Desktop adapter | Adapter | Stays (platform adapter) | Stays | n/a |
+| `apps/desktop/src-tauri/src/tray.rs` | 115 | `flag`, `set_flag`, `has_flag`, `close_to_tray`, `show_main`, `install` +4 | Tray icon, close to tray, start at login, one instance | Desktop adapter | Adapter | Stays (platform adapter) | Stays | n/a |
 
 ## Android app (Kotlin)
 

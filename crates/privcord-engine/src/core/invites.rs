@@ -119,6 +119,8 @@ impl Core {
     /// The name put on invite cards.
     pub fn set_display_name(&mut self, name: &str) -> Result<(), ErrorCode> {
         self.require_live()?;
+        // Reaches friends: a device without the account key cannot do it yet (per-device delivery, step 5c).
+        self.identity()?;
         let name: String = privcord_domain::text::js_trim(name)
             .chars()
             .take(40)
@@ -437,6 +439,8 @@ impl Core {
     /// Accept somebody who used our words.
     pub fn accept_request(&mut self, uid: &UserId) -> Result<UserId, ErrorCode> {
         self.require_live()?;
+        // Reaches friends: a device without the account key cannot do it yet (per-device delivery, step 5c).
+        self.identity()?;
         let r = self
             .invites
             .requests
@@ -469,17 +473,22 @@ impl Core {
         {
             return;
         }
+        // Linking a device: the new device has no account yet, so this comes first.
+        if self.is_link_mailbox(mailbox) {
+            self.link_blob(&blob);
+            return;
+        }
+        // Another device of this account (a linked device has no account key, so this comes before what needs it).
+        if self.is_self_mailbox(mailbox) {
+            self.sync_blob(mailbox, &blob);
+            return;
+        }
         let Ok(value) = serde_json::to_value(&blob) else {
             return;
         };
         let Some(own) = self.identity.as_ref().map(|i| i.sign_public()) else {
             return;
         };
-        // Another device of this account left us sync entries.
-        if self.is_self_mailbox(mailbox) {
-            self.sync_blob(mailbox, &blob);
-            return;
-        }
         // A message in a public channel we joined, carried by the signaling service.
         if self.channels.values().any(|k| k.mailbox == mailbox) {
             self.accept_channel_blob(&blob);

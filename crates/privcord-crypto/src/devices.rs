@@ -511,10 +511,19 @@ pub mod link {
             if !list.get(&self.device.id).is_some_and(DeviceEntry::active) {
                 return Err(DeviceError::Unknown);
             }
+            let card = v
+                .get("card")
+                .and_then(|c| c.as_str())
+                .filter(|c| {
+                    crate::card::ContactCard::decode(c)
+                        .is_some_and(|k| k.card.sign == account_sign && k.card.dh == account_dh)
+                })
+                .map(str::to_owned);
             Ok(Granted {
                 account_sign,
                 account_dh,
                 list,
+                card,
             })
         }
     }
@@ -525,6 +534,8 @@ pub mod link {
         pub account_sign: PublicJwk,
         pub account_dh: PublicJwk,
         pub list: DeviceList,
+        /// The account's contact card (public, signed by the account), so the new device can show and share it.
+        pub card: Option<String>,
     }
 
     /// The grant is encrypted under a key that also depends on the fresh keys: only the device that took part in this
@@ -644,6 +655,7 @@ pub mod link {
             &self,
             account: &Identity,
             current: &DeviceList,
+            card: &str,
             entropy: &mut dyn Entropy,
         ) -> Result<(DeviceList, String), DeviceError> {
             let device = self.device.clone().ok_or(DeviceError::Malformed)?;
@@ -653,7 +665,7 @@ pub mod link {
             let grant = seal(
                 &grant_secret(&self.secret, shared.as_slice())?,
                 "grant",
-                &json!({ "account_sign": account.sign_public(), "account_dh": account.dh_public(), "list": list.to_json() }),
+                &json!({ "account_sign": account.sign_public(), "account_dh": account.dh_public(), "list": list.to_json(), "card": card }),
                 entropy,
             )?;
             Ok((list, grant))
@@ -865,7 +877,7 @@ mod tests {
         assert_eq!(host_code, joiner_code);
         assert_eq!(host_code.len(), 6);
 
-        let (new_list, grant) = host.grant(&account, &list, &mut rng()).unwrap();
+        let (new_list, grant) = host.grant(&account, &list, "", &mut rng()).unwrap();
         let granted = joiner.on_grant(&grant).unwrap();
         assert_eq!(granted.list, new_list);
         assert_eq!(granted.list.active().count(), 2);
@@ -960,7 +972,7 @@ mod tests {
         let (secret, code) = new_offer(&mut rng()).unwrap();
         let mut host = Host::new(secret, &mut rng()).unwrap();
         let (_, _, _real) = link(&mut host, parse_offer(&code).unwrap(), &ident());
-        let (_, grant) = host.grant(&account, &list, &mut rng()).unwrap();
+        let (_, grant) = host.grant(&account, &list, "", &mut rng()).unwrap();
         // Another joiner with the same QR secret, but not the one the host exchanged keys with.
         let mut other_host = Host::new(parse_offer(&code).unwrap(), &mut rng()).unwrap();
         let (_, _, eavesdropper) = link(&mut other_host, parse_offer(&code).unwrap(), &ident());

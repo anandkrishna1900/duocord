@@ -585,6 +585,7 @@ Each step ships with its tests and leaves the app working.
 | 3. Sync log | Built: `privcord_crypto::synclog` (entries, merge rules, clone detection, quarantine, fingerprint), simulated and fuzzed. |
 | 4. Self-mailbox | Built: `privcord_crypto::selfbox`, `core/sync.rs`. See below. |
 | 5a. Sync key | Built: the self-mailbox is keyed by the account's sync key (version 0 derived from the account key, so phrase-restored installs share it), never by the account key itself; posts are signed by the posting device and checked against the account-signed list; a device without the sync key asks the others through its device inbox and is handed it sealed to its device key; forked device lists are merged by a holder of the account key, with a fixed tie-break so merges settle. |
+| 5b. A device of an account | Built: the engine runs as a device of an account. It keeps the account's public keys apart from the account key; a device linked by QR code (`core/linking.rs`) gets the public keys, the account's signed card and the device list, never the account key; it fetches the sync key from another device and catches up on the history. Everything that reaches friends answers `NeedsAccountKey` on such a device, before storing anything, until per-device delivery (5c–5d). The linking calls are exposed through the runtime, FFI and the desktop host; no screen yet (5g). |
 
 What step 4 does today:
 

@@ -26,7 +26,10 @@ use privcord_crypto::{
     secure_channel::{Data, Hello, SecureChannel},
     CryptoError,
 };
-use privcord_domain::{blob::SealedBlob, signaling::PutKind};
+use privcord_domain::{
+    blob::{PublicJwk, SealedBlob},
+    signaling::PutKind,
+};
 use privcord_domain::{
     channel::normalize_channel_name,
     files::{file_chunks, AssembleResult, BeginOutcome, FileAssembler, FileChunk, FileOffer},
@@ -61,6 +64,7 @@ mod devices;
 mod invites;
 mod keys;
 mod legacy_groups;
+mod linking;
 mod privacy;
 mod signaling;
 mod social;
@@ -233,6 +237,11 @@ pub struct Core {
     device_list: Option<privcord_crypto::devices::DeviceList>,
     /// The sync log and self-mailbox (`core/sync.rs`), once there is an identity.
     sync: Option<sync::SyncState>,
+    /// Linking a device by QR code, while it happens (`core/linking.rs`).
+    link: Option<linking::LinkState>,
+    /// The account's public keys (sign, agree). Every device of the account has them; only a device holding the account
+    /// key also has `identity`.
+    account: Option<(PublicJwk, PublicJwk)>,
     /// The storage port as wrapped by the sync recorder.
     recorder: Arc<sync::Recorder>,
     sealed: signaling::SealedState,
@@ -300,6 +309,8 @@ impl Core {
             device_id: None,
             device_list: None,
             sync: None,
+            link: None,
+            account: None,
             recorder,
             sealed: signaling::SealedState::default(),
             channel_subscribed: HashSet::new(),
@@ -326,7 +337,12 @@ impl Core {
             }
             let identity = Identity::from_stored(&stored)?;
             core.uid = Some(identity.uid()?);
+            core.account = Some((identity.sign_public(), identity.dh_public()));
             core.identity = Some(identity);
+        } else if let Some((sign, dh)) = core.linked_account() {
+            // A device linked to an account whose key is on another device.
+            core.uid = Some(privcord_crypto::identity::uid_from_keys(&sign, &dh)?);
+            core.account = Some((sign, dh));
         }
         core.reload_from_storage()?;
         core.hub.publish(EngineEvent::Ready);
@@ -464,6 +480,7 @@ impl Core {
         }
         self.ports.secure.save_identity(&both)?;
         self.uid = Some(identity.uid()?);
+        self.account = Some((identity.sign_public(), identity.dh_public()));
         self.identity = Some(identity);
         // Data already stored (an imported or restored database) may be under this identity's v1 id: move it, and
         // read it again now that cards can be checked against our own id.
@@ -479,7 +496,7 @@ impl Core {
     /// A new identity from a fresh 12-word phrase. The phrase is returned once; the engine does not keep it.
     pub fn create_identity(&mut self) -> Result<Zeroizing<String>, ErrorCode> {
         self.require_live()?;
-        if self.identity.is_some() {
+        if self.account.is_some() {
             return Err(ErrorCode::IdentityExists);
         }
         let phrase = privcord_crypto::identity::generate_recovery_phrase(&mut *self.ports.entropy)?;
@@ -491,7 +508,7 @@ impl Core {
     /// Restore the identity a phrase always produces.
     pub fn recover_identity(&mut self, phrase: &str, passphrase: &str) -> Result<(), ErrorCode> {
         self.require_live()?;
-        if self.identity.is_some() {
+        if self.account.is_some() {
             return Err(ErrorCode::IdentityExists);
         }
         let identity = Identity::from_phrase(phrase, passphrase).map_err(|e| match e {
@@ -505,12 +522,36 @@ impl Core {
     }
 
     fn identity(&self) -> Result<&Identity, ErrorCode> {
-        self.identity.as_ref().ok_or(ErrorCode::NoIdentity)
+        self.identity.as_ref().ok_or(if self.account.is_some() {
+            ErrorCode::NeedsAccountKey
+        } else {
+            ErrorCode::NoIdentity
+        })
+    }
+
+    /// Whether this device holds the account key (a device linked by QR code does not).
+    pub fn holds_account_key(&self) -> bool {
+        self.identity.is_some()
     }
 
     /// The `DUOID1:` text to hand to a friend.
     pub fn own_card(&self, name: Option<&str>) -> Result<String, ErrorCode> {
-        Ok(ContactCard::of(self.identity()?, name)?.encode()?)
+        if let Some(id) = &self.identity {
+            return Ok(ContactCard::of(id, name)?.encode()?);
+        }
+        // A linked device shares the card the account made when it was linked (the name on it is the one from then;
+        // a new name needs the device holding the account key, which signs cards).
+        self.stored_account_card()
+            .map(|(text, _)| text)
+            .ok_or_else(|| self.identity().err().unwrap_or(ErrorCode::NoIdentity))
+    }
+
+    /// The account's card as stored on a linked device: its text, and the card itself (checked against our uid).
+    fn stored_account_card(&self) -> Option<(String, ContactCard)> {
+        let text =
+            String::from_utf8(self.ports.storage.kv(devices::KV_ACCOUNT_CARD).ok()??).ok()?;
+        let contact = ContactCard::decode(&text).filter(|c| Some(&c.uid) == self.uid.as_ref())?;
+        Some((text, contact.card))
     }
 
     /* ---------------------------------------------------------------- contacts */
@@ -520,6 +561,8 @@ impl Core {
         card_text: &str,
         trust: ContactTrust,
     ) -> Result<UserId, ErrorCode> {
+        // Reaches friends: a device without the account key cannot do it yet (per-device delivery, step 5c).
+        self.identity()?;
         self.add_contact_from(card_text, trust, None)
     }
 
@@ -1409,6 +1452,8 @@ impl Core {
         reply_to: Option<&MessageId>,
     ) -> Result<MessageId, ErrorCode> {
         self.require_live()?;
+        // Reaches friends: a device without the account key cannot do it yet (per-device delivery, step 5c).
+        self.identity()?;
         let own = self.uid.clone().ok_or(ErrorCode::NoIdentity)?;
         if !self.contacts.contains_key(peer) {
             return Err(ErrorCode::UnknownContact);
@@ -1681,6 +1726,7 @@ impl Core {
         self.tick_invites();
         // Before the store-and-forward pass: a message's sync copy goes up no later than the message does.
         self.tick_sync();
+        self.tick_link();
         self.tick_sealed();
         self.tick_group_mesh();
         self.tick_channels();
@@ -1734,10 +1780,17 @@ impl Core {
         if self.groups.is_some() {
             return Ok(());
         }
-        let (Some(id), Some(uid)) = (self.identity.as_ref(), self.uid.as_ref()) else {
+        let Some(uid) = self.uid.clone() else {
             return Ok(());
         };
-        let mut coordinator = GroupCoordinator::new(uid.as_str(), ContactCard::of(id, None)?);
+        let own_card = match self.identity.as_ref() {
+            Some(id) => ContactCard::of(id, None)?,
+            None => match self.stored_account_card() {
+                Some((_, card)) => card,
+                None => return Ok(()),
+            },
+        };
+        let mut coordinator = GroupCoordinator::new(uid.as_str(), own_card);
         if let Some(bytes) = self.ports.storage.kv(KV_GROUPS)? {
             if let Ok(saved) = serde_json::from_slice::<BTreeMap<String, Vec<Value>>>(&bytes) {
                 coordinator.load(&saved);
@@ -1902,6 +1955,8 @@ impl Core {
 
     pub fn create_group(&mut self, name: &str, members: &[UserId]) -> Result<String, ErrorCode> {
         self.require_live()?;
+        // Reaches friends: a device without the account key cannot do it yet (per-device delivery, step 5c).
+        self.identity()?;
         let cards = members
             .iter()
             .map(|u| self.card_of(u))
@@ -1919,6 +1974,8 @@ impl Core {
 
     pub fn add_group_member(&mut self, group_id: &str, uid: &UserId) -> Result<(), ErrorCode> {
         self.require_live()?;
+        // Reaches friends: a device without the account key cannot do it yet (per-device delivery, step 5c).
+        self.identity()?;
         let card = self.card_of(uid)?;
         let now = self.now();
         let (Some(groups), Some(id)) = (self.groups.as_mut(), self.identity.as_ref()) else {
@@ -1932,6 +1989,8 @@ impl Core {
 
     pub fn remove_group_member(&mut self, group_id: &str, uid: &UserId) -> Result<(), ErrorCode> {
         self.require_live()?;
+        // Reaches friends: a device without the account key cannot do it yet (per-device delivery, step 5c).
+        self.identity()?;
         let now = self.now();
         let (Some(groups), Some(id)) = (self.groups.as_mut(), self.identity.as_ref()) else {
             return Err(ErrorCode::NoIdentity);
@@ -1944,6 +2003,8 @@ impl Core {
 
     pub fn leave_group(&mut self, group_id: &str) -> Result<(), ErrorCode> {
         self.require_live()?;
+        // Reaches friends: a device without the account key cannot do it yet (per-device delivery, step 5c).
+        self.identity()?;
         let now = self.now();
         let (Some(groups), Some(id)) = (self.groups.as_mut(), self.identity.as_ref()) else {
             return Err(ErrorCode::NoIdentity);
@@ -1956,6 +2017,8 @@ impl Core {
 
     pub fn rename_group(&mut self, group_id: &str, name: &str) -> Result<(), ErrorCode> {
         self.require_live()?;
+        // Reaches friends: a device without the account key cannot do it yet (per-device delivery, step 5c).
+        self.identity()?;
         let now = self.now();
         let (Some(groups), Some(id)) = (self.groups.as_mut(), self.identity.as_ref()) else {
             return Err(ErrorCode::NoIdentity);
@@ -1974,6 +2037,8 @@ impl Core {
         reply_to: Option<&MessageId>,
     ) -> Result<MessageId, ErrorCode> {
         self.require_live()?;
+        // Reaches friends: a device without the account key cannot do it yet (per-device delivery, step 5c).
+        self.identity()?;
         let own = self.uid.clone().ok_or(ErrorCode::NoIdentity)?;
         let groups = self.groups.as_ref().ok_or(ErrorCode::NoIdentity)?;
         if !groups.is_member(group_id, own.as_str()) {
@@ -2067,6 +2132,8 @@ impl Core {
     /// say), or when the person taps "retry". Everyone it was for gets it again; receivers ignore a message they have.
     pub fn retry_message(&mut self, id: &MessageId) -> Result<(), ErrorCode> {
         self.require_live()?;
+        // Reaches friends: a device without the account key cannot do it yet (per-device delivery, step 5c).
+        self.identity()?;
         let own = self.uid.clone().ok_or(ErrorCode::NoIdentity)?;
         let row = self.messages.get(id).ok_or(ErrorCode::UnknownMessage)?;
         if row.message.sender_id != own || row.message.delivery_state == DeliveryState::Read {
@@ -2284,6 +2351,8 @@ impl Core {
         reply_to: Option<&MessageId>,
     ) -> Result<MessageId, ErrorCode> {
         self.require_live()?;
+        // Reaches friends: a device without the account key cannot do it yet (per-device delivery, step 5c).
+        self.identity()?;
         if !self.contacts.contains_key(peer) {
             return Err(ErrorCode::UnknownContact);
         }
@@ -2310,6 +2379,8 @@ impl Core {
         reply_to: Option<&MessageId>,
     ) -> Result<MessageId, ErrorCode> {
         self.require_live()?;
+        // Reaches friends: a device without the account key cannot do it yet (per-device delivery, step 5c).
+        self.identity()?;
         let own = self.uid.clone().ok_or(ErrorCode::NoIdentity)?;
         let groups = self.groups.as_ref().ok_or(ErrorCode::NoIdentity)?;
         if !groups.is_member(group_id, own.as_str()) {
@@ -2590,6 +2661,8 @@ impl Core {
     /// broadcast.
     pub fn send_channel_message(&mut self, raw: &str, text: &str) -> Result<MessageId, ErrorCode> {
         self.require_live()?;
+        // Reaches friends: a device without the account key cannot do it yet (per-device delivery, step 5c).
+        self.identity()?;
         let own = self.uid.clone().ok_or(ErrorCode::NoIdentity)?;
         let name = normalize_channel_name(raw).ok_or(ErrorCode::BadChannel)?;
         let now = self.now();

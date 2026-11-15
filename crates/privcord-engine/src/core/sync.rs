@@ -202,6 +202,16 @@ impl FileSource for NoFiles {
     }
 }
 
+impl SyncState {
+    /// The account's device list changed (a device was linked): its devices write entries this device accepts.
+    pub(super) fn devices_changed(&mut self, list: &DeviceList) {
+        self.replica.set_devices(list.clone());
+        let own = self.writer.device.clone();
+        self.others
+            .extend(list.active().map(|d| d.id.clone()).filter(|d| d != &own));
+    }
+}
+
 impl Core {
     fn kv_json<T: serde::de::DeserializeOwned>(&self, key: &str) -> Option<T> {
         self.ports
@@ -306,15 +316,13 @@ impl Core {
     }
 
     /// The account's public keys, which every device has (device lists and posts are checked against them).
-    fn account_public(
+    pub(super) fn account_public(
         &self,
     ) -> Option<(
         privcord_domain::blob::PublicJwk,
         privcord_domain::blob::PublicJwk,
     )> {
-        self.identity
-            .as_ref()
-            .map(|a| (a.sign_public(), a.dh_public()))
+        self.account.clone()
     }
 
     /// Other devices of this account seen so far (none until another install of it shows up).

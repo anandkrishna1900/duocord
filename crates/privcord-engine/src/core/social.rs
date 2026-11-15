@@ -69,6 +69,10 @@ impl Core {
     /// remove it, and leaves a tombstone so a late copy cannot bring it back.
     pub fn delete_message(&mut self, id: &MessageId, everyone: bool) -> Result<(), ErrorCode> {
         self.require_live()?;
+        // Deleting for everyone reaches friends: not from a device without the account key yet (step 5c).
+        if everyone {
+            self.identity()?;
+        }
         let own = self.uid.clone().ok_or(ErrorCode::NoIdentity)?;
         let (conversation, sender) = {
             let m = self.messages.get(id).ok_or(ErrorCode::UnknownMessage)?;
@@ -157,6 +161,8 @@ impl Core {
     /// Toggle my reaction on a message (the same emoji again removes it). One emoji per person per message.
     pub fn react(&mut self, id: &MessageId, emoji: &str) -> Result<(), ErrorCode> {
         self.require_live()?;
+        // Reaches friends: a device without the account key cannot do it yet (per-device delivery, step 5c).
+        self.identity()?;
         let own = self.uid.clone().ok_or(ErrorCode::NoIdentity)?;
         if !REACTION_EMOJI.contains(&emoji) {
             return Err(ErrorCode::BadReaction);

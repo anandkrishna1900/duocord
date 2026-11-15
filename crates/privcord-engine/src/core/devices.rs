@@ -13,12 +13,17 @@ use privcord_crypto::{
     devices::DeviceList,
     identity::{Identity, StoredSecrets},
 };
+use privcord_domain::blob::PublicJwk;
 use zeroize::Zeroizing;
 
-const KV_DEVICE_KEYS: &str = "devices.self";
+pub(super) const KV_DEVICE_KEYS: &str = "devices.self";
 pub(super) const KV_DEVICE_LIST: &str = "devices.list";
 /// The name the first device gets until the person names it.
 const FIRST_NAME: &str = "This device";
+/// On a device linked by QR code: the account's public keys (`{ "sign", "dh" }`). Its private keys are not here.
+pub(super) const KV_ACCOUNT_PUBLIC: &str = "account.public";
+/// On a device linked by QR code: the account's contact card, as the account signed it when the device was linked.
+pub(super) const KV_ACCOUNT_CARD: &str = "account.card";
 
 impl Core {
     fn device_keys_key(&self) -> Option<String> {
@@ -40,17 +45,36 @@ impl Core {
         Ok(Identity::from_stored(&StoredSecrets { sign, dh }).ok())
     }
 
-    /// Makes sure this install has device keys and a device list it is in. Runs whenever the identity is loaded.
+    /// The account a linked device belongs to, from storage.
+    pub(super) fn linked_account(&self) -> Option<(PublicJwk, PublicJwk)> {
+        let v: serde_json::Value =
+            serde_json::from_slice(&self.ports.storage.kv(KV_ACCOUNT_PUBLIC).ok()??).ok()?;
+        let sign: PublicJwk = serde_json::from_value(v.get("sign")?.clone()).ok()?;
+        let dh: PublicJwk = serde_json::from_value(v.get("dh")?.clone()).ok()?;
+        Some((sign, dh))
+    }
+
+    /// Makes sure this install has device keys and a device list it is in. Runs whenever the account is loaded.
+    ///
+    /// A device holding the account key makes its keys and a first list itself. A device linked by QR code got both
+    /// when it was linked; it cannot sign a list, so without a valid one it has no device.
     pub(super) fn ensure_devices(&mut self) -> Result<(), ErrorCode> {
-        let (Some(account), Some(key)) = (self.identity.as_ref(), self.device_keys_key()) else {
+        let (Some((sign, dh)), Some(key)) = (self.account.clone(), self.device_keys_key()) else {
             self.device_id = None;
             self.device_list = None;
             self.sync = None;
             return Ok(());
         };
+        let root = self.identity.is_some();
         let mut ops = Vec::new();
         let device = match self.load_device_keys(&key)? {
             Some(d) => d,
+            None if !root => {
+                self.device_id = None;
+                self.device_list = None;
+                self.sync = None;
+                return Ok(());
+            }
             None => {
                 let d = Identity::generate(&mut *self.ports.entropy)?;
                 let s = d.export_for_storage();
@@ -65,7 +89,6 @@ impl Core {
             }
         };
         let id = privcord_crypto::devices::device_id(&device.sign_public(), &device.dh_public())?;
-        let (sign, dh) = (account.sign_public(), account.dh_public());
         let stored = self
             .ports
             .storage
@@ -73,11 +96,17 @@ impl Core {
             .and_then(|b| String::from_utf8(b).ok())
             .and_then(|t| DeviceList::from_json(&t).ok())
             .filter(|l| l.verify(&sign, &dh).is_ok() && l.get(&id).is_some_and(|d| d.active()));
-        let list = match stored {
-            Some(l) => l,
-            None => {
-                // ponytail: a list kept by another device of this account (after a restore from the phrase) is not
-                // merged yet; that comes with device-list sync (syncengine.md step 4).
+        let list = match (stored, self.identity.as_ref()) {
+            (Some(l), _) => l,
+            (None, None) => {
+                self.device_id = None;
+                self.device_list = None;
+                self.sync = None;
+                return Ok(());
+            }
+            (None, Some(account)) => {
+                // Another device of this account (a phrase-restored install, or one linked earlier) may have a list
+                // already: the two are merged by a holder of the account key when they meet (core/sync.rs).
                 let l = DeviceList::first(account, &device, FIRST_NAME, self.now())
                     .map_err(|_| ErrorCode::Crypto)?;
                 ops.push(StorageOp::SetKv {

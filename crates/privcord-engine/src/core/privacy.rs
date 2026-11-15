@@ -186,6 +186,12 @@ impl Wipe<'_> {
                     self.core.identity = None;
                     self.core.uid = None;
                     self.core.groups = None;
+                    // The account as a whole: its public keys, this device's place in it, its sync state.
+                    self.core.account = None;
+                    self.core.device_id = None;
+                    self.core.device_list = None;
+                    self.core.sync = None;
+                    self.core.link = None;
                 }
                 r
             }

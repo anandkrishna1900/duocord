@@ -1044,6 +1044,14 @@ internal open class UniffiVTableCallbackInterfaceTransportCallbacks(
 
 
 
+
+
+
+
+
+
+
+
 // A JNA Library to expose the extern-C FFI definitions.
 // This is an implementation detail which will be called internally by the public API.
 
@@ -1108,7 +1116,11 @@ internal interface UniffiLib : Library {
     ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_ble_secret(`ptr`: Pointer,`peer`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    fun uniffi_privcord_ffi_fn_method_privcordengine_cancel_device_link(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_clear_answer(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    fun uniffi_privcord_ffi_fn_method_privcordengine_confirm_device_link(`ptr`: Pointer,`accept`: Byte,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_create_group(`ptr`: Pointer,`name`: RustBuffer.ByValue,`members`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -1130,6 +1142,8 @@ internal interface UniffiLib : Library {
     ): RustBuffer.ByValue
     fun uniffi_privcord_ffi_fn_method_privcordengine_join_channel(`ptr`: Pointer,`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    fun uniffi_privcord_ffi_fn_method_privcordengine_join_device_link(`ptr`: Pointer,`code`: RustBuffer.ByValue,`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_last_wipe_report(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_privcord_ffi_fn_method_privcordengine_leave_channel(`ptr`: Pointer,`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1209,6 +1223,8 @@ internal interface UniffiLib : Library {
     fun uniffi_privcord_ffi_fn_method_privcordengine_signal_blob(`ptr`: Pointer,`mailbox`: RustBuffer.ByValue,`blob`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_snapshot(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    fun uniffi_privcord_ffi_fn_method_privcordengine_start_device_link(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_privcord_ffi_fn_method_privcordengine_stop_invite(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
@@ -1400,7 +1416,11 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_ble_secret(
     ): Short
+    fun uniffi_privcord_ffi_checksum_method_privcordengine_cancel_device_link(
+    ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_clear_answer(
+    ): Short
+    fun uniffi_privcord_ffi_checksum_method_privcordengine_confirm_device_link(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_create_group(
     ): Short
@@ -1421,6 +1441,8 @@ internal interface UniffiLib : Library {
     fun uniffi_privcord_ffi_checksum_method_privcordengine_import_backup(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_join_channel(
+    ): Short
+    fun uniffi_privcord_ffi_checksum_method_privcordengine_join_device_link(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_last_wipe_report(
     ): Short
@@ -1501,6 +1523,8 @@ internal interface UniffiLib : Library {
     fun uniffi_privcord_ffi_checksum_method_privcordengine_signal_blob(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_snapshot(
+    ): Short
+    fun uniffi_privcord_ffi_checksum_method_privcordengine_start_device_link(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_stop_invite(
     ): Short
@@ -1590,7 +1614,13 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_ble_secret() != 10999.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_cancel_device_link() != 19478.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_clear_answer() != 55739.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_confirm_device_link() != 56402.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_create_group() != 11412.toShort()) {
@@ -1621,6 +1651,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_join_channel() != 1805.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_join_device_link() != 27528.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_last_wipe_report() != 42249.toShort()) {
@@ -1741,6 +1774,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_snapshot() != 20760.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_start_device_link() != 15845.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_stop_invite() != 37776.toShort()) {
@@ -3072,7 +3108,14 @@ public interface PrivcordEngineInterface {
      */
     fun `bleSecret`(`peer`: kotlin.String): kotlin.ByteArray
     
+    fun `cancelDeviceLink`()
+    
     fun `clearAnswer`()
+    
+    /**
+     * After comparing the 6-digit codes, on the device holding the account key: let the new device in, or not.
+     */
+    fun `confirmDeviceLink`(`accept`: kotlin.Boolean)
     
     /**
      * Make a group with these contacts. Returns the group's id.
@@ -3120,6 +3163,11 @@ public interface PrivcordEngineInterface {
      * Join a public channel; returns its normalised name.
      */
     fun `joinChannel`(`name`: kotlin.String): kotlin.String
+    
+    /**
+     * On a new device with no account: take the code shown by the other device.
+     */
+    fun `joinDeviceLink`(`code`: kotlin.String, `name`: kotlin.String)
     
     /**
      * The report of the last deletion that was started, if any.
@@ -3284,6 +3332,11 @@ public interface PrivcordEngineInterface {
      * Everything a recreated UI needs, so it never depends on having seen every event.
      */
     fun `snapshot`(): SnapshotDto
+    
+    /**
+     * On the device holding the account key: start linking a new device. Returns the code to show as a QR code.
+     */
+    fun `startDeviceLink`(): kotlin.String
     
     fun `stopInvite`()
     
@@ -3460,12 +3513,39 @@ open class PrivcordEngine: Disposable, AutoCloseable, PrivcordEngineInterface {
     
 
     
+    @Throws(FfiException::class)override fun `cancelDeviceLink`()
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_cancel_device_link(
+        it, _status)
+}
+    }
+    
+    
+
+    
     @Throws(FfiException::class)override fun `clearAnswer`()
         = 
     callWithPointer {
     uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_clear_answer(
         it, _status)
+}
+    }
+    
+    
+
+    
+    /**
+     * After comparing the 6-digit codes, on the device holding the account key: let the new device in, or not.
+     */
+    @Throws(FfiException::class)override fun `confirmDeviceLink`(`accept`: kotlin.Boolean)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_confirm_device_link(
+        it, FfiConverterBoolean.lower(`accept`),_status)
 }
     }
     
@@ -3622,6 +3702,21 @@ open class PrivcordEngine: Disposable, AutoCloseable, PrivcordEngineInterface {
     }
     )
     }
+    
+
+    
+    /**
+     * On a new device with no account: take the code shown by the other device.
+     */
+    @Throws(FfiException::class)override fun `joinDeviceLink`(`code`: kotlin.String, `name`: kotlin.String)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_join_device_link(
+        it, FfiConverterString.lower(`code`),FfiConverterString.lower(`name`),_status)
+}
+    }
+    
     
 
     
@@ -4193,6 +4288,22 @@ open class PrivcordEngine: Disposable, AutoCloseable, PrivcordEngineInterface {
     callWithPointer {
     uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_snapshot(
+        it, _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * On the device holding the account key: start linking a new device. Returns the code to show as a QR code.
+     */
+    @Throws(FfiException::class)override fun `startDeviceLink`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_start_device_link(
         it, _status)
 }
     }
@@ -6534,6 +6645,17 @@ sealed class EventDto {
     
     
     /**
+     * Linking a device by QR code: `stage` is "code" (show the 6-digit `code`; on the device holding the account key,
+     * `name` is the new device's), then "done", "failed", "cancelled" or "expired".
+     */
+    data class DeviceLink(
+        val `stage`: kotlin.String, 
+        val `code`: kotlin.String?, 
+        val `name`: kotlin.String?) : EventDto() {
+        companion object
+    }
+    
+    /**
      * A file is arriving: `percent` is how much of it is here.
      */
     data class FileProgress(
@@ -6643,26 +6765,31 @@ public object FfiConverterTypeEventDto : FfiConverterRustBuffer<EventDto>{
                 FfiConverterString.read(buf),
                 )
             19 -> EventDto.SnapshotChanged
-            20 -> EventDto.FileProgress(
+            20 -> EventDto.DeviceLink(
+                FfiConverterString.read(buf),
+                FfiConverterOptionalString.read(buf),
+                FfiConverterOptionalString.read(buf),
+                )
+            21 -> EventDto.FileProgress(
                 FfiConverterString.read(buf),
                 FfiConverterUInt.read(buf),
                 )
-            21 -> EventDto.FileIncoming(
+            22 -> EventDto.FileIncoming(
                 FfiConverterString.read(buf),
                 FfiConverterString.read(buf),
                 FfiConverterString.read(buf),
                 FfiConverterULong.read(buf),
                 )
-            22 -> EventDto.FileQueued(
+            23 -> EventDto.FileQueued(
                 FfiConverterString.read(buf),
                 FfiConverterString.read(buf),
                 FfiConverterUInt.read(buf),
                 )
-            23 -> EventDto.Wiped
-            24 -> EventDto.Lagged(
+            24 -> EventDto.Wiped
+            25 -> EventDto.Lagged(
                 FfiConverterULong.read(buf),
                 )
-            25 -> EventDto.ShutDown
+            26 -> EventDto.ShutDown
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -6803,6 +6930,15 @@ public object FfiConverterTypeEventDto : FfiConverterRustBuffer<EventDto>{
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
+            )
+        }
+        is EventDto.DeviceLink -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`stage`)
+                + FfiConverterOptionalString.allocationSize(value.`code`)
+                + FfiConverterOptionalString.allocationSize(value.`name`)
             )
         }
         is EventDto.FileProgress -> {
@@ -6954,14 +7090,21 @@ public object FfiConverterTypeEventDto : FfiConverterRustBuffer<EventDto>{
                 buf.putInt(19)
                 Unit
             }
-            is EventDto.FileProgress -> {
+            is EventDto.DeviceLink -> {
                 buf.putInt(20)
+                FfiConverterString.write(value.`stage`, buf)
+                FfiConverterOptionalString.write(value.`code`, buf)
+                FfiConverterOptionalString.write(value.`name`, buf)
+                Unit
+            }
+            is EventDto.FileProgress -> {
+                buf.putInt(21)
                 FfiConverterString.write(value.`messageId`, buf)
                 FfiConverterUInt.write(value.`percent`, buf)
                 Unit
             }
             is EventDto.FileIncoming -> {
-                buf.putInt(21)
+                buf.putInt(22)
                 FfiConverterString.write(value.`conversation`, buf)
                 FfiConverterString.write(value.`messageId`, buf)
                 FfiConverterString.write(value.`name`, buf)
@@ -6969,23 +7112,23 @@ public object FfiConverterTypeEventDto : FfiConverterRustBuffer<EventDto>{
                 Unit
             }
             is EventDto.FileQueued -> {
-                buf.putInt(22)
+                buf.putInt(23)
                 FfiConverterString.write(value.`peer`, buf)
                 FfiConverterString.write(value.`messageId`, buf)
                 FfiConverterUInt.write(value.`frames`, buf)
                 Unit
             }
             is EventDto.Wiped -> {
-                buf.putInt(23)
+                buf.putInt(24)
                 Unit
             }
             is EventDto.Lagged -> {
-                buf.putInt(24)
+                buf.putInt(25)
                 FfiConverterULong.write(value.`missed`, buf)
                 Unit
             }
             is EventDto.ShutDown -> {
-                buf.putInt(25)
+                buf.putInt(26)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -7004,6 +7147,12 @@ public object FfiConverterTypeEventDto : FfiConverterRustBuffer<EventDto>{
 sealed class FfiException: kotlin.Exception() {
     
     class NoIdentity(
+        ) : FfiException() {
+        override val message
+            get() = ""
+    }
+    
+    class NeedsAccountKey(
         ) : FfiException() {
         override val message
             get() = ""
@@ -7212,37 +7361,38 @@ public object FfiConverterTypeFfiError : FfiConverterRustBuffer<FfiException> {
 
         return when(buf.getInt()) {
             1 -> FfiException.NoIdentity()
-            2 -> FfiException.IdentityExists()
-            3 -> FfiException.InvalidPhrase()
-            4 -> FfiException.InvalidCard()
-            5 -> FfiException.OwnCard()
-            6 -> FfiException.UnknownContact()
-            7 -> FfiException.EmptyMessage()
-            8 -> FfiException.MessageTooLong()
-            9 -> FfiException.DirectNotAllowed()
-            10 -> FfiException.UnknownMessage()
-            11 -> FfiException.Storage()
-            12 -> FfiException.SecureStorage()
-            13 -> FfiException.Crypto()
-            14 -> FfiException.ShuttingDown()
-            15 -> FfiException.Busy()
-            16 -> FfiException.InvalidArgument()
-            17 -> FfiException.NoSuchGroup()
-            18 -> FfiException.GroupRefused()
-            19 -> FfiException.GroupFull()
-            20 -> FfiException.BadFile()
-            21 -> FfiException.BadChannel()
-            22 -> FfiException.NotJoined()
-            23 -> FfiException.NoSignaling()
-            24 -> FfiException.InvalidInvite()
-            25 -> FfiException.InviteNotFound()
-            26 -> FfiException.OwnInvite()
-            27 -> FfiException.StillInGroup()
-            28 -> FfiException.NoRoute()
-            29 -> FfiException.BadReaction()
-            30 -> FfiException.WeakPassphrase()
-            31 -> FfiException.BackupUnreadable()
-            32 -> FfiException.BackupNotYours()
+            2 -> FfiException.NeedsAccountKey()
+            3 -> FfiException.IdentityExists()
+            4 -> FfiException.InvalidPhrase()
+            5 -> FfiException.InvalidCard()
+            6 -> FfiException.OwnCard()
+            7 -> FfiException.UnknownContact()
+            8 -> FfiException.EmptyMessage()
+            9 -> FfiException.MessageTooLong()
+            10 -> FfiException.DirectNotAllowed()
+            11 -> FfiException.UnknownMessage()
+            12 -> FfiException.Storage()
+            13 -> FfiException.SecureStorage()
+            14 -> FfiException.Crypto()
+            15 -> FfiException.ShuttingDown()
+            16 -> FfiException.Busy()
+            17 -> FfiException.InvalidArgument()
+            18 -> FfiException.NoSuchGroup()
+            19 -> FfiException.GroupRefused()
+            20 -> FfiException.GroupFull()
+            21 -> FfiException.BadFile()
+            22 -> FfiException.BadChannel()
+            23 -> FfiException.NotJoined()
+            24 -> FfiException.NoSignaling()
+            25 -> FfiException.InvalidInvite()
+            26 -> FfiException.InviteNotFound()
+            27 -> FfiException.OwnInvite()
+            28 -> FfiException.StillInGroup()
+            29 -> FfiException.NoRoute()
+            30 -> FfiException.BadReaction()
+            31 -> FfiException.WeakPassphrase()
+            32 -> FfiException.BackupUnreadable()
+            33 -> FfiException.BackupNotYours()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -7250,6 +7400,10 @@ public object FfiConverterTypeFfiError : FfiConverterRustBuffer<FfiException> {
     override fun allocationSize(value: FfiException): ULong {
         return when(value) {
             is FfiException.NoIdentity -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is FfiException.NeedsAccountKey -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
             )
@@ -7386,128 +7540,132 @@ public object FfiConverterTypeFfiError : FfiConverterRustBuffer<FfiException> {
                 buf.putInt(1)
                 Unit
             }
-            is FfiException.IdentityExists -> {
+            is FfiException.NeedsAccountKey -> {
                 buf.putInt(2)
                 Unit
             }
-            is FfiException.InvalidPhrase -> {
+            is FfiException.IdentityExists -> {
                 buf.putInt(3)
                 Unit
             }
-            is FfiException.InvalidCard -> {
+            is FfiException.InvalidPhrase -> {
                 buf.putInt(4)
                 Unit
             }
-            is FfiException.OwnCard -> {
+            is FfiException.InvalidCard -> {
                 buf.putInt(5)
                 Unit
             }
-            is FfiException.UnknownContact -> {
+            is FfiException.OwnCard -> {
                 buf.putInt(6)
                 Unit
             }
-            is FfiException.EmptyMessage -> {
+            is FfiException.UnknownContact -> {
                 buf.putInt(7)
                 Unit
             }
-            is FfiException.MessageTooLong -> {
+            is FfiException.EmptyMessage -> {
                 buf.putInt(8)
                 Unit
             }
-            is FfiException.DirectNotAllowed -> {
+            is FfiException.MessageTooLong -> {
                 buf.putInt(9)
                 Unit
             }
-            is FfiException.UnknownMessage -> {
+            is FfiException.DirectNotAllowed -> {
                 buf.putInt(10)
                 Unit
             }
-            is FfiException.Storage -> {
+            is FfiException.UnknownMessage -> {
                 buf.putInt(11)
                 Unit
             }
-            is FfiException.SecureStorage -> {
+            is FfiException.Storage -> {
                 buf.putInt(12)
                 Unit
             }
-            is FfiException.Crypto -> {
+            is FfiException.SecureStorage -> {
                 buf.putInt(13)
                 Unit
             }
-            is FfiException.ShuttingDown -> {
+            is FfiException.Crypto -> {
                 buf.putInt(14)
                 Unit
             }
-            is FfiException.Busy -> {
+            is FfiException.ShuttingDown -> {
                 buf.putInt(15)
                 Unit
             }
-            is FfiException.InvalidArgument -> {
+            is FfiException.Busy -> {
                 buf.putInt(16)
                 Unit
             }
-            is FfiException.NoSuchGroup -> {
+            is FfiException.InvalidArgument -> {
                 buf.putInt(17)
                 Unit
             }
-            is FfiException.GroupRefused -> {
+            is FfiException.NoSuchGroup -> {
                 buf.putInt(18)
                 Unit
             }
-            is FfiException.GroupFull -> {
+            is FfiException.GroupRefused -> {
                 buf.putInt(19)
                 Unit
             }
-            is FfiException.BadFile -> {
+            is FfiException.GroupFull -> {
                 buf.putInt(20)
                 Unit
             }
-            is FfiException.BadChannel -> {
+            is FfiException.BadFile -> {
                 buf.putInt(21)
                 Unit
             }
-            is FfiException.NotJoined -> {
+            is FfiException.BadChannel -> {
                 buf.putInt(22)
                 Unit
             }
-            is FfiException.NoSignaling -> {
+            is FfiException.NotJoined -> {
                 buf.putInt(23)
                 Unit
             }
-            is FfiException.InvalidInvite -> {
+            is FfiException.NoSignaling -> {
                 buf.putInt(24)
                 Unit
             }
-            is FfiException.InviteNotFound -> {
+            is FfiException.InvalidInvite -> {
                 buf.putInt(25)
                 Unit
             }
-            is FfiException.OwnInvite -> {
+            is FfiException.InviteNotFound -> {
                 buf.putInt(26)
                 Unit
             }
-            is FfiException.StillInGroup -> {
+            is FfiException.OwnInvite -> {
                 buf.putInt(27)
                 Unit
             }
-            is FfiException.NoRoute -> {
+            is FfiException.StillInGroup -> {
                 buf.putInt(28)
                 Unit
             }
-            is FfiException.BadReaction -> {
+            is FfiException.NoRoute -> {
                 buf.putInt(29)
                 Unit
             }
-            is FfiException.WeakPassphrase -> {
+            is FfiException.BadReaction -> {
                 buf.putInt(30)
                 Unit
             }
-            is FfiException.BackupUnreadable -> {
+            is FfiException.WeakPassphrase -> {
                 buf.putInt(31)
                 Unit
             }
-            is FfiException.BackupNotYours -> {
+            is FfiException.BackupUnreadable -> {
                 buf.putInt(32)
+                Unit
+            }
+            is FfiException.BackupNotYours -> {
+                buf.putInt(33)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

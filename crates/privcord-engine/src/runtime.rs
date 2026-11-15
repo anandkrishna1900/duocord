@@ -167,6 +167,13 @@ pub enum Op {
         limit: usize,
     },
     ExportBackup(String),
+    StartDeviceLink,
+    JoinDeviceLink {
+        code: String,
+        name: String,
+    },
+    ConfirmDeviceLink(bool),
+    CancelDeviceLink,
     ImportBackup {
         text: String,
         passphrase: String,
@@ -341,6 +348,17 @@ fn pump(core: &mut Core, cmd: Command) -> bool {
                     .map(|()| Answer::Done),
                 Op::Search { query, limit } => Ok(Answer::Hits(core.search(&query, limit))),
                 Op::ExportBackup(p) => core.export_backup(&p).map(Answer::Text),
+                Op::StartDeviceLink => core.start_device_link().map(Answer::Text),
+                Op::JoinDeviceLink { code, name } => {
+                    core.join_device_link(&code, &name).map(|()| Answer::Done)
+                }
+                Op::ConfirmDeviceLink(accept) => {
+                    core.confirm_device_link(accept).map(|()| Answer::Done)
+                }
+                Op::CancelDeviceLink => {
+                    core.cancel_device_link();
+                    Ok(Answer::Done)
+                }
                 Op::ImportBackup { text, passphrase } => {
                     core.import_backup(&text, &passphrase).map(Answer::Restored)
                 }

@@ -213,6 +213,13 @@ pub enum EngineEvent {
     },
     /// A backup was restored: ask for a snapshot.
     Restored,
+    /// Linking a device by QR code: `stage` is "code" (show `code`, the 6 digits; on the device holding the account
+    /// key, `name` is the new device's), then "done", "failed", "cancelled" or "expired".
+    DeviceLink {
+        stage: String,
+        code: Option<String>,
+        name: Option<String>,
+    },
     /// A setting the snapshot shows changed (the muted list).
     SettingsChanged,
     /// A file is arriving: how much of it is here, in percent.

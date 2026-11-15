@@ -423,3 +423,145 @@ fn history_from_before_sync_groups_and_read_marks_reach_a_restored_install() {
         laptop.core.sync_fingerprint()
     );
 }
+
+fn link_codes(events: &mut privcord_engine::EventStream) -> (Vec<String>, Vec<String>) {
+    let (mut codes, mut stages) = (Vec::new(), Vec::new());
+    while let Ok((_, e)) = events.try_recv() {
+        if let privcord_engine::EngineEvent::DeviceLink { stage, code, .. } = e {
+            if let Some(c) = code {
+                codes.push(c);
+            }
+            stages.push(stage);
+        }
+    }
+    (codes, stages)
+}
+
+#[test]
+fn a_device_linked_by_code_gets_the_history_but_never_the_account_key() {
+    let clock = FakeClock::at(1_700_000_000_000);
+    let mut relay = Relay::default();
+    let mut phone = Device::new("phone", &clock);
+    phone.core.create_identity().unwrap();
+    let (card, fran) = friend(&clock);
+    phone
+        .core
+        .add_contact(&card, ContactTrust::Verified)
+        .unwrap();
+    phone
+        .core
+        .send_message(&fran, "before the laptop", None)
+        .unwrap();
+    phone.online(&mut relay);
+
+    let mut laptop = Device::new("laptop", &clock);
+    let mut phone_events = phone.core.subscribe();
+    let mut laptop_events = laptop.core.subscribe();
+    let code = phone.core.start_device_link().unwrap();
+    laptop.core.join_device_link(&code, "Laptop").unwrap();
+    for _ in 0..3 {
+        laptop.online(&mut relay);
+        phone.online(&mut relay);
+    }
+    // Both screens show the same six digits, and the person confirms on the phone.
+    let (phone_code, _) = link_codes(&mut phone_events);
+    let (laptop_code, _) = link_codes(&mut laptop_events);
+    assert_eq!(phone_code.len(), 1);
+    assert_eq!(phone_code, laptop_code);
+    phone.core.confirm_device_link(true).unwrap();
+    for _ in 0..4 {
+        laptop.online(&mut relay);
+        phone.online(&mut relay);
+    }
+    let (_, stages) = link_codes(&mut laptop_events);
+    assert!(stages.contains(&"done".to_owned()), "{stages:?}");
+
+    // The laptop is a device of the same account, without the account key.
+    assert_eq!(laptop.core.own_uid(), phone.core.own_uid());
+    assert!(phone.core.holds_account_key());
+    assert!(!laptop.core.holds_account_key());
+    assert_eq!(phone.core.device_list().unwrap().active().count(), 2);
+    assert_eq!(
+        laptop.core.device_list().unwrap(),
+        phone.core.device_list().unwrap()
+    );
+    assert_eq!(
+        laptop.core.own_card(None).unwrap(),
+        phone.core.own_card(None).unwrap(),
+        "it shares the account's card"
+    );
+
+    // It got the sync key from the phone (sealed to it) and the history through the self-mailbox.
+    assert!(laptop
+        .core
+        .snapshot()
+        .contacts
+        .iter()
+        .any(|c| c.uid == fran));
+    assert_eq!(laptop.texts(), ["before the laptop"]);
+
+    // Talking to friends from it needs the account key until per-device delivery (5c): it says so.
+    assert_eq!(
+        laptop
+            .core
+            .send_message(&fran, "from the laptop", None)
+            .err(),
+        Some(privcord_engine::ErrorCode::NeedsAccountKey)
+    );
+
+    // What the laptop does that needs no account key still syncs back: a delete for me.
+    let id = laptop.message_id("before the laptop");
+    laptop.core.delete_message(&id, false).unwrap();
+    laptop.online(&mut relay);
+    phone.online(&mut relay);
+    assert!(phone.texts().is_empty(), "hidden on the phone too");
+    assert_eq!(
+        phone.core.sync_fingerprint(),
+        laptop.core.sync_fingerprint()
+    );
+}
+
+#[test]
+fn a_wrong_code_links_nothing() {
+    let clock = FakeClock::at(1_700_000_000_000);
+    let mut relay = Relay::default();
+    let mut phone = Device::new("phone", &clock);
+    phone.core.create_identity().unwrap();
+    let mut laptop = Device::new("laptop", &clock);
+    phone.online(&mut relay);
+    let _code = phone.core.start_device_link().unwrap();
+    assert_eq!(
+        laptop
+            .core
+            .join_device_link("duocord-link-1:not-a-code", "Laptop")
+            .err(),
+        Some(privcord_engine::ErrorCode::InvalidInvite)
+    );
+    // A code the phone never made: nobody answers, nothing is granted.
+    let mut other = Device::new("other", &clock);
+    other.core.create_identity().unwrap();
+    other.online(&mut relay);
+    let foreign = other.core.start_device_link().unwrap();
+    let mut stranger = Device::new("stranger", &clock);
+    stranger
+        .core
+        .join_device_link(&foreign, "Stranger")
+        .unwrap();
+    for _ in 0..3 {
+        stranger.online(&mut relay);
+        other.online(&mut relay);
+        phone.online(&mut relay);
+        laptop.online(&mut relay);
+    }
+    // Without confirming on `other`, the stranger has no account, and the phone's list is untouched.
+    assert!(stranger.core.own_uid().is_none());
+    assert_eq!(phone.core.device_list().unwrap().active().count(), 1);
+    // Refusing ends it.
+    other.online(&mut relay);
+    other.core.confirm_device_link(false).unwrap();
+    for _ in 0..2 {
+        stranger.online(&mut relay);
+        other.online(&mut relay);
+    }
+    assert!(stranger.core.own_uid().is_none());
+}

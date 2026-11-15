@@ -316,6 +316,14 @@ impl DesktopHost {
                 unit(e.set_link_path(text(args, "peer")?, path_kind(&text(args, "path")?)?))
             }
             // backup and wiping
+            "start_device_link" => Ok(json!(e.start_device_link().map_err(failed)?)),
+            "join_device_link" => {
+                unit(e.join_device_link(text(args, "code")?, text(args, "name")?))
+            }
+            "confirm_device_link" => unit(
+                e.confirm_device_link(args.get("accept").and_then(Value::as_bool).unwrap_or(false)),
+            ),
+            "cancel_device_link" => unit(e.cancel_device_link()),
             "export_backup" => Ok(json!(e
                 .export_backup(text(args, "passphrase")?)
                 .map_err(failed)?)),

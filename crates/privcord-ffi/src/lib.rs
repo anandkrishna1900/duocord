@@ -39,6 +39,8 @@ uniffi::setup_scaffolding!();
 pub enum FfiError {
     #[error("no identity")]
     NoIdentity,
+    #[error("needs the device holding the account key")]
+    NeedsAccountKey,
     #[error("identity exists")]
     IdentityExists,
     #[error("invalid recovery phrase")]
@@ -107,6 +109,7 @@ impl From<ErrorCode> for FfiError {
     fn from(e: ErrorCode) -> Self {
         match e {
             ErrorCode::NoIdentity => Self::NoIdentity,
+            ErrorCode::NeedsAccountKey => Self::NeedsAccountKey,
             ErrorCode::IdentityExists => Self::IdentityExists,
             ErrorCode::InvalidPhrase => Self::InvalidPhrase,
             ErrorCode::InvalidCard => Self::InvalidCard,
@@ -768,6 +771,13 @@ pub enum EventDto {
     },
     /// A backup was restored, or a setting changed: ask for a snapshot.
     SnapshotChanged,
+    /// Linking a device by QR code: `stage` is "code" (show the 6-digit `code`; on the device holding the account key,
+    /// `name` is the new device's), then "done", "failed", "cancelled" or "expired".
+    DeviceLink {
+        stage: String,
+        code: Option<String>,
+        name: Option<String>,
+    },
     /// A file is arriving: `percent` is how much of it is here.
     FileProgress {
         message_id: String,
@@ -856,6 +866,7 @@ fn event_dto(e: EngineEvent) -> EventDto {
             message_id: message_id.to_string(),
         },
         EngineEvent::Restored | EngineEvent::SettingsChanged => EventDto::SnapshotChanged,
+        EngineEvent::DeviceLink { stage, code, name } => EventDto::DeviceLink { stage, code, name },
         EngineEvent::FileProgress {
             message_id,
             percent,
@@ -1338,6 +1349,31 @@ impl PrivcordEngine {
             Answer::Text(t) => Ok(t),
             _ => Err(FfiError::InvalidArgument),
         }
+    }
+
+    /// On the device holding the account key: start linking a new device. Returns the code to show as a QR code.
+    pub fn start_device_link(&self) -> Result<String, FfiError> {
+        match pollster::block_on(self.handle.op(Op::StartDeviceLink))? {
+            Answer::Text(t) => Ok(t),
+            _ => Err(FfiError::InvalidArgument),
+        }
+    }
+
+    /// On a new device with no account: take the code shown by the other device.
+    pub fn join_device_link(&self, code: String, name: String) -> Result<(), FfiError> {
+        pollster::block_on(self.handle.op(Op::JoinDeviceLink { code, name }))?;
+        Ok(())
+    }
+
+    /// After comparing the 6-digit codes, on the device holding the account key: let the new device in, or not.
+    pub fn confirm_device_link(&self, accept: bool) -> Result<(), FfiError> {
+        pollster::block_on(self.handle.op(Op::ConfirmDeviceLink(accept)))?;
+        Ok(())
+    }
+
+    pub fn cancel_device_link(&self) -> Result<(), FfiError> {
+        pollster::block_on(self.handle.op(Op::CancelDeviceLink))?;
+        Ok(())
     }
 
     /// Add what is in a backup to what is here. Never replaces or removes anything that already exists.

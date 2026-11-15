@@ -500,11 +500,12 @@ fn a_device_linked_by_code_gets_the_history_but_never_the_account_key() {
         .any(|c| c.uid == fran));
     assert_eq!(laptop.texts(), ["before the laptop"]);
 
-    // Talking to friends from it needs the account key until per-device delivery (5c): it says so.
+    // Changing a group needs the account key (its history is signed by it): the laptop says so, before storing
+    // anything.
     assert_eq!(
         laptop
             .core
-            .send_message(&fran, "from the laptop", None)
+            .create_group("Laptop group", std::slice::from_ref(&fran))
             .err(),
         Some(privcord_engine::ErrorCode::NeedsAccountKey)
     );
@@ -611,7 +612,7 @@ fn friends_hear_of_a_linked_device_once_and_keep_the_newest_list() {
     }
     assert_eq!(phone.core.device_list().unwrap().active().count(), 2);
 
-    // The phone told Fran (sealed to her mailbox), once, and she keeps the list it vouches for.
+    // The phone and the laptop each told Fran (sealed to her mailbox) once, and she keeps the list they carry.
     fran.online(&mut relay);
     let known = fran
         .core
@@ -624,11 +625,243 @@ fn friends_hear_of_a_linked_device_once_and_keep_the_newest_list() {
     phone.online(&mut relay);
     assert_eq!(
         relay.boxes.get(&fran_box).map_or(0, Vec::len),
-        1,
-        "told once"
+        2,
+        "told once by each device"
     );
 
     // Removing the friend forgets their devices too.
     fran.core.remove_contact(&phone_uid).unwrap();
     assert!(fran.core.contact_device_list(&phone_uid).is_none());
+}
+
+/// Links a laptop to `phone` by code, through `relay`.
+fn link_laptop(phone: &mut Device, relay: &mut Relay, clock: &Arc<FakeClock>) -> Device {
+    let mut laptop = Device::new("laptop", clock);
+    let code = phone.core.start_device_link().unwrap();
+    laptop.core.join_device_link(&code, "Laptop").unwrap();
+    for _ in 0..3 {
+        laptop.online(relay);
+        phone.online(relay);
+    }
+    phone.core.confirm_device_link(true).unwrap();
+    for _ in 0..4 {
+        laptop.online(relay);
+        phone.online(relay);
+    }
+    assert_eq!(phone.core.device_list().unwrap().active().count(), 2);
+    laptop
+}
+
+fn delivery(d: &Device, text: &str) -> privcord_domain::message::DeliveryState {
+    d.core
+        .snapshot()
+        .messages
+        .into_iter()
+        .flat_map(|(_, v)| v)
+        .find(|m| m.text == text)
+        .map(|m| m.delivery_state)
+        .unwrap()
+}
+
+#[test]
+fn a_linked_device_talks_to_a_friend_and_every_device_gets_the_answer() {
+    use privcord_domain::message::DeliveryState;
+    let clock = FakeClock::at(1_700_000_000_000);
+    let mut relay = Relay::default();
+    let mut phone = Device::new("phone", &clock);
+    phone.core.create_identity().unwrap();
+    let mut fran = Device::new("fran", &clock);
+    fran.core.create_identity().unwrap();
+    let fran_uid = fran.core.own_uid().unwrap().clone();
+    let pat = phone.core.own_uid().unwrap().clone();
+    phone
+        .core
+        .add_contact(
+            &fran.core.own_card(Some("Fran")).unwrap(),
+            ContactTrust::Verified,
+        )
+        .unwrap();
+    fran.core
+        .add_contact(
+            &phone.core.own_card(Some("Pat")).unwrap(),
+            ContactTrust::Verified,
+        )
+        .unwrap();
+    // Messages wait on the relay for whoever is offline.
+    phone.core.set_store_forward(true).unwrap();
+    fran.core.set_store_forward(true).unwrap();
+    let mut laptop = link_laptop(&mut phone, &mut relay, &clock);
+    laptop.core.set_store_forward(true).unwrap();
+
+    // The laptop, without the account key, writes to Fran. She gets it from Pat, and her receipt reaches the laptop.
+    laptop
+        .core
+        .send_message(&fran_uid, "hi from the laptop", None)
+        .unwrap();
+    for _ in 0..2 {
+        laptop.online(&mut relay);
+        fran.online(&mut relay);
+    }
+    assert!(fran.texts().contains(&"hi from the laptop".to_owned()));
+    let from = fran
+        .core
+        .snapshot()
+        .messages
+        .into_iter()
+        .flat_map(|(c, v)| v.into_iter().map(move |m| (c.clone(), m)))
+        .find(|(_, m)| m.text == "hi from the laptop")
+        .unwrap();
+    assert_eq!(from.0, privcord_domain::ConversationId::Direct(pat.clone()));
+    assert_eq!(from.1.sender_id, pat);
+    laptop.online(&mut relay);
+    assert_eq!(
+        delivery(&laptop, "hi from the laptop"),
+        DeliveryState::Delivered
+    );
+
+    // The phone has the message through sync, and the tick too.
+    phone.online(&mut relay);
+    phone.online(&mut relay);
+    assert_eq!(
+        delivery(&phone, "hi from the laptop"),
+        DeliveryState::Delivered
+    );
+
+    // Fran answers: a copy goes to each of Pat's devices, and both have it straight from her.
+    fran.core.send_message(&pat, "hello Pat", None).unwrap();
+    fran.online(&mut relay);
+    fran.online(&mut relay);
+    // The phone has it from Fran herself (the laptop has not been online since, so no sync copy exists yet).
+    phone.online(&mut relay);
+    assert!(phone.texts().contains(&"hello Pat".to_owned()));
+    laptop.online(&mut relay);
+    assert!(laptop.texts().contains(&"hello Pat".to_owned()));
+    fran.online(&mut relay);
+    assert_eq!(delivery(&fran, "hello Pat"), DeliveryState::Delivered);
+}
+
+/// Frames between two devices that are linked directly. `a_addr` is how `b` names `a`, `b_addr` how `a` names `b`.
+fn pump_link(a: &mut Device, a_addr: &UserId, b: &mut Device, b_addr: &UserId) {
+    for _ in 0..50 {
+        let (fa, fb) = (a.transport.drain(), b.transport.drain());
+        if fa.is_empty() && fb.is_empty() {
+            return;
+        }
+        for (to, f) in fa {
+            if &to == b_addr {
+                b.core.frame_received(a_addr, &f);
+            }
+        }
+        for (to, f) in fb {
+            if &to == a_addr {
+                a.core.frame_received(b_addr, &f);
+            }
+        }
+    }
+}
+
+#[test]
+fn a_linked_device_and_a_friend_link_directly_each_by_its_own_keys() {
+    use privcord_domain::{message::DeliveryState, state::ConnectionPath};
+    use privcord_engine::LinkSecurity;
+    for security in [
+        LinkSecurity::EngineEncrypted,
+        LinkSecurity::TransportEncrypted,
+        LinkSecurity::Layered,
+    ] {
+        let clock = FakeClock::at(1_700_000_000_000);
+        let mut relay = Relay::default();
+        let mut phone = Device::new("phone", &clock);
+        phone.core.create_identity().unwrap();
+        let mut fran = Device::new("fran", &clock);
+        fran.core.create_identity().unwrap();
+        let fran_uid = fran.core.own_uid().unwrap().clone();
+        let pat = phone.core.own_uid().unwrap().clone();
+        phone
+            .core
+            .add_contact(
+                &fran.core.own_card(Some("Fran")).unwrap(),
+                ContactTrust::Verified,
+            )
+            .unwrap();
+        fran.core
+            .add_contact(
+                &phone.core.own_card(Some("Pat")).unwrap(),
+                ContactTrust::Verified,
+            )
+            .unwrap();
+        let mut laptop = link_laptop(&mut phone, &mut relay, &clock);
+        // Fran hears of the laptop (the phone's notice), and from then on reaches each of Pat's devices.
+        fran.online(&mut relay);
+        let laptop_addr =
+            UserId::new(format!("{pat}.{}", laptop.core.this_device_id().unwrap())).unwrap();
+
+        laptop.transport.set_connected(&fran_uid, true);
+        fran.transport.set_connected(&laptop_addr, true);
+        laptop
+            .core
+            .link_up_with(&fran_uid, ConnectionPath::DirectLan, security)
+            .unwrap();
+        fran.core
+            .link_up_with(&laptop_addr, ConnectionPath::DirectLan, security)
+            .unwrap();
+        pump_link(&mut laptop, &laptop_addr, &mut fran, &fran_uid);
+        let connected = |d: &Device, who: &UserId| {
+            d.core
+                .snapshot()
+                .contacts
+                .iter()
+                .find(|c| &c.uid == who)
+                .map(|c| c.connection)
+        };
+        assert!(
+            matches!(
+                connected(&laptop, &fran_uid),
+                Some(privcord_domain::state::ConnectionState::Connected { .. })
+            ),
+            "{security:?}"
+        );
+        assert!(matches!(
+            connected(&fran, &pat),
+            Some(privcord_domain::state::ConnectionState::Connected { .. })
+        ));
+
+        laptop
+            .core
+            .send_message(&fran_uid, "over the link", None)
+            .unwrap();
+        pump_link(&mut laptop, &laptop_addr, &mut fran, &fran_uid);
+        assert!(fran.texts().contains(&"over the link".to_owned()));
+        assert_eq!(delivery(&laptop, "over the link"), DeliveryState::Delivered);
+
+        // Fran's answer goes over the live link too.
+        fran.core.send_message(&pat, "back to you", None).unwrap();
+        pump_link(&mut laptop, &laptop_addr, &mut fran, &fran_uid);
+        assert!(laptop.texts().contains(&"back to you".to_owned()));
+    }
+}
+
+#[test]
+fn a_link_claiming_a_device_that_is_not_on_the_list_is_refused() {
+    use privcord_domain::state::ConnectionPath;
+    let clock = FakeClock::at(1_700_000_000_000);
+    let mut phone = Device::new("phone", &clock);
+    phone.core.create_identity().unwrap();
+    let mut fran = Device::new("fran", &clock);
+    fran.core.create_identity().unwrap();
+    let pat = phone.core.own_uid().unwrap().clone();
+    fran.core
+        .add_contact(
+            &phone.core.own_card(Some("Pat")).unwrap(),
+            ContactTrust::Verified,
+        )
+        .unwrap();
+    // Fran knows of no device of Pat's: an address naming one is nobody to her.
+    let made_up = UserId::new(format!("{pat}.00112233445566778899aabbccddeeff")).unwrap();
+    assert!(fran
+        .core
+        .link_up(&made_up, ConnectionPath::DirectLan)
+        .is_err());
+    fran.core.frame_received(&made_up, "{\"kind\":\"hello\"}");
+    assert!(fran.transport.drain().is_empty());
 }

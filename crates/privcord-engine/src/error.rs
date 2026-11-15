@@ -5,8 +5,8 @@ use thiserror::Error;
 pub enum ErrorCode {
     #[error("There is no identity yet.")]
     NoIdentity,
-    /// This device was linked to an account whose key is on another device, and this needs that key (talking to
-    /// friends from a linked device comes with per-device delivery, docs/design/syncengine.md step 5c).
+    /// This device was linked to an account whose key is on another device, and this needs that key: changing a group
+    /// (its history is signed by the account key), or linking another device.
     #[error("This needs the device that holds your account key.")]
     NeedsAccountKey,
     #[error("An identity already exists on this device.")]

@@ -32,6 +32,8 @@ pub(super) const KV_ACCOUNT_CARD: &str = "account.card";
 const KV_CONTACT_LIST: &str = "devices.of";
 /// Which version of our list each friend has been sent (`{ uid: version }`).
 const KV_TOLD: &str = "devices.told";
+/// Between an account and a device in an address (`uid.<device>`); neither a uid nor a device id has one.
+const ADDR_SEP: char = '.';
 /// How long a list notice waits on the relays for a friend who is offline.
 const NOTICE_TTL_SEC: u32 = 7 * 24 * 3600;
 
@@ -138,6 +140,152 @@ impl Core {
         Ok(())
     }
 
+    /// The person an address belongs to: `uid` for `uid` and for `uid.<device>`.
+    pub(super) fn person_of(addr: &UserId) -> UserId {
+        match addr.as_str().split_once(ADDR_SEP) {
+            Some((uid, _)) => UserId::new(uid).unwrap_or_else(|_| addr.clone()),
+            None => addr.clone(),
+        }
+    }
+
+    /// The device an address names, if it names one.
+    pub(super) fn device_of(addr: &UserId) -> Option<&str> {
+        addr.as_str().split_once(ADDR_SEP).map(|(_, d)| d)
+    }
+
+    fn device_address(uid: &UserId, device: &str) -> Option<UserId> {
+        UserId::new(format!("{uid}{ADDR_SEP}{device}")).ok()
+    }
+
+    /// Where a friend is reached: each of their devices once we know their list has more than one, else their account.
+    pub(super) fn addresses_of(&self, uid: &UserId) -> Vec<UserId> {
+        let many = self
+            .contact_keys(uid)
+            .and_then(|k| k.list().cloned())
+            .filter(|l| l.active().count() > 1);
+        match many {
+            Some(l) => l
+                .active()
+                .filter_map(|d| Self::device_address(uid, &d.id))
+                .collect(),
+            None => vec![uid.clone()],
+        }
+    }
+
+    /// Whether `addr` is a way to reach a contact of ours: their account, or a device on their list (as we know it).
+    pub(super) fn known_address(&self, addr: &UserId) -> bool {
+        let person = Self::person_of(addr);
+        if !self.contacts.contains_key(&person) {
+            return false;
+        }
+        match Self::device_of(addr) {
+            None => true,
+            Some(d) => self
+                .contact_keys(&person)
+                .and_then(|k| k.list().map(|l| l.get(d).is_some_and(|e| e.active())))
+                .unwrap_or(false),
+        }
+    }
+
+    /// The keys a link or blob from `addr` must be signed with: their account's, or that device's (from their list).
+    pub(super) fn keys_of_address(&self, addr: &UserId) -> Option<(PublicJwk, PublicJwk)> {
+        let person = Self::person_of(addr);
+        let keys = self.contact_keys(&person)?;
+        match Self::device_of(addr) {
+            None => Some((keys.sign.clone(), keys.dh.clone())),
+            Some(d) => keys
+                .list()?
+                .get(d)
+                .filter(|e| e.active())
+                .map(|e| (e.sign.clone(), e.dh.clone())),
+        }
+    }
+
+    /// How we present ourselves by default: as this device once the account has more than one, else as the account.
+    pub(super) fn own_address(&self) -> Option<UserId> {
+        let uid = self.uid.as_ref()?;
+        let many = self
+            .device_list
+            .as_ref()
+            .is_some_and(|l| l.active().count() > 1);
+        match (&self.device_id, many) {
+            (Some(d), true) => Self::device_address(uid, d),
+            _ => Some(uid.clone()),
+        }
+    }
+
+    /// Our addresses: the account (where an install holding its key answers) and this device.
+    pub(super) fn is_own_address(&self, addr: &str) -> bool {
+        let Some(uid) = &self.uid else {
+            return false;
+        };
+        (addr == uid.as_str() && self.identity.is_some())
+            || self
+                .own_address()
+                .is_some_and(|a| a.as_str() == addr && Self::device_of(&a).is_some())
+    }
+
+    /// The key we sign with as `as_me` (one of our addresses): the account key, or this device's key.
+    pub(super) fn key_for_address(&self, as_me: &UserId) -> Option<&Identity> {
+        match Self::device_of(as_me) {
+            None => self.identity.as_ref(),
+            Some(_) => self.sync.as_ref().map(super::sync::SyncState::device_key),
+        }
+    }
+
+    /// Every address of a person with a live link up now.
+    pub(super) fn ready_addresses(&self, person: &UserId) -> Vec<UserId> {
+        self.peers
+            .iter()
+            .filter(|(a, p)| &Self::person_of(a) == person && p.ready())
+            .map(|(a, _)| a.clone())
+            .collect()
+    }
+
+    /// Whether any device of a person (or their account) has a live link up.
+    pub(super) fn person_ready(&self, person: &UserId) -> bool {
+        self.peers
+            .iter()
+            .any(|(a, p)| &Self::person_of(a) == person && p.ready())
+    }
+
+    /// How connected a person is: their best link (a person with one link up is connected).
+    pub(super) fn person_state(&self, person: &UserId) -> privcord_domain::state::ConnectionState {
+        use privcord_domain::state::ConnectionState as S;
+        let rank = |s: &S| match s {
+            S::Connected { .. } => 3,
+            S::Connecting => 2,
+            S::Failed { .. } => 1,
+            _ => 0,
+        };
+        self.peers
+            .iter()
+            .filter(|(a, _)| &Self::person_of(a) == person)
+            .map(|(_, p)| p.state)
+            .max_by_key(rank)
+            .unwrap_or(S::Offline)
+    }
+
+    /// Send what waits for a person over every live link to them.
+    pub(super) fn flush_person(&mut self, person: &UserId) {
+        for addr in self.ready_addresses(person) {
+            self.flush(&addr);
+        }
+    }
+
+    /// The address we use with `peer`: the one they reached us at, else our default.
+    pub(super) fn as_me(&self, peer: &UserId) -> Option<UserId> {
+        self.peers
+            .get(peer)
+            .and_then(|p| p.as_me.clone())
+            .or_else(|| self.own_address())
+    }
+
+    /// The key this install signs with on its link to `peer`.
+    pub(super) fn link_key(&self, peer: &UserId) -> Option<Identity> {
+        self.key_for_address(&self.as_me(peer)?).and_then(copy_key)
+    }
+
     /// Who signs what this install sends to friends: the account key where this install holds it, else this device's
     /// own key with the account's list. (A free function over the fields, so the caller can still lend out entropy.)
     pub(super) fn author_of<'a>(
@@ -213,10 +361,21 @@ impl Core {
     }
 
     /// A friend's device list as a notice (a frame on a link, or sealed to our mailbox).
-    pub(super) fn on_device_notice(&mut self, uid: &UserId, list: Option<&Value>) {
-        if let Some(list) = list.and_then(|v| serde_json::from_value::<DeviceList>(v.clone()).ok())
+    ///
+    /// `keysOf` names the device of theirs that sent it, when it is the install their account address was: the keys we
+    /// exchanged with that address are that device's, and move to its own address (so nothing falls back to the old
+    /// protocol when they start using device addresses). Only that device itself can say so.
+    pub(super) fn on_device_notice(&mut self, from: &UserId, notice: &Value) {
+        let person = Self::person_of(from);
+        if let Some(list) = notice
+            .get("list")
+            .and_then(|v| serde_json::from_value::<DeviceList>(v.clone()).ok())
         {
-            self.learn_contact_list(uid, &list);
+            self.learn_contact_list(&person, &list);
+        }
+        let keys_of = notice.get("keysOf").and_then(Value::as_str);
+        if keys_of.is_some() && keys_of == Self::device_of(from) && self.known_address(from) {
+            self.move_keys(&person, from);
         }
     }
 
@@ -253,8 +412,24 @@ impl Core {
     /// Our list, when friends need to hear of it: once the account has more than one device. (Only an install holding
     /// the account key tells them for now; a linked device reaches friends from per-device delivery on.)
     fn list_to_tell(&self) -> Option<DeviceList> {
-        self.identity.as_ref()?;
         self.device_list.clone().filter(|l| l.devices.len() > 1)
+    }
+
+    /// What a list notice says: the list, and which device sends it once this install speaks as a device (see
+    /// `on_device_notice`).
+    fn device_notice(&self, list: &DeviceList) -> Value {
+        let mut v = json!({ "list": list });
+        if let (Some(o), Some(d)) = (v.as_object_mut(), &self.device_id) {
+            if self
+                .own_address()
+                .as_ref()
+                .and_then(Self::device_of)
+                .is_some()
+            {
+                o.insert("keysOf".into(), json!(d));
+            }
+        }
+        v
     }
 
     /// A link to a friend is up: hand them our list if they have not had this version.
@@ -266,7 +441,11 @@ impl Core {
         if told.get(peer.as_str()).is_some_and(|v| *v >= list.version) {
             return;
         }
-        let frame = json!({ "v": privcord_domain::limits::PROTOCOL_VERSION, "kind": "devices", "list": list });
+        let mut frame = self.device_notice(&list);
+        if let Some(o) = frame.as_object_mut() {
+            o.insert("v".into(), json!(privcord_domain::limits::PROTOCOL_VERSION));
+            o.insert("kind".into(), json!("devices"));
+        }
         if self.send_secure(peer, &frame) {
             told.insert(peer.to_string(), list.version);
             let _ = self.ports.storage.apply(&[Self::told_op(&told)]);
@@ -286,13 +465,16 @@ impl Core {
         let due: Vec<UserId> = self
             .contacts
             .keys()
-            .filter(|u| told.get(u.as_str()).is_none_or(|v| *v < list.version))
-            .cloned()
+            .flat_map(|u| self.addresses_of(u))
+            .filter(|a| told.get(a.as_str()).is_none_or(|v| *v < list.version))
             .collect();
         if due.is_empty() {
             return;
         }
-        let notice = json!({ "t": "devices", "list": list });
+        let mut notice = self.device_notice(&list);
+        if let Some(o) = notice.as_object_mut() {
+            o.insert("t".into(), json!("devices"));
+        }
         for uid in due {
             if self
                 .put_sealed(&uid, &notice, PutKind::Msg, NOTICE_TTL_SEC)
@@ -318,4 +500,10 @@ impl Core {
     pub fn device_list(&self) -> Option<&DeviceList> {
         self.device_list.as_ref()
     }
+}
+
+/// A second handle on a key (keys are not `Clone`, so a copy is always deliberate): for a handshake that needs it while
+/// the engine is borrowed mutably.
+pub(super) fn copy_key(key: &Identity) -> Option<Identity> {
+    Identity::from_stored(&key.export_for_storage()).ok()
 }

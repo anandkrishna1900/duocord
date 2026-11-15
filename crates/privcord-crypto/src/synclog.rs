@@ -286,6 +286,8 @@ pub struct State {
     reactions: BTreeMap<(String, String), Lww<Option<String>>>,
     read: BTreeMap<String, Hlc>,
     settings: BTreeMap<String, Lww<Value>>,
+    /// How far our own messages got with the person they went to (1 delivered, 2 read): the furthest any device saw.
+    ticks: BTreeMap<String, u8>,
 }
 
 /// The kinds this version understands. Anything else is kept in the log as it is.
@@ -298,6 +300,8 @@ pub mod kind {
     pub const REACT: &str = "react";
     pub const READ: &str = "read";
     pub const SETTING: &str = "setting";
+    /// One of our messages reached the other side (`"delivered"`) or was read there (`"read"`).
+    pub const TICK: &str = "tick";
 }
 
 fn id_field<'a>(body: &'a Value, name: &str) -> Result<&'a str, &'static str> {
@@ -376,6 +380,16 @@ impl State {
                 let cur = self.read.entry(conv).or_default();
                 *cur = (*cur).max(upto);
             }
+            kind::TICK => {
+                let target = id_field(b, "target")?.to_owned();
+                let level = match b.get("state").and_then(Value::as_str) {
+                    Some("delivered") => 1,
+                    Some("read") => 2,
+                    _ => return Err("bad tick"),
+                };
+                let cur = self.ticks.entry(target).or_default();
+                *cur = (*cur).max(level);
+            }
             kind::SETTING => {
                 let key = id_field(b, "key")?.to_owned();
                 let value = b.get("value").cloned().ok_or("missing value")?;
@@ -449,6 +463,11 @@ impl State {
             .take_while(|((m, _), _)| m == message)
             .map(|((_, by), r)| (by.clone(), r.value.clone()))
             .collect()
+    }
+
+    /// How far one of our messages got: 1 delivered, 2 read.
+    pub fn tick(&self, message: &str) -> Option<u8> {
+        self.ticks.get(message).copied()
     }
 
     pub fn read_upto(&self, conv: &str) -> Option<Hlc> {

@@ -159,6 +159,32 @@ crash the engine. The apply path is fuzzed in CI with the existing fuzzing setup
 - A friend with an outdated copy of your device list is told about changes directly by your devices; anything they
   missed reaches your new device through your own sync (risk 109).
 
+### Addresses (how 5d does it)
+
+- **An address names who is on the other end.** A friend whose device list (as we know it) has one active device, or
+  none, is reached at their account, `uid`, as today; only an install holding their account key answers there. A friend
+  whose list has more than one is reached at each device, `uid.<device id>`. Everything per connection is per address:
+  the live link and its handshakes, the mailbox (`mailbox_for(address)`), the v2 keys handed over a link, the
+  anti-downgrade rule, dial backoff and signaling. The apps treat an address as an opaque peer id, so nothing changes
+  in them.
+- **How we present ourselves.** Once our own list has more than one active device, every device of ours, the first one
+  included, speaks as itself: it signs with its device key and the friend reaches it at `uid.<device>`. A friend who
+  has not heard of our list yet still reaches the account; an install holding the account key answers there as the
+  account, and tells them of the list on that link (5c), after which they use device addresses.
+- **Which address a link uses** is fixed by its signaling: an offer sealed to `uid.<device>` (or to `uid`) names both
+  ends, and the handshakes bind both names, so the two sides never disagree.
+- **Messages and receipts.** A message waits in the outbox once per person. It goes over every live link to any of
+  their devices, and sealed to each device's mailbox when it waits on the relays. The first receipt from any device
+  counts as delivered for the person; their other devices get it through that person's own sync.
+- **Delivery ticks.** The receipt comes back to the device that sent the message; a `tick` entry in the sync log tells
+  the account's other devices (delivered, then read).
+- **Keys that predate devices.** Keys a friend exchanged with an account before it had several devices belong to one
+  install. That install proves it by using one (a key given to the account address, used by its device), or says so in
+  its list notice (`keysOf`, only from that device itself); the friend then files them under its device address, so
+  nothing falls back to the classic protocol.
+- **Bluetooth** advertises per account today (a secret from the two account keys). A device without the account key
+  is not found over Bluetooth until per-device advertising (later in 5d).
+
 ## 5. The self-mailbox (relays as untrusted storage)
 
 - Every entry is also posted, encrypted, to the account's **self-mailbox** on 2–3 relays (the user's own relay plus
@@ -587,6 +613,7 @@ Each step ships with its tests and leaves the app working.
 | 5a. Sync key | Built: the self-mailbox is keyed by the account's sync key (version 0 derived from the account key, so phrase-restored installs share it), never by the account key itself; posts are signed by the posting device and checked against the account-signed list; a device without the sync key asks the others through its device inbox and is handed it sealed to its device key; forked device lists are merged by a holder of the account key, with a fixed tie-break so merges settle. |
 | 5b. A device of an account | Built: the engine runs as a device of an account. It keeps the account's public keys apart from the account key; a device linked by QR code (`core/linking.rs`) gets the public keys, the account's signed card and the device list, never the account key; it fetches the sync key from another device and catches up on the history. Everything that reaches friends answers `NeedsAccountKey` on such a device, before storing anything, until per-device delivery (5c–5d). The linking calls are exposed through the runtime, FFI and the desktop host; no screen yet (5g). |
 | 5c. Friends check devices | Built for everything that travels sealed or signed through relays: a sealed blob (v1 and v2), an invite, a friend request and a channel post may be signed by the account key or by a device on the account's list (`privcord_crypto::devices::{Author, AccountKeys}`). A device-signed one carries the account-signed list inside the encryption, so a friend who has not seen it can still check it; a friend keeps the newest list they have seen per contact, an older or forked list changes nothing, and a device that list has removed stays refused whatever older list it shows. The install holding the account key tells every friend of a new list, once per version: on the next link, and sealed to their mailbox meanwhile. Live links (the handshakes over Bluetooth and WebRTC) come with per-device links in 5d: a friend still keeps one link per person. |
+| 5d. Delivery to every device | Built for chats (see "Addresses" in §4): a friend whose list has several devices is reached at each of them, `uid.<device>`, with its own live link, handshake keys, mailbox, v2 keys and backoff; every device of such an account speaks as itself. Messages go over every live link and sealed to every device; the first receipt from any device counts, and the sender's other devices see the tick through sync (a new `tick` entry). Keys exchanged with an account before it had devices move to the device that holds them (that device proves it by using one, or says so in its list notice). A linked device now sends and receives chats, files, reactions, deletes, group messages and invites; changing a group still needs the account key (5e). Tested over the relay and over live links of all three kinds. Not yet: Bluetooth finds only the install holding the account key (advertising is per account); a friend's first message to a device it has never linked with is sealed classically, as for any first contact. |
 
 What step 4 does today:
 

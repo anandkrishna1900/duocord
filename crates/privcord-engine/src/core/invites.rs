@@ -119,8 +119,6 @@ impl Core {
     /// The name put on invite cards.
     pub fn set_display_name(&mut self, name: &str) -> Result<(), ErrorCode> {
         self.require_live()?;
-        // Reaches friends: a device without the account key cannot do it yet (per-device delivery, step 5c).
-        self.identity()?;
         let name: String = privcord_domain::text::js_trim(name)
             .chars()
             .take(40)
@@ -159,7 +157,6 @@ impl Core {
     /// Publish our card under fresh words and listen for people who answer. Returns the words and when they expire.
     pub fn create_invite(&mut self) -> Result<(String, i64), ErrorCode> {
         self.require_live()?;
-        self.identity()?;
         let now = self.now();
         if let Some(a) = &self.invites.active {
             if a.expires_at > now + 30_000 {
@@ -252,7 +249,6 @@ impl Core {
     /// `InviteFound` or `InviteLookupFailed` (15 seconds at most).
     pub fn preview_invite(&mut self, text: &str) -> Result<Option<InvitePreview>, ErrorCode> {
         self.require_live()?;
-        self.identity()?;
         let Some(words) = parse_invite_words(text) else {
             let contact = ContactCard::decode(text).ok_or(ErrorCode::InvalidInvite)?;
             return self.preview_of(&contact).map(Some);
@@ -289,7 +285,6 @@ impl Core {
     /// card, so they can accept us on their side.
     pub fn accept_invite(&mut self, text: &str) -> Result<UserId, ErrorCode> {
         self.require_live()?;
-        self.identity()?;
         let (contact, answer_with) = match parse_invite_words(text) {
             Some(words) => {
                 let key = words.join(" ");
@@ -340,7 +335,7 @@ impl Core {
             .map(|(u, _)| u.clone())
             .collect();
         for uid in due {
-            let linked = self.peers.get(&uid).is_some_and(super::Peer::ready);
+            let linked = self.person_ready(&uid);
             let expired = self.invites.hellos.get(&uid).is_none_or(|h| h.until <= now);
             if linked || expired || !self.contacts.contains_key(&uid) {
                 self.invites.hellos.remove(&uid);
@@ -457,8 +452,6 @@ impl Core {
     /// Accept somebody who used our words.
     pub fn accept_request(&mut self, uid: &UserId) -> Result<UserId, ErrorCode> {
         self.require_live()?;
-        // Reaches friends: a device without the account key cannot do it yet (per-device delivery, step 5c).
-        self.identity()?;
         let r = self
             .invites
             .requests
@@ -504,7 +497,8 @@ impl Core {
         let Ok(value) = serde_json::to_value(&blob) else {
             return;
         };
-        let Some(own) = self.identity.as_ref().map(|i| i.sign_public()) else {
+        // The account's public key (for safety numbers): every device of the account has it.
+        let Some(own) = self.account.as_ref().map(|(sign, _)| sign.clone()) else {
             return;
         };
         // A message in a public channel we joined, carried by the signaling service.
@@ -551,11 +545,7 @@ impl Core {
             return;
         }
         // Something sealed for us, on our own mailbox.
-        if self
-            .uid
-            .as_ref()
-            .is_some_and(|u| privcord_crypto::seal::mailbox_for(u.as_str()) == mailbox)
-        {
+        if self.own_mailboxes().iter().any(|m| m == mailbox) {
             self.handle_own_blob(blob);
             return;
         }
@@ -692,9 +682,17 @@ impl Core {
             StorageOp::DeleteContact(uid.clone()),
         ])?;
         self.forget_contact_devices(uid);
-        self.link_down(uid);
-        self.ports.transport.close(uid);
-        self.peers.remove(uid);
+        let addrs: Vec<UserId> = self
+            .peers
+            .keys()
+            .filter(|a| &Self::person_of(a) == uid)
+            .cloned()
+            .collect();
+        for a in addrs {
+            self.link_down(&a);
+            self.ports.transport.close(&a);
+            self.peers.remove(&a);
+        }
         self.contacts.remove(uid);
         self.messages
             .retain(|_, m| m.conversation != ConversationId::Direct(uid.clone()));

@@ -170,6 +170,8 @@ struct Peer {
     pq: Option<Box<PqChannel>>,
     /// The handshake above must be done by this time, or the link is dropped and made again.
     pq_deadline: i64,
+    /// Which of our addresses this link is with (how they reached us); `None` means our default (`own_address`).
+    as_me: Option<UserId>,
 }
 
 impl Peer {
@@ -191,6 +193,7 @@ impl Peer {
             pq_deadline: 0,
             offer_in: None,
             offer_in_at: 0,
+            as_me: None,
         }
     }
     /// Ready to carry messages: the link is authenticated AND its post-quantum channel is up.
@@ -554,8 +557,6 @@ impl Core {
         card_text: &str,
         trust: ContactTrust,
     ) -> Result<UserId, ErrorCode> {
-        // Reaches friends: a device without the account key cannot do it yet (per-device delivery, step 5c).
-        self.identity()?;
         self.add_contact_from(card_text, trust, None)
     }
 
@@ -641,7 +642,7 @@ impl Core {
     pub fn safety_number(&self, uid: &UserId) -> Result<String, ErrorCode> {
         let c = self.contacts.get(uid).ok_or(ErrorCode::UnknownContact)?;
         Ok(derive_safety_number(
-            &self.identity()?.sign_public(),
+            &self.account.as_ref().ok_or(ErrorCode::NoIdentity)?.0,
             &c.contact.card.sign,
         )?)
     }
@@ -670,7 +671,10 @@ impl Core {
             can_start_direct(
                 c.stored.trust,
                 self.group_only,
-                self.peers.get(uid).and_then(|p| p.group_only),
+                self.peers
+                    .iter()
+                    .filter(|(a, _)| &Self::person_of(a) == uid)
+                    .find_map(|(_, p)| p.group_only),
             )
         })
     }
@@ -711,14 +715,19 @@ impl Core {
         security: LinkSecurity,
     ) -> Result<(), ErrorCode> {
         self.require_live()?;
-        let own = self.uid.clone().ok_or(ErrorCode::NoIdentity)?;
-        let card = self
-            .contacts
-            .get(peer)
-            .ok_or(ErrorCode::UnknownContact)?
-            .contact
-            .card
-            .clone();
+        let (sign, dh) = self
+            .keys_of_address(peer)
+            .ok_or(ErrorCode::UnknownContact)?;
+        let own = self.as_me(peer).ok_or(ErrorCode::NoIdentity)?;
+        let key = self
+            .key_for_address(&own)
+            .and_then(devices::copy_key)
+            .ok_or(ErrorCode::NoIdentity)?;
+        // The other side checks a device by its own keys: its uid there is the one those keys give.
+        let expected_uid = match Self::device_of(peer) {
+            Some(_) => privcord_crypto::identity::uid_from_keys(&sign, &dh)?.to_string(),
+            None => peer.to_string(),
+        };
         // A new link replaces any older state for this person.
         if self
             .peers
@@ -732,20 +741,19 @@ impl Core {
                 let channel = SecureChannel::new(
                     own.as_str(),
                     peer.as_str(),
-                    card.sign.clone(),
+                    sign.clone(),
                     &mut *self.ports.entropy,
                 )?;
-                let hello = channel.hello(self.identity()?)?.to_value();
+                let hello = channel.hello(&key)?.to_value();
                 let device = self.device_id()?;
                 let expected = Expected {
-                    uid: peer.to_string(),
-                    sign: card.sign,
-                    dh: card.dh,
+                    uid: expected_uid,
+                    sign,
+                    dh,
                 };
-                let id = self.identity.as_ref().ok_or(ErrorCode::NoIdentity)?;
                 let auth = PeerAuth::new(
                     &self.context,
-                    id,
+                    &key,
                     &device,
                     expected,
                     &mut *self.ports.entropy,
@@ -763,28 +771,27 @@ impl Core {
                 let channel = SecureChannel::new(
                     own.as_str(),
                     peer.as_str(),
-                    card.sign,
+                    sign,
                     &mut *self.ports.entropy,
                 )?;
-                let hello = channel.hello(self.identity()?)?.to_value();
+                let hello = channel.hello(&key)?.to_value();
                 (Session::Secure(Box::new(channel)), hello)
             }
             LinkSecurity::TransportEncrypted => {
                 let device = self.device_id()?;
                 let expected = Expected {
-                    uid: peer.to_string(),
-                    sign: card.sign,
-                    dh: card.dh,
+                    uid: expected_uid,
+                    sign,
+                    dh,
                 };
-                let id = self.identity.as_ref().ok_or(ErrorCode::NoIdentity)?;
                 let auth = PeerAuth::new(
                     &self.context,
-                    id,
+                    &key,
                     &device,
                     expected,
                     &mut *self.ports.entropy,
                 )?;
-                let hello = auth.hello(id)?;
+                let hello = auth.hello(&key)?;
                 (Session::Legacy(Box::new(auth)), hello)
             }
         };
@@ -792,6 +799,7 @@ impl Core {
             let p = self.peers.entry(peer.clone()).or_insert_with(Peer::offline);
             p.session = Some(session);
             p.path = path;
+            p.as_me = Some(own);
         }
         self.step(peer, ConnectionEvent::Dial);
         // The handshake travels in the clear by design: it is signed, and carries only keys and a nonce.
@@ -862,7 +870,7 @@ impl Core {
 
     /// One frame arrived from a peer. Anything malformed, too big, unauthenticated or replayed is dropped.
     pub fn frame_received(&mut self, peer: &UserId, text: &str) {
-        if self.shut_down || text.len() > MAX_FRAME_BYTES || !self.contacts.contains_key(peer) {
+        if self.shut_down || text.len() > MAX_FRAME_BYTES || !self.known_address(peer) {
             return;
         }
         let Ok(value) = serde_json::from_str::<Value>(text) else {
@@ -988,10 +996,13 @@ impl Core {
 
     /// The link is authenticated: start the post-quantum handshake inside it.
     fn start_pq(&mut self, peer: &UserId) {
-        let (Some(own), Some(identity)) = (self.uid.clone(), self.identity.as_ref()) else {
+        let Some(own) = self.as_me(peer) else {
             return;
         };
-        let Some(sign) = self.contacts.get(peer).map(|c| c.contact.card.sign.clone()) else {
+        let (Some(key), Some((sign, _))) = (
+            self.key_for_address(&own).and_then(devices::copy_key),
+            self.keys_of_address(peer),
+        ) else {
             return;
         };
         let Ok(channel) =
@@ -1000,7 +1011,7 @@ impl Core {
             self.pq_failed(peer);
             return;
         };
-        let hello = channel.hello(identity).to_value();
+        let hello = channel.hello(&key).to_value();
         let deadline = self.now() + PQ_SETUP_MS;
         if let Some(p) = self.peers.get_mut(peer) {
             p.pq = Some(Box::new(channel));
@@ -1106,20 +1117,20 @@ impl Core {
             Session::Secure(channel) => Hello::from_value(value)
                 .map(|hello| channel.accept(&hello).map(|()| Vec::new()).map_err(|_| ())),
             Session::Legacy(auth) => {
-                let Some(own) = self.identity.as_ref() else {
+                let Some(own) = self.link_key(peer) else {
                     return;
                 };
-                match auth.on_frame(own, value) {
+                match auth.on_frame(&own, value) {
                     Ok(Some(out)) => Some(Ok(out)),
                     Ok(None) => None,
                     Err(_) => Some(Err(())),
                 }
             }
             Session::Layered(l) => {
-                let Some(own) = self.identity.as_ref() else {
+                let Some(own) = self.link_key(peer) else {
                     return;
                 };
-                Self::layered_step(l, own, value)
+                Self::layered_step(l, &own, value)
             }
         };
         let ready = match &session {
@@ -1198,14 +1209,16 @@ impl Core {
             Some("ack") => self.on_ack(peer, frame),
             Some("keys") => self.on_keys_frame(peer, frame),
             Some("declined") => self.on_declined(peer, frame),
-            Some("group_push" | "group_events" | "group_have") => self.on_group_frame(peer, frame),
+            Some("group_push" | "group_events" | "group_have") => {
+                self.on_group_frame(&Self::person_of(peer), frame)
+            }
             Some("gmsg") => self.on_group_message(peer, frame),
             Some("relay_blob") => self.on_relay_blob(peer, frame),
-            Some("delete") => self.on_delete_frame(peer, frame),
-            Some("react") => self.on_react_frame(peer, frame),
+            Some("delete") => self.on_delete_frame(&Self::person_of(peer), frame),
+            Some("react") => self.on_react_frame(&Self::person_of(peer), frame),
             Some("file_offer") => self.on_file_offer(peer, frame),
             Some("file_chunk") => self.on_file_chunk(peer, frame),
-            Some("devices") => self.on_device_notice(peer, frame.get("list")),
+            Some("devices") => self.on_device_notice(peer, frame),
             Some("privacy") => {
                 if let Some(g) = frame.get("groupOnly").and_then(Value::as_bool) {
                     if let Some(p) = self.peers.get_mut(peer) {
@@ -1225,17 +1238,18 @@ impl Core {
     }
 
     fn on_message(&mut self, peer: &UserId, frame: &Value) {
+        let who = &Self::person_of(peer);
         let Some(mut message) = ChatMessage::from_peer_frame(frame) else {
             return;
         };
         // The link is authenticated as `peer`; a message that claims another sender, or carries an id that is not
         // theirs, is forged.
-        if &message.sender_id != peer || !id_is_from(&message.message_id, peer) {
+        if &message.sender_id != who || !id_is_from(&message.message_id, who) {
             return;
         }
         let trust = self
             .contacts
-            .get(peer)
+            .get(who)
             .map_or(ContactTrust::Introduced, |c| c.stored.trust);
         if !accepts_direct(trust, self.group_only) {
             self.send_secure(
@@ -1256,7 +1270,7 @@ impl Core {
         }
         message.delivery_state = DeliveryState::Delivered;
         message.transport = self.inbound_transport();
-        let conversation = ConversationId::Direct(peer.clone());
+        let conversation = ConversationId::Direct(who.clone());
         let row = StoredMessage {
             conversation: conversation.clone(),
             message: message.clone(),
@@ -1278,7 +1292,7 @@ impl Core {
         });
         self.ports.notifier.notify(Notification::MessageReceived {
             conversation,
-            sender: peer.clone(),
+            sender: who.clone(),
             preview: message.text.chars().take(80).collect(),
         });
         let id = message.message_id;
@@ -1302,6 +1316,7 @@ impl Core {
     }
 
     fn on_ack(&mut self, peer: &UserId, frame: &Value) {
+        let who = &Self::person_of(peer);
         let Some(id) = frame
             .get("messageId")
             .and_then(Value::as_str)
@@ -1315,7 +1330,7 @@ impl Core {
             _ => return,
         };
         // Only the person we sent it to may acknowledge it.
-        let ours = self.is_ours_to(&id, peer);
+        let ours = self.is_ours_to(&id, who);
         if !ours {
             return;
         }
@@ -1330,7 +1345,7 @@ impl Core {
         ) && self
             .outbox
             .iter()
-            .any(|o| o.message_id == id && &o.recipient != peer);
+            .any(|o| o.message_id == id && &o.recipient != who);
         if others_pending && matches!(next, DeliveryState::Delivered | DeliveryState::Read) {
             next = current;
         }
@@ -1343,14 +1358,14 @@ impl Core {
             },
             StorageOp::RemoveOutbox {
                 message_id: id.clone(),
-                recipient: peer.clone(),
+                recipient: who.clone(),
             },
         ];
         if self.ports.storage.apply(&ops).is_err() {
             return;
         }
         self.outbox
-            .retain(|o| !(o.message_id == id && &o.recipient == peer));
+            .retain(|o| !(o.message_id == id && &o.recipient == who));
         if let Some(m) = self.messages.get_mut(&id) {
             m.message.delivery_state = next;
             m.message.read_at = read_at.or(m.message.read_at);
@@ -1364,10 +1379,11 @@ impl Core {
     }
 
     fn on_declined(&mut self, peer: &UserId, frame: &Value) {
+        let who = &Self::person_of(peer);
         let Some((id, reason)) = parse_declined_frame(frame) else {
             return;
         };
-        let ours = self.is_ours_to(&id, peer);
+        let ours = self.is_ours_to(&id, who);
         if !ours {
             return;
         }
@@ -1378,7 +1394,7 @@ impl Core {
             if let Some(entry) = self
                 .outbox
                 .iter_mut()
-                .find(|o| o.message_id == id && &o.recipient == peer)
+                .find(|o| o.message_id == id && &o.recipient == who)
             {
                 entry.next_try_ms = next_try;
                 let saved = entry.clone();
@@ -1393,7 +1409,7 @@ impl Core {
         let others_pending = self
             .outbox
             .iter()
-            .any(|o| o.message_id == id && &o.recipient != peer);
+            .any(|o| o.message_id == id && &o.recipient != who);
         let current = self.messages.get(&id).map(|m| m.message.delivery_state);
         // In a group one person refusing does not make the message a failure for everybody else: it only fails when
         // nobody else has it and nobody else is still to get it.
@@ -1402,7 +1418,7 @@ impl Core {
                 && matches!(current, Some(DeliveryState::Queued | DeliveryState::Sent)));
         let mut ops = vec![StorageOp::RemoveOutbox {
             message_id: id.clone(),
-            recipient: peer.clone(),
+            recipient: who.clone(),
         }];
         if fail {
             ops.push(StorageOp::SetDelivery {
@@ -1415,7 +1431,7 @@ impl Core {
             return;
         }
         self.outbox
-            .retain(|o| !(o.message_id == id && &o.recipient == peer));
+            .retain(|o| !(o.message_id == id && &o.recipient == who));
         if fail {
             if let Some(m) = self.messages.get_mut(&id) {
                 m.message.delivery_state = DeliveryState::Failed;
@@ -1447,8 +1463,6 @@ impl Core {
         reply_to: Option<&MessageId>,
     ) -> Result<MessageId, ErrorCode> {
         self.require_live()?;
-        // Reaches friends: a device without the account key cannot do it yet (per-device delivery, step 5c).
-        self.identity()?;
         let own = self.uid.clone().ok_or(ErrorCode::NoIdentity)?;
         if !self.contacts.contains_key(peer) {
             return Err(ErrorCode::UnknownContact);
@@ -1496,7 +1510,7 @@ impl Core {
             message_id: id.clone(),
             own: true,
         });
-        self.flush(peer);
+        self.flush_person(peer);
         Ok(id)
     }
 
@@ -1544,6 +1558,7 @@ impl Core {
     }
 
     fn flush(&mut self, peer: &UserId) {
+        let who = Self::person_of(peer);
         if !self.peers.get(peer).is_some_and(Peer::ready) {
             return;
         }
@@ -1551,7 +1566,7 @@ impl Core {
         let due: Vec<OutboxEntry> = self
             .outbox
             .iter()
-            .filter(|o| &o.recipient == peer && o.next_try_ms <= now)
+            .filter(|o| o.recipient == who && o.next_try_ms <= now)
             .cloned()
             .collect();
         for entry in due {
@@ -1640,7 +1655,9 @@ impl Core {
                 m.message.delivery_state = DeliveryState::Read;
                 m.message.read_at = Some(now);
             }
-            self.send_secure(peer, &json!({ "v": PROTOCOL_VERSION, "kind": "ack", "messageId": id, "state": "READ", "at": now }));
+            for addr in self.ready_addresses(peer) {
+                self.send_secure(&addr, &json!({ "v": PROTOCOL_VERSION, "kind": "ack", "messageId": id, "state": "READ", "at": now }));
+            }
         }
         Ok(())
     }
@@ -1666,7 +1683,7 @@ impl Core {
     /// announced it is online), so a link does not wait out a delay that was earned while it could not have worked.
     pub fn reset_dial_backoff(&mut self, peer: Option<&UserId>) {
         for (uid, p) in &mut self.peers {
-            if p.ready() || peer.is_some_and(|only| only != uid) {
+            if p.ready() || peer.is_some_and(|only| only != uid && only != &Self::person_of(uid)) {
                 continue;
             }
             p.attempts = 0;
@@ -1731,9 +1748,13 @@ impl Core {
     /// Ask for a dial to each person whose link is down and whose backoff has passed (5 s doubling to 2 minutes, a few
     /// at a time, never past the open-link cap).
     fn request_dials(&mut self, now: i64) {
-        let links: Vec<LinkInfo> = self
+        let addresses: Vec<UserId> = self
             .contacts
             .keys()
+            .flat_map(|uid| self.addresses_of(uid))
+            .collect();
+        let links: Vec<LinkInfo> = addresses
+            .iter()
             .map(|uid| {
                 let p = self.peers.get(uid);
                 LinkInfo {
@@ -1855,8 +1876,8 @@ impl Core {
         }
         for out in &result.outgoing {
             if let Ok(to) = UserId::new(out.to.as_str()) {
-                if self.peers.get(&to).is_some_and(Peer::ready) {
-                    self.send_secure(&to, &out.frame.to_value());
+                for addr in self.ready_addresses(&to) {
+                    self.send_secure(&addr, &out.frame.to_value());
                 }
             }
         }
@@ -1923,7 +1944,7 @@ impl Core {
         let frames = self
             .groups
             .as_ref()
-            .map(|g| g.on_link_open(peer.as_str()))
+            .map(|g| g.on_link_open(Self::person_of(peer).as_str()))
             .unwrap_or_default();
         for f in frames {
             self.send_secure(peer, &f.frame.to_value());
@@ -1951,7 +1972,7 @@ impl Core {
 
     pub fn create_group(&mut self, name: &str, members: &[UserId]) -> Result<String, ErrorCode> {
         self.require_live()?;
-        // Reaches friends: a device without the account key cannot do it yet (per-device delivery, step 5c).
+        // Changes the group, which is signed by the account key: not from a linked device (step 5e).
         self.identity()?;
         let cards = members
             .iter()
@@ -1970,7 +1991,7 @@ impl Core {
 
     pub fn add_group_member(&mut self, group_id: &str, uid: &UserId) -> Result<(), ErrorCode> {
         self.require_live()?;
-        // Reaches friends: a device without the account key cannot do it yet (per-device delivery, step 5c).
+        // Changes the group, which is signed by the account key: not from a linked device (step 5e).
         self.identity()?;
         let card = self.card_of(uid)?;
         let now = self.now();
@@ -1985,7 +2006,7 @@ impl Core {
 
     pub fn remove_group_member(&mut self, group_id: &str, uid: &UserId) -> Result<(), ErrorCode> {
         self.require_live()?;
-        // Reaches friends: a device without the account key cannot do it yet (per-device delivery, step 5c).
+        // Changes the group, which is signed by the account key: not from a linked device (step 5e).
         self.identity()?;
         let now = self.now();
         let (Some(groups), Some(id)) = (self.groups.as_mut(), self.identity.as_ref()) else {
@@ -1999,7 +2020,7 @@ impl Core {
 
     pub fn leave_group(&mut self, group_id: &str) -> Result<(), ErrorCode> {
         self.require_live()?;
-        // Reaches friends: a device without the account key cannot do it yet (per-device delivery, step 5c).
+        // Changes the group, which is signed by the account key: not from a linked device (step 5e).
         self.identity()?;
         let now = self.now();
         let (Some(groups), Some(id)) = (self.groups.as_mut(), self.identity.as_ref()) else {
@@ -2013,7 +2034,7 @@ impl Core {
 
     pub fn rename_group(&mut self, group_id: &str, name: &str) -> Result<(), ErrorCode> {
         self.require_live()?;
-        // Reaches friends: a device without the account key cannot do it yet (per-device delivery, step 5c).
+        // Changes the group, which is signed by the account key: not from a linked device (step 5e).
         self.identity()?;
         let now = self.now();
         let (Some(groups), Some(id)) = (self.groups.as_mut(), self.identity.as_ref()) else {
@@ -2033,8 +2054,6 @@ impl Core {
         reply_to: Option<&MessageId>,
     ) -> Result<MessageId, ErrorCode> {
         self.require_live()?;
-        // Reaches friends: a device without the account key cannot do it yet (per-device delivery, step 5c).
-        self.identity()?;
         let own = self.uid.clone().ok_or(ErrorCode::NoIdentity)?;
         let groups = self.groups.as_ref().ok_or(ErrorCode::NoIdentity)?;
         if !groups.is_member(group_id, own.as_str()) {
@@ -2093,7 +2112,7 @@ impl Core {
             own: true,
         });
         for r in &recipients {
-            self.flush(r);
+            self.flush_person(r);
         }
         self.connect_now(&recipients);
         Ok(id)
@@ -2108,15 +2127,17 @@ impl Core {
         let now = self.now();
         let mut any = false;
         for uid in people {
-            let recent = self.peers.get(uid).is_some_and(|p| {
-                p.attempts > 0 && now - p.last_attempt_at < RECONNECT_ON_SEND_AFTER_MS
-            });
-            if self.contacts.contains_key(uid)
-                && !self.peers.get(uid).is_some_and(Peer::ready)
-                && !recent
-            {
-                self.reset_dial_backoff(Some(uid));
-                any = true;
+            if !self.contacts.contains_key(uid) || self.person_ready(uid) {
+                continue;
+            }
+            for addr in self.addresses_of(uid) {
+                let recent = self.peers.get(&addr).is_some_and(|p| {
+                    p.attempts > 0 && now - p.last_attempt_at < RECONNECT_ON_SEND_AFTER_MS
+                });
+                if !recent {
+                    self.reset_dial_backoff(Some(&addr));
+                    any = true;
+                }
             }
         }
         if any {
@@ -2128,8 +2149,6 @@ impl Core {
     /// say), or when the person taps "retry". Everyone it was for gets it again; receivers ignore a message they have.
     pub fn retry_message(&mut self, id: &MessageId) -> Result<(), ErrorCode> {
         self.require_live()?;
-        // Reaches friends: a device without the account key cannot do it yet (per-device delivery, step 5c).
-        self.identity()?;
         let own = self.uid.clone().ok_or(ErrorCode::NoIdentity)?;
         let row = self.messages.get(id).ok_or(ErrorCode::UnknownMessage)?;
         if row.message.sender_id != own || row.message.delivery_state == DeliveryState::Read {
@@ -2181,26 +2200,27 @@ impl Core {
             status: DeliveryState::Queued,
         });
         for r in &recipients {
-            self.flush(r);
+            self.flush_person(r);
         }
         Ok(())
     }
 
     fn on_group_message(&mut self, peer: &UserId, value: &Value) {
+        let who = &Self::person_of(peer);
         let Some(GroupFrame::Message(m)) = GroupFrame::parse(value) else {
             return;
         };
         let Some(groups) = self.groups.as_ref() else {
             return;
         };
-        match groups.check_message(peer.as_str(), &m.group_id) {
+        match groups.check_message(who.as_str(), &m.group_id) {
             MessageVerdict::Ok => {}
             MessageVerdict::UnknownGroup => {
                 // The group's history may be a moment behind the message: hold it. A full buffer drops it, and with no
                 // acknowledgement the sender sends it again.
                 let now = self.now();
                 self.pending_group
-                    .hold(&m.group_id, peer.as_str(), value.clone(), now);
+                    .hold(&m.group_id, who.as_str(), value.clone(), now);
                 return;
             }
             MessageVerdict::NotMember => return,
@@ -2208,7 +2228,7 @@ impl Core {
         let Ok(gid) = GroupId::new(m.group_id.as_str()) else {
             return;
         };
-        if !id_is_from(&m.message_id, peer) {
+        if !id_is_from(&m.message_id, who) {
             return;
         }
         let ack = |core: &mut Self, id: &MessageId| {
@@ -2222,7 +2242,7 @@ impl Core {
         let message = ChatMessage {
             message_id: m.message_id.clone(),
             client_message_id: m.message_id.clone(),
-            sender_id: peer.clone(),
+            sender_id: who.clone(),
             text: m.text,
             client_created_at: m.client_created_at,
             kind: privcord_domain::message::MessageKind::Text,
@@ -2252,7 +2272,7 @@ impl Core {
         });
         self.ports.notifier.notify(Notification::MessageReceived {
             conversation,
-            sender: peer.clone(),
+            sender: who.clone(),
             preview: message.text.chars().take(80).collect(),
         });
         ack(self, &message.message_id);
@@ -2331,7 +2351,7 @@ impl Core {
             own: true,
         });
         for r in &recipients {
-            self.flush(r);
+            self.flush_person(r);
         }
         self.connect_now(&recipients);
         Ok(id)
@@ -2347,8 +2367,6 @@ impl Core {
         reply_to: Option<&MessageId>,
     ) -> Result<MessageId, ErrorCode> {
         self.require_live()?;
-        // Reaches friends: a device without the account key cannot do it yet (per-device delivery, step 5c).
-        self.identity()?;
         if !self.contacts.contains_key(peer) {
             return Err(ErrorCode::UnknownContact);
         }
@@ -2375,8 +2393,6 @@ impl Core {
         reply_to: Option<&MessageId>,
     ) -> Result<MessageId, ErrorCode> {
         self.require_live()?;
-        // Reaches friends: a device without the account key cannot do it yet (per-device delivery, step 5c).
-        self.identity()?;
         let own = self.uid.clone().ok_or(ErrorCode::NoIdentity)?;
         let groups = self.groups.as_ref().ok_or(ErrorCode::NoIdentity)?;
         if !groups.is_member(group_id, own.as_str()) {
@@ -2408,11 +2424,12 @@ impl Core {
     }
 
     fn on_file_offer(&mut self, peer: &UserId, frame: &Value) {
+        let who = &Self::person_of(peer);
         let Some(offer) = FileOffer::from_frame(frame) else {
             return;
         };
         let id = offer.message_id.clone();
-        if !id_is_from(&id, peer) {
+        if !id_is_from(&id, who) {
             return;
         }
         let (group, name, size) = (offer.group_id.clone(), offer.name.clone(), offer.size);
@@ -2420,7 +2437,7 @@ impl Core {
             None => {
                 let trust = self
                     .contacts
-                    .get(peer)
+                    .get(who)
                     .map_or(ContactTrust::Introduced, |c| c.stored.trust);
                 if !accepts_direct(trust, self.group_only) {
                     self.decline(peer, &id, DeclineReason::DirectNotAccepted);
@@ -2431,7 +2448,7 @@ impl Core {
                 let ok = self
                     .groups
                     .as_ref()
-                    .is_some_and(|c| c.check_message(peer.as_str(), g) == MessageVerdict::Ok);
+                    .is_some_and(|c| c.check_message(who.as_str(), g) == MessageVerdict::Ok);
                 if !ok {
                     return;
                 }
@@ -2451,7 +2468,7 @@ impl Core {
         match outcome {
             BeginOutcome::Ok => {
                 let conversation = match group {
-                    None => Some(ConversationId::Direct(peer.clone())),
+                    None => Some(ConversationId::Direct(who.clone())),
                     Some(g) => GroupId::new(g.as_str()).ok().map(ConversationId::Group),
                 };
                 if let Some(conversation) = conversation {
@@ -2519,8 +2536,9 @@ impl Core {
     }
 
     fn store_received_file(&mut self, peer: &UserId, offer: FileOffer, bytes: Vec<u8>) {
+        let who = &Self::person_of(peer);
         let conversation = match &offer.group_id {
-            None => ConversationId::Direct(peer.clone()),
+            None => ConversationId::Direct(who.clone()),
             Some(g) => match GroupId::new(g.as_str()) {
                 Ok(g) => ConversationId::Group(g),
                 Err(_) => return,
@@ -2529,7 +2547,7 @@ impl Core {
         let message = ChatMessage {
             message_id: offer.message_id.clone(),
             client_message_id: offer.message_id.clone(),
-            sender_id: peer.clone(),
+            sender_id: who.clone(),
             text: offer.name.clone(),
             client_created_at: offer.client_created_at,
             kind: MessageKind::File,
@@ -2563,7 +2581,7 @@ impl Core {
         });
         self.ports.notifier.notify(Notification::MessageReceived {
             conversation,
-            sender: peer.clone(),
+            sender: who.clone(),
             preview: privcord_domain::files::file_preview_text(&offer.name),
         });
         let at = self.now();
@@ -2657,8 +2675,6 @@ impl Core {
     /// broadcast.
     pub fn send_channel_message(&mut self, raw: &str, text: &str) -> Result<MessageId, ErrorCode> {
         self.require_live()?;
-        // Reaches friends: a device without the account key cannot do it yet (per-device delivery, step 5c).
-        self.identity()?;
         let own = self.uid.clone().ok_or(ErrorCode::NoIdentity)?;
         let name = normalize_channel_name(raw).ok_or(ErrorCode::BadChannel)?;
         let now = self.now();
@@ -2851,7 +2867,8 @@ impl Core {
     /* ---------------------------------------------------------------- state */
 
     pub fn snapshot(&self) -> Snapshot {
-        let own = self.identity.as_ref();
+        // Safety numbers cover the account key, which every device of the account knows.
+        let own = self.account.as_ref().map(|(sign, _)| sign);
         let contacts = self
             .contacts
             .values()
@@ -2873,12 +2890,9 @@ impl Core {
                 trust: c.stored.trust,
                 checked: c.stored.checked,
                 safety_number: own
-                    .and_then(|i| derive_safety_number(&i.sign_public(), &c.contact.card.sign).ok())
+                    .and_then(|s| derive_safety_number(s, &c.contact.card.sign).ok())
                     .unwrap_or_default(),
-                connection: self
-                    .peers
-                    .get(&c.stored.uid)
-                    .map_or(ConnectionState::Offline, |p| p.state),
+                connection: self.person_state(&c.stored.uid),
                 can_message: self.may_start_direct(&c.stored.uid),
             })
             .collect();
@@ -2913,10 +2927,7 @@ impl Core {
                         .filter(|u| Some(u.as_str()) != self.uid.as_ref().map(UserId::as_str))
                         .filter(|u| {
                             UserId::new(u.as_str()).is_ok_and(|u| {
-                                matches!(
-                                    self.peers.get(&u).map(|p| p.state),
-                                    Some(ConnectionState::Connected { .. })
-                                )
+                                matches!(self.person_state(&u), ConnectionState::Connected { .. })
                             })
                         })
                         .count(),

@@ -12,7 +12,7 @@
 use super::{Core, StorageOp};
 use crate::error::ErrorCode;
 use privcord_crypto::{
-    devices::AccountKeys,
+    devices::{AccountKeys, Signer},
     prekeys::{open_v2, seal_v2, OwnKey, PeerKey},
     seal::Opened,
 };
@@ -205,6 +205,27 @@ impl Core {
         self.save_keys();
     }
 
+    /// The keys exchanged with one address of a friend belong to another (their account address turned out to be one
+    /// of their devices). Moved only where the new address has none yet.
+    pub(super) fn move_keys(&mut self, from: &UserId, to: &UserId) {
+        let mut moved = false;
+        if !self.keys.theirs.contains_key(to) {
+            if let Some(t) = self.keys.theirs.remove(from) {
+                self.keys.theirs.insert(to.clone(), t);
+                moved = true;
+            }
+        }
+        if !self.keys.issued.contains_key(to) {
+            if let Some(i) = self.keys.issued.remove(from) {
+                self.keys.issued.insert(to.clone(), i);
+                moved = true;
+            }
+        }
+        if moved {
+            self.save_keys();
+        }
+    }
+
     /// Seal for a contact: v2 to one of their keys when we have them (a one-time key for a text message), else v1
     /// (only before the first link with them).
     pub(super) fn seal_for(
@@ -219,12 +240,23 @@ impl Core {
             Some(t) => Some(t.standing.clone()),
             None => None,
         };
-        let author = Self::author_of(
-            self.uid.as_ref(),
-            self.identity.as_ref(),
-            self.sync.as_ref(),
-            self.device_list.as_ref(),
-        )?;
+        // Signed as the address they know us by on this route.
+        let as_me = self.as_me(peer).ok_or(ErrorCode::NoIdentity)?;
+        let uid = self.uid.clone().ok_or(ErrorCode::NoIdentity)?;
+        let author = match Self::device_of(&as_me) {
+            None => privcord_crypto::devices::Author::account(
+                &uid,
+                self.identity.as_ref().ok_or(ErrorCode::NoIdentity)?,
+            ),
+            Some(_) => privcord_crypto::devices::Author::device(
+                &uid,
+                self.sync
+                    .as_ref()
+                    .map(super::sync::SyncState::device_key)
+                    .ok_or(ErrorCode::NoIdentity)?,
+                self.device_list.as_ref().ok_or(ErrorCode::NoIdentity)?,
+            ),
+        };
         let blob = match &key {
             Some(k) => seal_v2(&author, peer, k, payload, &mut *self.ports.entropy)?,
             None => privcord_crypto::seal::seal_as(
@@ -245,38 +277,75 @@ impl Core {
     /// Open a blob from a contact: v2 with the key it names (a one-time key is erased once used); v1 only from someone
     /// we have never exchanged keys with.
     ///
-    /// A device list the blob carries (it came from one of their devices) is learned.
+    /// Returns what it said and the address it came from (their account, or the device that signed it). A device list
+    /// the blob carries is learned first, so a device that list adds is known by the time anything answers it.
     pub(super) fn open_from_contact(
         &mut self,
         blob: &SealedBlob,
         keys: &AccountKeys,
-    ) -> Option<Value> {
-        let opened = self.open_sealed(blob, keys)?;
+    ) -> Option<(Value, UserId)> {
+        let (opened, from) = self.open_sealed(blob, keys)?;
         if let Some(list) = &opened.list {
             self.learn_contact_list(&keys.uid, list);
         }
-        Some(opened.payload)
+        Some((opened.payload, from))
     }
 
-    fn open_sealed(&mut self, blob: &SealedBlob, keys: &AccountKeys) -> Option<Opened> {
-        let own_uid = self.uid.clone()?;
-        let from = &keys.uid;
+    fn sender_address(person: &UserId, signer: &Signer) -> Option<UserId> {
+        match signer {
+            Signer::Account => Some(person.clone()),
+            Signer::Device(d) => UserId::new(format!("{person}.{d}")).ok(),
+        }
+    }
+
+    fn open_sealed(&mut self, blob: &SealedBlob, keys: &AccountKeys) -> Option<(Opened, UserId)> {
+        // Sealed to one of our addresses: the account (only with its key) or this device.
+        if !self.is_own_address(&blob.to) {
+            return None;
+        }
+        let own = UserId::new(blob.to.as_str()).ok()?;
+        let person = &keys.uid;
         if blob.v == 2 {
             let id = blob.key.as_deref()?;
             if let Some(k) = self.keys.standing.iter().find(|k| k.id == id) {
-                return open_v2(blob, &own_uid, k, keys);
+                let opened = open_v2(blob, &own, k, keys)?;
+                let from = Self::sender_address(person, &opened.signer)?;
+                return Some((opened, from));
             }
-            let list = self.keys.issued.get_mut(from)?;
-            let at = list.iter().position(|k| k.id == id)?;
-            let opened = open_v2(blob, &own_uid, list.get(at)?, keys)?;
-            list.remove(at);
+            // A one-time key goes to one address of theirs; only that address may use it.
+            let (addr, at) = self.keys.issued.iter().find_map(|(addr, list)| {
+                (&Self::person_of(addr) == person)
+                    .then(|| {
+                        list.iter()
+                            .position(|k| k.id == id)
+                            .map(|at| (addr.clone(), at))
+                    })
+                    .flatten()
+            })?;
+            let opened = open_v2(blob, &own, self.keys.issued.get(&addr)?.get(at)?, keys)?;
+            let from = Self::sender_address(person, &opened.signer)?;
+            // A key given to their account address and used by one of their devices: that device is the install the
+            // key went to (nobody else has it), so the keys of that address are its keys from now on.
+            let was_account = &addr == person && Self::device_of(&from).is_some();
+            if from != addr && !was_account {
+                return None;
+            }
+            if let Some(list) = self.keys.issued.get_mut(&addr) {
+                list.remove(at);
+            }
             self.save_keys();
-            return Some(opened);
+            if was_account {
+                self.move_keys(&addr, &from);
+            }
+            return Some((opened, from));
         }
-        if self.keys.theirs.contains_key(from) {
+        let identity = self.key_for_address(&own)?;
+        let opened = privcord_crypto::seal::open(blob, &own, identity, keys)?;
+        let from = Self::sender_address(person, &opened.signer)?;
+        // Once keys have been exchanged with that address, the old protocol is refused.
+        if self.keys.theirs.contains_key(&from) {
             return None;
         }
-        let identity = self.identity.as_ref()?;
-        privcord_crypto::seal::open(blob, &own_uid, identity, keys)
+        Some((opened, from))
     }
 }

@@ -29,7 +29,9 @@ use privcord_crypto::{
     selfbox::{device_inbox, open_from_device, seal_to_device, signed_by, SelfBox, SyncKey},
     synclog::{kind, Entry, Replica, Summary, Writer},
 };
-use privcord_domain::{blob::SealedBlob, signaling::PutKind, ConversationId, MessageId, UserId};
+use privcord_domain::{
+    blob::SealedBlob, message::DeliveryState, signaling::PutKind, ConversationId, MessageId, UserId,
+};
 use privcord_import::{backup::read_bundle, import, FileSource, Source};
 use privcord_ports::{
     OutboxEntry, Storage, StorageError, StoredContact, StoredFile, StoredMessage, StoredReaction,
@@ -127,9 +129,13 @@ impl Storage for Recorder {
                 StorageOp::SetKv { key, .. } => {
                     key == super::social::KV_MUTED || key == super::KV_GROUPS
                 }
-                // A message read here (the engine decides below whether it was someone else's).
+                // A message read here, or one of ours delivered or read there (the engine decides below which).
                 StorageOp::SetDelivery {
                     read_at: Some(_), ..
+                }
+                | StorageOp::SetDelivery {
+                    state: DeliveryState::Delivered | DeliveryState::Read,
+                    ..
                 } => true,
                 _ => false,
             })
@@ -412,14 +418,26 @@ impl Core {
                         json!({ "key": SETTING_MUTED, "value": list }),
                     ));
                 }
-                StorageOp::SetDelivery { id, .. } => {
-                    // Only messages from someone else count as read; our own messages' ticks are not synced.
+                StorageOp::SetDelivery { id, state, read_at } => {
+                    // A message from someone else: read here, read everywhere. One of ours: how far it got with them
+                    // (the receipt came to the device that sent it; the others learn it here).
                     let theirs = self
                         .messages
                         .get(&id)
                         .is_some_and(|m| Some(&m.message.sender_id) != self.uid.as_ref());
                     if theirs {
-                        items.push((kind::SEEN, json!({ "target": id })));
+                        if read_at.is_some() {
+                            items.push((kind::SEEN, json!({ "target": id })));
+                        }
+                    } else {
+                        match state {
+                            DeliveryState::Delivered => items
+                                .push((kind::TICK, json!({ "target": id, "state": "delivered" }))),
+                            DeliveryState::Read => {
+                                items.push((kind::TICK, json!({ "target": id, "state": "read" })));
+                            }
+                            _ => {}
+                        }
                     }
                 }
                 _ => {}
@@ -1041,7 +1059,7 @@ impl Core {
                         groups.push((id.to_owned(), events.clone()));
                     }
                 }
-                kind::SEEN => {
+                kind::SEEN | kind::TICK => {
                     if let Some(id) = e.body.get("target").and_then(Value::as_str) {
                         touched.insert(id.to_owned());
                     }
@@ -1103,6 +1121,16 @@ impl Core {
         // Deletes and reactions, as the merged state has them, for every message these entries touched (in any
         // order: a reaction that came before its message is applied now that the message is here).
         let mut ops: Vec<StorageOp> = Vec::new();
+        // Our own messages' delivery as storage has it now, for the ticks other devices saw.
+        let own_state: std::collections::HashMap<MessageId, DeliveryState> = self
+            .ports
+            .storage
+            .messages()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|m| Some(&m.message.sender_id) == self.uid.as_ref())
+            .map(|m| (m.message.message_id, m.message.delivery_state))
+            .collect();
         // Unread messages as storage has them now (just imported ones included), read once.
         let unread: std::collections::HashMap<MessageId, privcord_domain::message::DeliveryState> =
             self.ports
@@ -1128,6 +1156,20 @@ impl Core {
                 if state.is_hidden(id) {
                     ops.push(StorageOp::DeleteMessage(mid));
                     continue;
+                }
+                if let (Some(level), Some(cur)) = (state.tick(id), own_state.get(&mid)) {
+                    let seen = if level >= 2 {
+                        DeliveryState::Read
+                    } else {
+                        DeliveryState::Delivered
+                    };
+                    if DeliveryState::highest(*cur, seen) != *cur {
+                        ops.push(StorageOp::SetDelivery {
+                            id: mid.clone(),
+                            state: seen,
+                            read_at: (seen == DeliveryState::Read).then_some(now),
+                        });
+                    }
                 }
                 if state.is_seen(id) {
                     if let Some(delivery) = unread.get(&mid) {

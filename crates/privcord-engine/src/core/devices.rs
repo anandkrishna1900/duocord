@@ -34,6 +34,10 @@ const KV_CONTACT_LIST: &str = "devices.of";
 const KV_TOLD: &str = "devices.told";
 /// Between an account and a device in an address (`uid.<device>`); neither a uid nor a device id has one.
 const ADDR_SEP: char = '.';
+/// Friends whose app understands device lists (`["uid", ...]`): we have seen the mark from them.
+const KV_AWARE: &str = "devices.aware";
+/// The mark: on every sealed payload and on the privacy frame of every link.
+const AWARE_FIELD: &str = "dv";
 /// How long a list notice waits on the relays for a friend who is offline.
 const NOTICE_TTL_SEC: u32 = 7 * 24 * 3600;
 
@@ -201,6 +205,50 @@ impl Core {
         }
     }
 
+    /// Puts the mark that says our app understands device lists into something we send.
+    pub(super) fn mark_devices(&self, value: &mut Value) {
+        if let (false, Some(o)) = (self.old_version, value.as_object_mut()) {
+            o.insert(AWARE_FIELD.into(), json!(1));
+        }
+    }
+
+    /// Something from `from` carried the mark: their app understands device lists, and from now on we may speak to
+    /// them as a device.
+    pub(super) fn note_devices(&mut self, from: &UserId, value: &Value) {
+        if value.get(AWARE_FIELD).is_none() {
+            return;
+        }
+        let person = Self::person_of(from);
+        let mut aware = self.aware_list();
+        if aware.insert(person.to_string()) {
+            let _ = self.ports.storage.apply(&[StorageOp::SetKv {
+                key: KV_AWARE.into(),
+                value: serde_json::to_vec(&aware).unwrap_or_default(),
+            }]);
+        }
+    }
+
+    fn aware_list(&self) -> std::collections::BTreeSet<String> {
+        self.ports
+            .storage
+            .kv(KV_AWARE)
+            .ok()
+            .flatten()
+            .and_then(|b| serde_json::from_slice(&b).ok())
+            .unwrap_or_default()
+    }
+
+    /// Whether a friend's app understands device lists (we have seen it say so).
+    pub(super) fn understands_devices(&self, person: &UserId) -> bool {
+        self.aware_list().contains(person.as_str())
+    }
+
+    /// Tests only: behave like an app from before device lists.
+    #[doc(hidden)]
+    pub fn act_as_old_version(&mut self) {
+        self.old_version = true;
+    }
+
     /// How we present ourselves by default: as this device once the account has more than one, else as the account.
     pub(super) fn own_address(&self) -> Option<UserId> {
         let uid = self.uid.as_ref()?;
@@ -275,10 +323,16 @@ impl Core {
 
     /// The address we use with `peer`: the one they reached us at, else our default.
     pub(super) fn as_me(&self, peer: &UserId) -> Option<UserId> {
-        self.peers
-            .get(peer)
-            .and_then(|p| p.as_me.clone())
-            .or_else(|| self.own_address())
+        if let Some(a) = self.peers.get(peer).and_then(|p| p.as_me.clone()) {
+            return Some(a);
+        }
+        // A friend whose app predates device lists checks only the account key: the install holding it speaks to them
+        // as the account (a linked device cannot; what it writes to them goes out from the install that can, see
+        // `deliver_for_devices`).
+        if self.identity.is_some() && !self.understands_devices(&Self::person_of(peer)) {
+            return self.uid.clone();
+        }
+        self.own_address()
     }
 
     /// The key this install signs with on its link to `peer`.
@@ -349,6 +403,9 @@ impl Core {
     /// A friend's device list arrived (with something one of their devices sent, or as a notice): kept if it is the
     /// first we have or extends the one we have.
     pub(super) fn learn_contact_list(&mut self, uid: &UserId, list: &DeviceList) {
+        if self.old_version {
+            return;
+        }
         let Some(mut keys) = self.contact_keys(uid) else {
             return;
         };

@@ -285,6 +285,9 @@ impl Core {
         keys: &AccountKeys,
     ) -> Option<(Value, UserId)> {
         let (opened, from) = self.open_sealed(blob, keys)?;
+        if self.old_version && opened.signer != Signer::Account {
+            return None;
+        }
         if let Some(list) = &opened.list {
             self.learn_contact_list(&keys.uid, list);
         }

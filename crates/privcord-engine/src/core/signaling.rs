@@ -95,7 +95,9 @@ impl Core {
             .keys_of_address(peer)
             .ok_or(ErrorCode::UnknownContact)?;
         // v2 to one of their keys once we have them; v1 only before the first link (see core::keys).
-        self.seal_for(peer, payload, &dh)
+        let mut payload = payload.clone();
+        self.mark_devices(&mut payload);
+        self.seal_for(peer, &payload, &dh)
     }
 
     /// Seal `payload` to a contact and send it: through signaling if it is up, else (for live signaling only) through
@@ -232,6 +234,7 @@ impl Core {
         if !self.known_address(&from) {
             return;
         }
+        self.note_devices(&from, &Value::Object(payload.clone()));
         // They reached us at `own`: that is who we are on this route.
         self.peers
             .entry(from.clone())

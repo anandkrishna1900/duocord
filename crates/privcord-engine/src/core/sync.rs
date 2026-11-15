@@ -208,6 +208,51 @@ impl FileSource for NoFiles {
     }
 }
 
+/// On a message entry: written by a device without the account key.
+const FIELD_HELP: &str = "byDevice";
+
+impl Core {
+    /// Messages a device of ours without the account key wrote to a friend whose app predates device lists: that friend checks only the
+    /// account key, so the install holding it sends them (they stay waiting in its outbox until the friend's receipt,
+    /// which then reaches the other devices as a tick).
+    fn deliver_for_devices(
+        &self,
+        own: &[privcord_ports::StoredMessage],
+        by_device: &BTreeSet<String>,
+    ) -> Vec<StorageOp> {
+        if self.identity.is_none() {
+            return Vec::new();
+        }
+        let now = self.now();
+        own.iter()
+            .filter(|m| by_device.contains(m.message.message_id.as_str()))
+            .filter(|m| {
+                matches!(
+                    m.message.delivery_state,
+                    DeliveryState::Queued | DeliveryState::Sent
+                )
+            })
+            .filter_map(|m| match &m.conversation {
+                ConversationId::Direct(p)
+                    if !self.understands_devices(p)
+                        && !self
+                            .outbox
+                            .iter()
+                            .any(|o| o.message_id == m.message.message_id) =>
+                {
+                    Some(StorageOp::PutOutbox(privcord_ports::OutboxEntry {
+                        message_id: m.message.message_id.clone(),
+                        recipient: p.clone(),
+                        attempts: 0,
+                        next_try_ms: now,
+                    }))
+                }
+                _ => None,
+            })
+            .collect()
+    }
+}
+
 impl SyncState {
     /// This device's own keys.
     pub(super) fn device_key(&self) -> &Identity {
@@ -372,6 +417,13 @@ impl Core {
                         }
                         o.insert("id".into(), json!(row.message.message_id));
                         o.insert("conv".into(), json!(row.conversation.storage_key()));
+                        // Ours, written without the account key: friends whose app checks only that key get it
+                        // from an install that holds it (`deliver_for_devices`).
+                        if self.identity.is_none()
+                            && Some(&row.message.sender_id) == self.uid.as_ref()
+                        {
+                            o.insert(FIELD_HELP.into(), json!(true));
+                        }
                     }
                     items.push((kind::MESSAGE, v));
                 }
@@ -1035,6 +1087,8 @@ impl Core {
         let mut messages = Vec::new();
         let mut contacts = Vec::new();
         let mut touched: BTreeSet<String> = BTreeSet::new();
+        // Messages written by a device without the account key.
+        let mut by_device: BTreeSet<String> = BTreeSet::new();
         let mut muted: Option<Value> = None;
         let mut groups: Vec<(String, Vec<Value>)> = Vec::new();
         for e in entries {
@@ -1042,6 +1096,9 @@ impl Core {
                 kind::MESSAGE => {
                     if let Some(id) = e.body.get("id").and_then(Value::as_str) {
                         touched.insert(id.to_owned());
+                        if e.body.get(FIELD_HELP).and_then(Value::as_bool) == Some(true) {
+                            by_device.insert(id.to_owned());
+                        }
                     }
                     messages.push(e.body.clone());
                 }
@@ -1121,15 +1178,19 @@ impl Core {
         // Deletes and reactions, as the merged state has them, for every message these entries touched (in any
         // order: a reaction that came before its message is applied now that the message is here).
         let mut ops: Vec<StorageOp> = Vec::new();
-        // Our own messages' delivery as storage has it now, for the ticks other devices saw.
-        let own_state: std::collections::HashMap<MessageId, DeliveryState> = self
+        // Our own messages as storage has them now: their delivery (for the ticks other devices saw) and who they
+        // were for.
+        let own_rows: Vec<privcord_ports::StoredMessage> = self
             .ports
             .storage
             .messages()
             .unwrap_or_default()
             .into_iter()
             .filter(|m| Some(&m.message.sender_id) == self.uid.as_ref())
-            .map(|m| (m.message.message_id, m.message.delivery_state))
+            .collect();
+        let own_state: std::collections::HashMap<MessageId, DeliveryState> = own_rows
+            .iter()
+            .map(|m| (m.message.message_id.clone(), m.message.delivery_state))
             .collect();
         // Unread messages as storage has them now (just imported ones included), read once.
         let unread: std::collections::HashMap<MessageId, privcord_domain::message::DeliveryState> =
@@ -1191,6 +1252,7 @@ impl Core {
                 }
             }
         }
+        ops.extend(self.deliver_for_devices(&own_rows, &by_device));
         if let Some(list) = muted {
             ops.push(StorageOp::SetKv {
                 key: super::social::KV_MUTED.into(),

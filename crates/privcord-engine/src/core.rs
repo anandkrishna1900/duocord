@@ -262,6 +262,9 @@ pub struct Core {
     muted: BTreeSet<UserId>,
     /// True only while a message that came through the signaling service is being handled.
     relay_inbound: bool,
+    /// Tests only: behave like an app from before device lists (accepts only account signatures, says nothing of
+    /// devices), to check that such friends are still reached.
+    old_version: bool,
     /// The name on our invite cards.
     display_name: Option<String>,
 }
@@ -323,6 +326,7 @@ impl Core {
             deleted: std::collections::HashSet::new(),
             muted: BTreeSet::new(),
             relay_inbound: false,
+            old_version: false,
             display_name: None,
         };
         if let Some(secrets) = core.ports.secure.load_identity()? {
@@ -1196,8 +1200,9 @@ impl Core {
     }
 
     fn send_privacy(&mut self, peer: &UserId) {
-        let frame =
+        let mut frame =
             json!({ "v": PROTOCOL_VERSION, "kind": "privacy", "groupOnly": self.group_only });
+        self.mark_devices(&mut frame);
         self.send_secure(peer, &frame);
     }
 
@@ -1220,6 +1225,7 @@ impl Core {
             Some("file_chunk") => self.on_file_chunk(peer, frame),
             Some("devices") => self.on_device_notice(peer, frame),
             Some("privacy") => {
+                self.note_devices(peer, frame);
                 if let Some(g) = frame.get("groupOnly").and_then(Value::as_bool) {
                     if let Some(p) = self.peers.get_mut(peer) {
                         p.group_only = Some(g);

@@ -865,3 +865,76 @@ fn a_link_claiming_a_device_that_is_not_on_the_list_is_refused() {
     fran.core.frame_received(&made_up, "{\"kind\":\"hello\"}");
     assert!(fran.transport.drain().is_empty());
 }
+
+#[test]
+fn a_friend_on_an_old_version_is_still_reached_from_every_device() {
+    use privcord_domain::message::DeliveryState;
+    let clock = FakeClock::at(1_700_000_000_000);
+    let mut relay = Relay::default();
+    let mut phone = Device::new("phone", &clock);
+    phone.core.create_identity().unwrap();
+    // Fran's app predates device lists: it believes only the account key and never mentions devices.
+    let mut fran = Device::new("fran", &clock);
+    fran.core.act_as_old_version();
+    fran.core.create_identity().unwrap();
+    let fran_uid = fran.core.own_uid().unwrap().clone();
+    let pat = phone.core.own_uid().unwrap().clone();
+    phone
+        .core
+        .add_contact(
+            &fran.core.own_card(Some("Fran")).unwrap(),
+            ContactTrust::Verified,
+        )
+        .unwrap();
+    fran.core
+        .add_contact(
+            &phone.core.own_card(Some("Pat")).unwrap(),
+            ContactTrust::Verified,
+        )
+        .unwrap();
+    for d in [&mut phone, &mut fran] {
+        d.core.set_store_forward(true).unwrap();
+    }
+    let mut laptop = link_laptop(&mut phone, &mut relay, &clock);
+    laptop.core.set_store_forward(true).unwrap();
+
+    // The phone speaks to her as the account, so her app believes it.
+    phone
+        .core
+        .send_message(&fran_uid, "from the phone", None)
+        .unwrap();
+    phone.online(&mut relay);
+    fran.online(&mut relay);
+    assert!(fran.texts().contains(&"from the phone".to_owned()));
+    assert!(fran.core.contact_device_list(&pat).is_none());
+
+    // What the laptop writes to her goes out from the phone (the laptop's own copy is one her app cannot check).
+    laptop
+        .core
+        .send_message(&fran_uid, "from the laptop", None)
+        .unwrap();
+    laptop.online(&mut relay);
+    fran.online(&mut relay);
+    assert!(!fran.texts().contains(&"from the laptop".to_owned()));
+    phone.online(&mut relay);
+    phone.online(&mut relay);
+    fran.online(&mut relay);
+    assert!(fran.texts().contains(&"from the laptop".to_owned()));
+    // Her receipt reaches the phone, and the laptop sees the tick.
+    phone.online(&mut relay);
+    laptop.online(&mut relay);
+    laptop.online(&mut relay);
+    assert_eq!(
+        delivery(&laptop, "from the laptop"),
+        DeliveryState::Delivered
+    );
+
+    // Her answers reach Pat's account, and through it the laptop.
+    fran.core.send_message(&pat, "hi Pat", None).unwrap();
+    fran.online(&mut relay);
+    phone.online(&mut relay);
+    phone.online(&mut relay);
+    laptop.online(&mut relay);
+    assert!(phone.texts().contains(&"hi Pat".to_owned()));
+    assert!(laptop.texts().contains(&"hi Pat".to_owned()));
+}

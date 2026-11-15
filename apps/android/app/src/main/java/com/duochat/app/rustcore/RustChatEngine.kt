@@ -99,6 +99,13 @@ class RustChatEngine(
     override val state: StateFlow<ChatState> = _state.asStateFlow()
 
     private var engine: PrivcordEngine? = null
+
+    /** Files between the account's devices move only when the shared background plan allows bulk work. */
+    private val bulkChanged: () -> Unit = {
+        val e = engine
+        val allowed = com.duochat.app.engine.BackgroundPolicy.plan.bulk
+        if (e != null) scope.launch(Dispatchers.IO) { runCatching { e.setBulkAllowed(allowed) } }
+    }
     private var stopped = false
     private var visible = false
     private var openChat: String? = null
@@ -358,6 +365,8 @@ class RustChatEngine(
                 }
             }
             runCatching { withContext(Dispatchers.IO) { started.setGroupOnly(groupOnly) } }
+            runCatching { withContext(Dispatchers.IO) { started.setBulkAllowed(com.duochat.app.engine.BackgroundPolicy.plan.bulk) } }
+            com.duochat.app.engine.BackgroundPolicy.addListener(bulkChanged)
             runCatching { withContext(Dispatchers.IO) { started.setStoreForward(networkConfig().relaysMessages) } }
             requestRefresh()
         } catch (error: Throwable) {
@@ -380,6 +389,7 @@ class RustChatEngine(
 
     override fun stop() {
         stopped = true
+        com.duochat.app.engine.BackgroundPolicy.removeListener(bulkChanged)
         refreshJob?.cancel()
         refreshRequests.close()
         inbound.close()

@@ -174,6 +174,8 @@ pub enum Op {
     },
     ConfirmDeviceLink(bool),
     CancelDeviceLink,
+    /// Whether bulk work (media between devices) may run now.
+    SetBulkAllowed(bool),
     ImportBackup {
         text: String,
         passphrase: String,
@@ -357,6 +359,10 @@ fn pump(core: &mut Core, cmd: Command) -> bool {
                 }
                 Op::CancelDeviceLink => {
                     core.cancel_device_link();
+                    Ok(Answer::Done)
+                }
+                Op::SetBulkAllowed(allowed) => {
+                    core.set_bulk_allowed(allowed);
                     Ok(Answer::Done)
                 }
                 Op::ImportBackup { text, passphrase } => {

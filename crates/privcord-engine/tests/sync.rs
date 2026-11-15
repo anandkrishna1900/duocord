@@ -1053,3 +1053,84 @@ fn keys_go_ahead_through_the_relay_so_a_first_message_is_sealed_post_quantum() {
     laptop.online(&mut relay);
     assert!(laptop.texts().contains(&"first ever".to_owned()));
 }
+
+#[test]
+fn a_file_reaches_the_other_devices_whole_and_only_when_bulk_work_is_allowed() {
+    use privcord_domain::background::{DeviceState, NetworkKind};
+    let clock = FakeClock::at(1_700_000_000_000);
+    let mut relay = Relay::default();
+    let mut phone = Device::new("phone", &clock);
+    phone.core.create_identity().unwrap();
+    let (card, fran) = friend(&clock);
+    phone
+        .core
+        .add_contact(&card, ContactTrust::Verified)
+        .unwrap();
+    let mut laptop = link_laptop(&mut phone, &mut relay, &clock);
+
+    // A photo of three chunks and a bit, sent from the phone.
+    let bytes: Vec<u8> = (0..(3 * 32 * 1024 + 77))
+        .map(|i| (i * 31 % 253) as u8)
+        .collect();
+    let id = phone
+        .core
+        .send_file(&fran, "beach.jpg", "image/jpeg", bytes.clone(), None)
+        .unwrap();
+    // The phone is on mobile data: the message syncs, its pieces wait.
+    phone.core.set_bulk_allowed(
+        privcord_domain::background::plan(DeviceState {
+            battery_percent: Some(80),
+            charging: false,
+            network: NetworkKind::Metered,
+            data_saver: false,
+            power_saver: false,
+            foreground: false,
+        })
+        .bulk,
+    );
+    phone.online(&mut relay);
+    laptop.online(&mut relay);
+    assert!(
+        laptop.core.file(&id).unwrap().is_none(),
+        "no bulk on mobile data"
+    );
+    assert!(
+        !relay.boxes.keys().any(|m| m.starts_with("media-")),
+        "nothing went up"
+    );
+
+    // On Wi-Fi the pieces go up, and the laptop puts the file together.
+    phone.core.set_bulk_allowed(
+        privcord_domain::background::plan(DeviceState {
+            battery_percent: Some(80),
+            charging: false,
+            network: NetworkKind::Unmetered,
+            data_saver: false,
+            power_saver: false,
+            foreground: false,
+        })
+        .bulk,
+    );
+    phone.online(&mut relay);
+    laptop.online(&mut relay);
+    laptop.online(&mut relay);
+    let got = laptop
+        .core
+        .file(&id)
+        .unwrap()
+        .expect("the laptop has the file");
+    assert_eq!(got.bytes, bytes);
+    assert_eq!(
+        (got.name.as_str(), got.mime.as_str()),
+        ("beach.jpg", "image/jpeg")
+    );
+    // What the relay holds is unreadable without the key.
+    let pieces: Vec<&String> = relay
+        .boxes
+        .iter()
+        .filter(|(m, _)| m.starts_with("media-"))
+        .flat_map(|(_, b)| b)
+        .collect();
+    assert_eq!(pieces.len(), 5, "the hash list and four chunks");
+    assert!(pieces.iter().all(|p| !p.contains("beach")));
+}

@@ -65,6 +65,7 @@ mod invites;
 mod keys;
 mod legacy_groups;
 mod linking;
+mod media;
 mod privacy;
 mod signaling;
 mod social;
@@ -242,6 +243,8 @@ pub struct Core {
     sync: Option<sync::SyncState>,
     /// Linking a device by QR code, while it happens (`core/linking.rs`).
     link: Option<linking::LinkState>,
+    /// Files moving between the account's devices (`core/media.rs`).
+    media: media::MediaState,
     /// The account's public keys (sign, agree). Every device of the account has them; only a device holding the account
     /// key also has `identity`.
     account: Option<(PublicJwk, PublicJwk)>,
@@ -316,6 +319,7 @@ impl Core {
             device_list: None,
             sync: None,
             link: None,
+            media: media::MediaState::default(),
             account: None,
             recorder,
             sealed: signaling::SealedState::default(),
@@ -1752,6 +1756,7 @@ impl Core {
         self.tick_link();
         self.tick_device_notices();
         self.tick_key_handover();
+        self.tick_media();
         self.tick_sealed();
         self.tick_group_mesh();
         self.tick_channels();

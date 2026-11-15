@@ -235,6 +235,8 @@ export class HostedChatEngine implements ChatEngineApi {
       const name = this.deps.ownName();
       if (name) await this.engine.call('set_display_name', { name }).catch(() => undefined);
       await this.engine.call('set_store_forward', { value: this.deps.network().storeForward || this.deps.network().torMode === true }).catch(() => undefined);
+      // Private mode: files between your devices do not go over Tor (they wait for a direct local path).
+      await this.engine.call('set_bulk_allowed', { allowed: this.deps.network().torMode !== true }).catch(() => undefined);
       this.card = (await this.engine.call<string>('own_card', { name: name || null }).catch(() => '')) ?? '';
       await this.refresh();
       const own = this.snapshot?.own_uid ?? null;

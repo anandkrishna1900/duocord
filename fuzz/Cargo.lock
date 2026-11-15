@@ -889,6 +889,7 @@ dependencies = [
  "privcord-domain",
  "privcord-import",
  "privcord-ports",
+ "serde",
  "serde_json",
  "thiserror",
  "tokio",

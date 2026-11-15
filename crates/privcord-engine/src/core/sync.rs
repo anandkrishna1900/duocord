@@ -269,7 +269,7 @@ impl SyncState {
 }
 
 impl Core {
-    fn kv_json<T: serde::de::DeserializeOwned>(&self, key: &str) -> Option<T> {
+    pub(super) fn kv_json<T: serde::de::DeserializeOwned>(&self, key: &str) -> Option<T> {
         self.ports
             .storage
             .kv(key)
@@ -417,6 +417,12 @@ impl Core {
                         }
                         o.insert("id".into(), json!(row.message.message_id));
                         o.insert("conv".into(), json!(row.conversation.storage_key()));
+                        // A file's bytes do not go in the log: its reference does, and the pieces go up apart.
+                        if o.contains_key("file") {
+                            if let Some(r) = self.media_for_sync(&row.message.message_id) {
+                                o.insert("media".into(), json!(r));
+                            }
+                        }
                         // Ours, written without the account key: friends whose app checks only that key get it
                         // from an install that holds it (`deliver_for_devices`).
                         if self.identity.is_none()
@@ -1089,11 +1095,16 @@ impl Core {
         let mut touched: BTreeSet<String> = BTreeSet::new();
         // Messages written by a device without the account key.
         let mut by_device: BTreeSet<String> = BTreeSet::new();
+        // File messages whose bytes come separately.
+        let mut with_media: Vec<Value> = Vec::new();
         let mut muted: Option<Value> = None;
         let mut groups: Vec<(String, Vec<Value>)> = Vec::new();
         for e in entries {
             match e.kind.as_str() {
                 kind::MESSAGE => {
+                    if e.body.get("media").is_some() {
+                        with_media.push(e.body.clone());
+                    }
                     if let Some(id) = e.body.get("id").and_then(Value::as_str) {
                         touched.insert(id.to_owned());
                         if e.body.get(FIELD_HELP).and_then(Value::as_bool) == Some(true) {
@@ -1145,6 +1156,15 @@ impl Core {
                     &*self.ports.storage,
                     now,
                 );
+            }
+        }
+        for body in &with_media {
+            if let Some(id) = body
+                .get("id")
+                .and_then(Value::as_str)
+                .and_then(|i| MessageId::new(i).ok())
+            {
+                self.want_media(&id, body);
             }
         }
         // Groups: each event is checked again and added to what this install has (never replacing it).

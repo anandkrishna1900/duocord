@@ -494,6 +494,11 @@ impl Core {
             self.sync_blob(mailbox, &blob);
             return;
         }
+        // A piece of a file coming from another device of this account.
+        if self.is_media_mailbox(mailbox) {
+            self.media_blob(mailbox, &blob);
+            return;
+        }
         let Ok(value) = serde_json::to_value(&blob) else {
             return;
         };

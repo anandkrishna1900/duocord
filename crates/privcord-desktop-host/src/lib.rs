@@ -324,6 +324,9 @@ impl DesktopHost {
                 e.confirm_device_link(args.get("accept").and_then(Value::as_bool).unwrap_or(false)),
             ),
             "cancel_device_link" => unit(e.cancel_device_link()),
+            "set_bulk_allowed" => unit(
+                e.set_bulk_allowed(args.get("allowed").and_then(Value::as_bool).unwrap_or(true)),
+            ),
             "export_backup" => Ok(json!(e
                 .export_backup(text(args, "passphrase")?)
                 .map_err(failed)?)),

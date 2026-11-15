@@ -1052,6 +1052,8 @@ internal open class UniffiVTableCallbackInterfaceTransportCallbacks(
 
 
 
+
+
 // A JNA Library to expose the extern-C FFI definitions.
 // This is an implementation detail which will be called internally by the public API.
 
@@ -1205,6 +1207,8 @@ internal interface UniffiLib : Library {
     fun uniffi_privcord_ffi_fn_method_privcordengine_send_message(`ptr`: Pointer,`peer`: RustBuffer.ByValue,`text`: RustBuffer.ByValue,`replyTo`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_privcord_ffi_fn_method_privcordengine_send_signal(`ptr`: Pointer,`peer`: RustBuffer.ByValue,`kind`: RustBuffer.ByValue,`sdp`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    fun uniffi_privcord_ffi_fn_method_privcordengine_set_bulk_allowed(`ptr`: Pointer,`allowed`: Byte,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_set_checked(`ptr`: Pointer,`uid`: RustBuffer.ByValue,`checked`: Byte,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
@@ -1506,6 +1510,8 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_send_signal(
     ): Short
+    fun uniffi_privcord_ffi_checksum_method_privcordengine_set_bulk_allowed(
+    ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_set_checked(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_set_display_name(
@@ -1747,6 +1753,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_send_signal() != 24050.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_set_bulk_allowed() != 58938.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_set_checked() != 19308.toShort()) {
@@ -3292,6 +3301,11 @@ public interface PrivcordEngineInterface {
     fun `sendSignal`(`peer`: kotlin.String, `kind`: SignalKindDto, `sdp`: kotlin.String?)
     
     /**
+     * Whether bulk work (files between the account's devices) may run now: pass `background_plan(..).bulk`.
+     */
+    fun `setBulkAllowed`(`allowed`: kotlin.Boolean)
+    
+    /**
      * Record that you compared the safety number with this person (or took it back).
      */
     fun `setChecked`(`uid`: kotlin.String, `checked`: kotlin.Boolean)
@@ -4157,6 +4171,21 @@ open class PrivcordEngine: Disposable, AutoCloseable, PrivcordEngineInterface {
     uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_send_signal(
         it, FfiConverterString.lower(`peer`),FfiConverterTypeSignalKindDto.lower(`kind`),FfiConverterOptionalString.lower(`sdp`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Whether bulk work (files between the account's devices) may run now: pass `background_plan(..).bulk`.
+     */
+    @Throws(FfiException::class)override fun `setBulkAllowed`(`allowed`: kotlin.Boolean)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_set_bulk_allowed(
+        it, FfiConverterBoolean.lower(`allowed`),_status)
 }
     }
     

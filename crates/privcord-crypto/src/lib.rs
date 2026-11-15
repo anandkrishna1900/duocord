@@ -24,6 +24,7 @@ pub mod group_coordinator;
 pub mod identity;
 pub mod invite;
 pub mod kdf;
+pub mod media;
 pub mod nostr;
 pub mod peer_auth;
 pub mod pq;

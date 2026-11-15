@@ -1390,6 +1390,12 @@ impl PrivcordEngine {
         Ok(())
     }
 
+    /// Whether bulk work (files between the account's devices) may run now: pass `background_plan(..).bulk`.
+    pub fn set_bulk_allowed(&self, allowed: bool) -> Result<(), FfiError> {
+        pollster::block_on(self.handle.op(Op::SetBulkAllowed(allowed)))?;
+        Ok(())
+    }
+
     /// Add what is in a backup to what is here. Never replaces or removes anything that already exists.
     pub fn import_backup(&self, text: String, passphrase: String) -> Result<RestoreDto, FfiError> {
         match pollster::block_on(self.handle.op(Op::ImportBackup { text, passphrase }))? {

@@ -15,7 +15,7 @@ pub use api::{
     AnswerStatus, AnswerView, ContactView, ConversationSummary, DeliveryDetail, EngineEvent,
     GroupView, InviteView, LastMessage, LegacyGroupView, RequestView, SignalMessage, Snapshot,
 };
-pub use core::{Core, LinkSecurity, Ports};
+pub use core::{lan::LanPeer, Core, LinkSecurity, Ports};
 pub use core::{InvitePreview, RestoreSummary, SearchHit};
 pub use error::ErrorCode;
 pub use events::EventStream;

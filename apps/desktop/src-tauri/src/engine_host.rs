@@ -341,6 +341,11 @@ pub async fn engine_start(app: AppHandle, state: State<'_, EngineState>) -> Resu
     .await
     .map_err(|e| e.to_string())??;
     let host = Arc::new(host);
+    // The account's other devices on the local network: found and linked directly, even with no internet. Not in
+    // private mode (it announces nothing on the network then).
+    if !crate::tor_active() {
+        let _ = host.start_lan(privcord_desktop_host::lan::LanConfig::default());
+    }
     let stop = Arc::new(AtomicBool::new(false));
     // Engine events are forwarded to the page until the engine is stopped.
     let (pump_host, pump_stop, pump_app) = (host.clone(), stop.clone(), app);

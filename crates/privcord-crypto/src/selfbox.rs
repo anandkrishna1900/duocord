@@ -157,6 +157,39 @@ impl SelfBox {
     }
 }
 
+/// What starts a local-network beacon (so other apps' packets are told apart at once).
+const LAN_PREFIX: &str = "dcl1.";
+
+/// A beacon one device of the account sends on the local network (step 7): `payload` encrypted under a key from the
+/// sync key with a fresh nonce, so only devices of this account can read it, and two beacons of one device look
+/// unrelated to anyone else on the network.
+pub fn lan_beacon(
+    sync: &SyncKey,
+    payload: &Value,
+    entropy: &mut dyn Entropy,
+) -> Result<String, CryptoError> {
+    let key = Zeroizing::new(hkdf_sha256::<32>(&*sync.key, SALT, b"lan-beacon")?);
+    let iv: [u8; 12] = random_array(entropy)?;
+    let ct = aead::encrypt(
+        &*key,
+        &iv,
+        payload.to_string().as_bytes(),
+        LAN_PREFIX.as_bytes(),
+    )?;
+    let mut raw = iv.to_vec();
+    raw.extend_from_slice(&ct);
+    Ok(format!("{LAN_PREFIX}{}", codec::encode(&raw)))
+}
+
+/// What a beacon says, if it was made with this sync key.
+pub fn open_lan_beacon(sync: &SyncKey, text: &str) -> Option<Value> {
+    let raw = codec::decode(text.trim().strip_prefix(LAN_PREFIX)?)?;
+    let (iv, ct) = (raw.get(..12)?, raw.get(12..)?);
+    let key = Zeroizing::new(hkdf_sha256::<32>(&*sync.key, SALT, b"lan-beacon").ok()?);
+    let plain = aead::decrypt(&*key, iv, ct, LAN_PREFIX.as_bytes()).ok()?;
+    serde_json::from_slice(&plain).ok()
+}
+
 /// Was this blob signed by this device?
 pub fn signed_by(blob: &SealedBlob, device: &DeviceEntry) -> bool {
     verify_blob_signature(blob, &device.sign)

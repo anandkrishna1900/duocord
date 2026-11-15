@@ -610,6 +610,17 @@ pub struct SnapshotDto {
     pub holds_account_key: bool,
 }
 
+/// Another device of ours heard on the local network.
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct LanPeerDto {
+    /// Its address: pass it to `link_up` (path `DirectLan`, kind `Open`) and `frame_received` for this connection.
+    pub address: String,
+    pub port: u16,
+    /// Whether this side opens the connection.
+    pub initiator: bool,
+}
+
 /// One device of the account.
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -1388,6 +1399,27 @@ impl PrivcordEngine {
     pub fn cancel_device_link(&self) -> Result<(), FfiError> {
         pollster::block_on(self.handle.op(Op::CancelDeviceLink))?;
         Ok(())
+    }
+
+    /// The beacon to broadcast on the local network now (this device listens on `port`), or `None` when there is no other
+    /// device of the account to find.
+    pub fn lan_beacon(&self, port: u16) -> Result<Option<String>, FfiError> {
+        match pollster::block_on(self.handle.op(Op::LanBeacon(port)))? {
+            Answer::Maybe(b) => Ok(b),
+            _ => Err(FfiError::InvalidArgument),
+        }
+    }
+
+    /// A beacon heard on the local network: another device of ours, its port, and whether this side connects.
+    pub fn lan_beacon_seen(&self, beacon: String) -> Result<Option<LanPeerDto>, FfiError> {
+        match pollster::block_on(self.handle.op(Op::LanBeaconSeen(beacon)))? {
+            Answer::Lan(p) => Ok(p.map(|p| LanPeerDto {
+                address: p.address.to_string(),
+                port: p.port,
+                initiator: p.initiator,
+            })),
+            _ => Err(FfiError::InvalidArgument),
+        }
     }
 
     /// Whether bulk work (files between the account's devices) may run now: pass `background_plan(..).bulk`.

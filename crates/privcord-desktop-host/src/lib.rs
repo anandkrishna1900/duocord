@@ -11,6 +11,7 @@
 //! It reuses `privcord-ffi`'s `PrivcordEngine`, so the desktop and Android apps run exactly the same engine surface.
 //! Commands are added here as the page moves onto the engine; an unknown command is an error, never a silent no-op.
 
+pub mod lan;
 pub mod native_signaling;
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
@@ -19,13 +20,90 @@ use privcord_ffi::{
     TransportCallbacks,
 };
 use serde_json::{json, Value};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock, Weak};
 
 /// What went wrong, as a short stable string the page can show or branch on.
 pub type HostError = String;
 
 pub struct DesktopHost {
     engine: Arc<PrivcordEngine>,
+    /// Connections to the account's other devices on the local network, once started (`start_lan`).
+    lan: Arc<OnceLock<lan::Lan>>,
+}
+
+/// The shell's transport, with frames for a device we reach on the local network sent there instead.
+struct LanRouted {
+    inner: Arc<dyn TransportCallbacks>,
+    lan: Arc<OnceLock<lan::Lan>>,
+}
+
+impl TransportCallbacks for LanRouted {
+    fn send(&self, peer: String, frame: String) -> bool {
+        if self.lan.get().is_some_and(|l| l.send(&peer, &frame)) {
+            return true;
+        }
+        self.inner.send(peer, frame)
+    }
+    fn send_raw(&self, link: String, frame: String) -> bool {
+        self.inner.send_raw(link, frame)
+    }
+    fn close(&self, peer: String) {
+        if let Some(l) = self.lan.get() {
+            l.close(&peer);
+        }
+        self.inner.close(peer);
+    }
+    fn signal_available(&self) -> bool {
+        self.inner.signal_available()
+    }
+    fn signal_subscribe(&self, mailbox: String) -> bool {
+        self.inner.signal_subscribe(mailbox)
+    }
+    fn signal_unsubscribe(&self, mailbox: String) {
+        self.inner.signal_unsubscribe(mailbox);
+    }
+    fn signal_put(
+        &self,
+        mailbox: String,
+        blob: String,
+        kind: privcord_ffi::SignalKind,
+        ttl_sec: u32,
+    ) -> bool {
+        self.inner.signal_put(mailbox, blob, kind, ttl_sec)
+    }
+}
+
+/// The engine, as the local-network side sees it (weak: the engine owns the transport that owns the network side).
+struct EngineLan(Weak<PrivcordEngine>);
+
+impl lan::LanEngine for EngineLan {
+    fn beacon(&self, port: u16) -> Option<String> {
+        self.0.upgrade()?.lan_beacon(port).ok().flatten()
+    }
+    fn seen(&self, beacon: &str) -> Option<(String, u16, bool)> {
+        let p = self
+            .0
+            .upgrade()?
+            .lan_beacon_seen(beacon.to_owned())
+            .ok()??;
+        Some((p.address, p.port, p.initiator))
+    }
+    fn link_up(&self, peer: &str) {
+        if let Some(e) = self.0.upgrade() {
+            // The engine authenticates and encrypts the link itself, with both devices' own keys.
+            let _ = e.link_up(peer.to_owned(), PathKind::DirectLan, LinkKind::Open);
+        }
+    }
+    fn frame(&self, peer: &str, text: &str) {
+        if let Some(e) = self.0.upgrade() {
+            let _ = e.frame_received(peer.to_owned(), text.to_owned());
+        }
+    }
+    fn link_down(&self, peer: &str) {
+        if let Some(e) = self.0.upgrade() {
+            let _ = e.link_down(peer.to_owned());
+        }
+    }
 }
 
 impl std::fmt::Debug for DesktopHost {
@@ -129,6 +207,11 @@ impl DesktopHost {
         transport: Arc<dyn TransportCallbacks>,
         notifier: Arc<dyn NotifierCallbacks>,
     ) -> Result<Self, HostError> {
+        let lan = Arc::new(OnceLock::new());
+        let transport = Arc::new(LanRouted {
+            inner: transport,
+            lan: lan.clone(),
+        });
         let engine = PrivcordEngine::start(
             db_path.to_owned(),
             context.to_owned(),
@@ -137,7 +220,18 @@ impl DesktopHost {
             notifier,
         )
         .map_err(failed)?;
-        Ok(Self { engine })
+        Ok(Self { engine, lan })
+    }
+
+    /// Find the account's other devices on the local network and link to them directly (no internet needed). Once.
+    pub fn start_lan(&self, config: lan::LanConfig) -> Result<(), HostError> {
+        if self.lan.get().is_some() {
+            return Ok(());
+        }
+        let started = lan::Lan::start(config, Arc::new(EngineLan(Arc::downgrade(&self.engine))))
+            .map_err(failed)?;
+        let _ = self.lan.set(started);
+        Ok(())
     }
 
     /// Run one command. Arguments are a JSON object; the result is JSON (`null` when there is nothing to return).
@@ -358,6 +452,9 @@ impl DesktopHost {
 
     /// Stop the engine and wait for it to finish. Safe to call more than once.
     pub fn shutdown(&self) {
+        if let Some(l) = self.lan.get() {
+            l.stop();
+        }
         let _ = self.engine.shutdown();
     }
 }

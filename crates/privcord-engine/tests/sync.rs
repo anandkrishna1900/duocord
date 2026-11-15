@@ -1210,3 +1210,45 @@ fn two_devices_of_one_account_sync_directly_without_any_relay() {
         laptop.core.sync_fingerprint()
     );
 }
+
+#[test]
+fn devices_of_one_account_find_each_other_on_the_local_network_and_nobody_else_can() {
+    let clock = FakeClock::at(1_700_000_000_000);
+    let mut relay = Relay::default();
+    let mut phone = Device::new("phone", &clock);
+    phone.core.create_identity().unwrap();
+    // Alone, there is nothing to find: no beacon at all.
+    assert!(phone.core.lan_beacon(5000).is_none());
+    let mut laptop = link_laptop(&mut phone, &mut relay, &clock);
+    let pat = phone.core.own_uid().unwrap().clone();
+
+    let from_phone = phone.core.lan_beacon(5000).unwrap();
+    let from_laptop = laptop.core.lan_beacon(6000).unwrap();
+    assert_ne!(
+        from_phone,
+        phone.core.lan_beacon(5000).unwrap(),
+        "each beacon looks new"
+    );
+    let seen_by_laptop = laptop.core.lan_beacon_seen(&from_phone).unwrap();
+    let seen_by_phone = phone.core.lan_beacon_seen(&from_laptop).unwrap();
+    assert_eq!(seen_by_laptop.port, 5000);
+    assert_eq!(seen_by_phone.port, 6000);
+    assert_eq!(
+        seen_by_laptop.address.as_str(),
+        format!("{pat}.{}", phone.core.this_device_id().unwrap())
+    );
+    assert_ne!(
+        seen_by_laptop.initiator, seen_by_phone.initiator,
+        "exactly one opens the connection"
+    );
+    // Its own beacon means nothing to a device.
+    assert!(phone.core.lan_beacon_seen(&from_phone).is_none());
+
+    // Someone else on the network, with an account of their own, reads nothing.
+    let mut other = Device::new("stranger", &clock);
+    other.core.create_identity().unwrap();
+    assert!(other.core.lan_beacon_seen(&from_phone).is_none());
+    // A beacon recorded and played back much later is ignored.
+    clock.advance(10 * 60 * 1000);
+    assert!(laptop.core.lan_beacon_seen(&from_phone).is_none());
+}

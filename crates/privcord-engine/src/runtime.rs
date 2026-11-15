@@ -176,6 +176,10 @@ pub enum Op {
     CancelDeviceLink,
     /// Whether bulk work (media between devices) may run now.
     SetBulkAllowed(bool),
+    /// The local-network beacon to send, saying this device listens on this port.
+    LanBeacon(u16),
+    /// A local-network beacon heard.
+    LanBeaconSeen(String),
     ImportBackup {
         text: String,
         passphrase: String,
@@ -196,7 +200,10 @@ pub enum Op {
 #[derive(Debug)]
 pub enum Answer {
     Done,
-    Invite { words: String, expires_at: i64 },
+    Invite {
+        words: String,
+        expires_at: i64,
+    },
     Preview(Option<InvitePreview>),
     Person(UserId),
     Report(Option<KillSwitchReport>),
@@ -204,6 +211,9 @@ pub enum Answer {
     Text(String),
     Restored(crate::core::RestoreSummary),
     Bytes(Vec<u8>),
+    /// Another device of ours heard on the local network (or `None`).
+    Lan(Option<crate::core::lan::LanPeer>),
+    Maybe(Option<String>),
 }
 
 /// A channel operation. Returns the channel's normalised name or the new message's id, else an empty string.
@@ -361,6 +371,8 @@ fn pump(core: &mut Core, cmd: Command) -> bool {
                     core.cancel_device_link();
                     Ok(Answer::Done)
                 }
+                Op::LanBeacon(port) => Ok(Answer::Maybe(core.lan_beacon(port))),
+                Op::LanBeaconSeen(text) => Ok(Answer::Lan(core.lan_beacon_seen(&text))),
                 Op::SetBulkAllowed(allowed) => {
                     core.set_bulk_allowed(allowed);
                     Ok(Answer::Done)

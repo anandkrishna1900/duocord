@@ -263,6 +263,11 @@ impl SyncState {
         &self.device
     }
 
+    /// The account's sync key, once this device has it.
+    pub(super) fn sync_key(&self) -> Option<&SyncKey> {
+        self.key.as_ref()
+    }
+
     /// The account's device list changed (a device was linked): its devices write entries this device accepts.
     pub(super) fn devices_changed(&mut self, list: &DeviceList) {
         self.replica.set_devices(list.clone());

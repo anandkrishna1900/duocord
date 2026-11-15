@@ -63,6 +63,7 @@ mod backup;
 mod devices;
 mod invites;
 mod keys;
+pub mod lan;
 mod legacy_groups;
 mod linking;
 mod media;

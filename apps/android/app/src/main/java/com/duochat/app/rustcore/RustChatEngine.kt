@@ -221,10 +221,11 @@ class RustChatEngine(
         private val job = scope.launch(Dispatchers.Default) {
             for (frame in queue) {
                 val web = links[peer]
-                val ok = if (web != null && web.isOpen) {
-                    web.awaitWritable() && web.sendJson(frame)
-                } else {
-                    bleLinks[peer]?.takeIf { it.isOpen }?.sendJson(frame) == true
+                val ble = bleLinks[peer]?.takeIf { it.isOpen }
+                val ok = when {
+                    web != null && web.isOpen -> web.awaitWritable() && web.sendJson(frame)
+                    ble != null -> ble.sendJson(frame)
+                    else -> lan?.send(peer, frame) == true
                 }
                 if (ok) {
                     written.incrementAndGet()
@@ -237,6 +238,7 @@ class RustChatEngine(
                     inbound.trySend(Inbound.Down(peer))
                     links.remove(peer)?.close()
                     bleLinks.remove(peer)?.close()
+                    lan?.close(peer)
                     break
                 }
             }
@@ -274,9 +276,12 @@ class RustChatEngine(
         }
     }
 
+    /** The account's other devices on the local network (step 7). */
+    @Volatile private var lan: AndroidLan? = null
+
     private val transport = object : TransportCallbacks {
         override fun send(peer: String, frame: String): Boolean {
-            val open = links[peer]?.isOpen == true || bleLinks[peer]?.isOpen == true
+            val open = links[peer]?.isOpen == true || bleLinks[peer]?.isOpen == true || lan?.isOpen(peer) == true
             if (!open) return false
             return senders.getOrPut(peer) { Outbound(peer) }.add(frame)
         }
@@ -287,6 +292,7 @@ class RustChatEngine(
             stopSender(peer)
             links.remove(peer)?.close()
             bleLinks.remove(peer)?.close()
+            lan?.close(peer)
         }
 
         override fun signalAvailable(): Boolean = networkConfig().signaling.isNotEmpty()
@@ -367,6 +373,15 @@ class RustChatEngine(
             runCatching { withContext(Dispatchers.IO) { started.setGroupOnly(groupOnly) } }
             runCatching { withContext(Dispatchers.IO) { started.setBulkAllowed(com.duochat.app.engine.BackgroundPolicy.plan.bulk) } }
             com.duochat.app.engine.BackgroundPolicy.addListener(bulkChanged)
+            // The account's other devices on this network: found and linked directly, even with no internet.
+            lan = AndroidLan(
+                app, scope,
+                beacon = { port -> runCatching { started.lanBeacon(port.toUShort()) }.getOrNull() },
+                seen = { b -> runCatching { started.lanBeaconSeen(b) }.getOrNull() },
+                onUp = { peer -> inbound.trySend(Inbound.Up(peer, PathKind.DIRECT_LAN, LinkKind.OPEN)) },
+                onFrame = { peer, text -> inbound.trySend(Inbound.Frame(peer, text)) },
+                onDown = { peer -> inbound.trySend(Inbound.Down(peer)) },
+            ).also { it.start() }
             runCatching { withContext(Dispatchers.IO) { started.setStoreForward(networkConfig().relaysMessages) } }
             requestRefresh()
         } catch (error: Throwable) {
@@ -390,6 +405,8 @@ class RustChatEngine(
     override fun stop() {
         stopped = true
         com.duochat.app.engine.BackgroundPolicy.removeListener(bulkChanged)
+        lan?.stop()
+        lan = null
         refreshJob?.cancel()
         refreshRequests.close()
         inbound.close()

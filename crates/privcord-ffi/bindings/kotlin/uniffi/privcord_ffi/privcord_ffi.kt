@@ -1054,6 +1054,10 @@ internal open class UniffiVTableCallbackInterfaceTransportCallbacks(
 
 
 
+
+
+
+
 // A JNA Library to expose the extern-C FFI definitions.
 // This is an implementation detail which will be called internally by the public API.
 
@@ -1146,6 +1150,10 @@ internal interface UniffiLib : Library {
     ): RustBuffer.ByValue
     fun uniffi_privcord_ffi_fn_method_privcordengine_join_device_link(`ptr`: Pointer,`code`: RustBuffer.ByValue,`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    fun uniffi_privcord_ffi_fn_method_privcordengine_lan_beacon(`ptr`: Pointer,`port`: Short,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    fun uniffi_privcord_ffi_fn_method_privcordengine_lan_beacon_seen(`ptr`: Pointer,`beacon`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     fun uniffi_privcord_ffi_fn_method_privcordengine_last_wipe_report(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_privcord_ffi_fn_method_privcordengine_leave_channel(`ptr`: Pointer,`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1448,6 +1456,10 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_join_device_link(
     ): Short
+    fun uniffi_privcord_ffi_checksum_method_privcordengine_lan_beacon(
+    ): Short
+    fun uniffi_privcord_ffi_checksum_method_privcordengine_lan_beacon_seen(
+    ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_last_wipe_report(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_leave_channel(
@@ -1660,6 +1672,12 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_join_device_link() != 27528.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_lan_beacon() != 10643.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_lan_beacon_seen() != 34601.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_last_wipe_report() != 42249.toShort()) {
@@ -1903,6 +1921,29 @@ public object FfiConverterUByte: FfiConverter<UByte, Byte> {
 
     override fun write(value: UByte, buf: ByteBuffer) {
         buf.put(value.toByte())
+    }
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterUShort: FfiConverter<UShort, Short> {
+    override fun lift(value: Short): UShort {
+        return value.toUShort()
+    }
+
+    override fun read(buf: ByteBuffer): UShort {
+        return lift(buf.getShort())
+    }
+
+    override fun lower(value: UShort): Short {
+        return value.toShort()
+    }
+
+    override fun allocationSize(value: UShort) = 2UL
+
+    override fun write(value: UShort, buf: ByteBuffer) {
+        buf.putShort(value.toShort())
     }
 }
 
@@ -3179,6 +3220,17 @@ public interface PrivcordEngineInterface {
     fun `joinDeviceLink`(`code`: kotlin.String, `name`: kotlin.String)
     
     /**
+     * The beacon to broadcast on the local network now (this device listens on `port`), or `None` when there is no other
+     * device of the account to find.
+     */
+    fun `lanBeacon`(`port`: kotlin.UShort): kotlin.String?
+    
+    /**
+     * A beacon heard on the local network: another device of ours, its port, and whether this side connects.
+     */
+    fun `lanBeaconSeen`(`beacon`: kotlin.String): LanPeerDto?
+    
+    /**
      * The report of the last deletion that was started, if any.
      */
     fun `lastWipeReport`(): WipeReportDto?
@@ -3731,6 +3783,39 @@ open class PrivcordEngine: Disposable, AutoCloseable, PrivcordEngineInterface {
 }
     }
     
+    
+
+    
+    /**
+     * The beacon to broadcast on the local network now (this device listens on `port`), or `None` when there is no other
+     * device of the account to find.
+     */
+    @Throws(FfiException::class)override fun `lanBeacon`(`port`: kotlin.UShort): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_lan_beacon(
+        it, FfiConverterUShort.lower(`port`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * A beacon heard on the local network: another device of ours, its port, and whether this side connects.
+     */
+    @Throws(FfiException::class)override fun `lanBeaconSeen`(`beacon`: kotlin.String): LanPeerDto? {
+            return FfiConverterOptionalTypeLanPeerDto.lift(
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_lan_beacon_seen(
+        it, FfiConverterString.lower(`beacon`),_status)
+}
+    }
+    )
+    }
     
 
     
@@ -5827,6 +5912,51 @@ public object FfiConverterTypeInviteDto: FfiConverterRustBuffer<InviteDto> {
     override fun write(value: InviteDto, buf: ByteBuffer) {
             FfiConverterString.write(value.`words`, buf)
             FfiConverterLong.write(value.`expiresAt`, buf)
+    }
+}
+
+
+
+/**
+ * Another device of ours heard on the local network.
+ */
+data class LanPeerDto (
+    /**
+     * Its address: pass it to `link_up` (path `DirectLan`, kind `Open`) and `frame_received` for this connection.
+     */
+    var `address`: kotlin.String, 
+    var `port`: kotlin.UShort, 
+    /**
+     * Whether this side opens the connection.
+     */
+    var `initiator`: kotlin.Boolean
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeLanPeerDto: FfiConverterRustBuffer<LanPeerDto> {
+    override fun read(buf: ByteBuffer): LanPeerDto {
+        return LanPeerDto(
+            FfiConverterString.read(buf),
+            FfiConverterUShort.read(buf),
+            FfiConverterBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: LanPeerDto) = (
+            FfiConverterString.allocationSize(value.`address`) +
+            FfiConverterUShort.allocationSize(value.`port`) +
+            FfiConverterBoolean.allocationSize(value.`initiator`)
+    )
+
+    override fun write(value: LanPeerDto, buf: ByteBuffer) {
+            FfiConverterString.write(value.`address`, buf)
+            FfiConverterUShort.write(value.`port`, buf)
+            FfiConverterBoolean.write(value.`initiator`, buf)
     }
 }
 
@@ -8276,6 +8406,38 @@ public object FfiConverterOptionalTypeInviteDto: FfiConverterRustBuffer<InviteDt
         } else {
             buf.put(1)
             FfiConverterTypeInviteDto.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeLanPeerDto: FfiConverterRustBuffer<LanPeerDto?> {
+    override fun read(buf: ByteBuffer): LanPeerDto? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeLanPeerDto.read(buf)
+    }
+
+    override fun allocationSize(value: LanPeerDto?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeLanPeerDto.allocationSize(value)
+        }
+    }
+
+    override fun write(value: LanPeerDto?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeLanPeerDto.write(value, buf)
         }
     }
 }

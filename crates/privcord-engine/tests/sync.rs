@@ -792,6 +792,12 @@ fn a_linked_device_and_a_friend_link_directly_each_by_its_own_keys() {
         let laptop_addr =
             UserId::new(format!("{pat}.{}", laptop.core.this_device_id().unwrap())).unwrap();
 
+        // Over Bluetooth each pair of devices finds only each other: the laptop and Fran share a secret the phone
+        // does not have.
+        let secret = laptop.core.ble_secret(&fran_uid).unwrap();
+        assert_eq!(secret, fran.core.ble_secret(&laptop_addr).unwrap());
+        assert_ne!(secret, phone.core.ble_secret(&fran_uid).unwrap());
+
         laptop.transport.set_connected(&fran_uid, true);
         fran.transport.set_connected(&laptop_addr, true);
         laptop
@@ -998,4 +1004,52 @@ fn a_linked_device_creates_and_changes_a_group() {
     phone.online(&mut relay);
     phone.online(&mut relay);
     assert_eq!(group_on(&phone).expect("on the phone").name, "Long weekend");
+}
+
+#[test]
+fn keys_go_ahead_through_the_relay_so_a_first_message_is_sealed_post_quantum() {
+    let clock = FakeClock::at(1_700_000_000_000);
+    let mut relay = Relay::default();
+    let mut phone = Device::new("phone", &clock);
+    phone.core.create_identity().unwrap();
+    let mut fran = Device::new("fran", &clock);
+    fran.core.create_identity().unwrap();
+    let pat = phone.core.own_uid().unwrap().clone();
+    phone
+        .core
+        .add_contact(
+            &fran.core.own_card(Some("Fran")).unwrap(),
+            ContactTrust::Verified,
+        )
+        .unwrap();
+    fran.core
+        .add_contact(
+            &phone.core.own_card(Some("Pat")).unwrap(),
+            ContactTrust::Verified,
+        )
+        .unwrap();
+    fran.core.set_store_forward(true).unwrap();
+    let mut laptop = link_laptop(&mut phone, &mut relay, &clock);
+    laptop.core.set_store_forward(true).unwrap();
+    // Fran hears of the laptop; the laptop hands her its keys through the relay. They never link.
+    fran.online(&mut relay);
+    laptop.online(&mut relay);
+    fran.online(&mut relay);
+    let laptop_addr = format!("{pat}.{}", laptop.core.this_device_id().unwrap());
+    let laptop_box = privcord_crypto::seal::mailbox_for(&laptop_addr);
+    let before = relay.boxes.get(&laptop_box).map_or(0, Vec::len);
+
+    fran.core.send_message(&pat, "first ever", None).unwrap();
+    fran.online(&mut relay);
+    let new: Vec<privcord_domain::blob::SealedBlob> = relay.boxes[&laptop_box][before..]
+        .iter()
+        .filter_map(|b| privcord_domain::blob::SealedBlob::decode(b))
+        .collect();
+    assert!(!new.is_empty());
+    assert!(
+        new.iter().all(|b| b.v == 2),
+        "sealed to the laptop's own keys"
+    );
+    laptop.online(&mut relay);
+    assert!(laptop.texts().contains(&"first ever".to_owned()));
 }

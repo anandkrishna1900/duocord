@@ -648,10 +648,12 @@ fn a_message_for_an_offline_friend_waits_on_the_relay_only_when_allowed_and_is_a
 
     a.core.set_store_forward(true).unwrap();
     a.core.tick();
+    // The message, and our keys for Bob (so his replies while we are away are sealed post-quantum).
     let sent = put_blobs(&a);
-    assert_eq!(sent.len(), 1);
-    assert_eq!(sent[0].2, privcord_domain::signaling::PutKind::Msg);
-    assert!(!sent[0].1.contains("see you"), "the relay sees ciphertext");
+    assert_eq!(sent.len(), 2);
+    assert!(sent
+        .iter()
+        .all(|s| s.2 == privcord_domain::signaling::PutKind::Msg && !s.1.contains("see you")));
     let status = |n: &Node| {
         n.core
             .snapshot()
@@ -667,7 +669,9 @@ fn a_message_for_an_offline_friend_waits_on_the_relay_only_when_allowed_and_is_a
     assert!(put_blobs(&a).is_empty(), "handed over once, not every tick");
 
     // Bob gets it through the service, stores it as a relay message, and answers with a sealed receipt.
-    b.core.signal_blob(&sent[0].0, &sent[0].1);
+    for s in &sent {
+        b.core.signal_blob(&s.0, &s.1);
+    }
     let m = b
         .core
         .snapshot()

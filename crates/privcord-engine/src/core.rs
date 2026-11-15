@@ -638,9 +638,14 @@ impl Core {
     /// The 32-byte secret shared with a contact. Bluetooth uses it only to pick which advertisements to accept; it is
     /// never sent anywhere.
     pub fn ble_secret(&self, uid: &UserId) -> Result<Vec<u8>, ErrorCode> {
-        let c = self.contacts.get(uid).ok_or(ErrorCode::UnknownContact)?;
-        let shared = self.identity()?.agree(&c.contact.card.dh)?;
-        Ok(shared.to_vec())
+        // Per address: the key we use with them on this route and the key of theirs that address names (their account,
+        // or one of their devices), so each pair of devices finds only each other.
+        let (_, dh) = self.keys_of_address(uid).ok_or(ErrorCode::UnknownContact)?;
+        let own = self.as_me(uid).ok_or(ErrorCode::NoIdentity)?;
+        let key = self
+            .key_for_address(&own)
+            .ok_or(ErrorCode::NeedsAccountKey)?;
+        Ok(key.agree(&dh)?.to_vec())
     }
 
     pub fn safety_number(&self, uid: &UserId) -> Result<String, ErrorCode> {
@@ -1746,6 +1751,7 @@ impl Core {
         self.tick_sync();
         self.tick_link();
         self.tick_device_notices();
+        self.tick_key_handover();
         self.tick_sealed();
         self.tick_group_mesh();
         self.tick_channels();

@@ -377,6 +377,7 @@ impl Core {
                 }
             }
             Some("devices") => self.on_device_notice(&from, &Value::Object(payload.clone())),
+            Some("keys") => self.take_keys(&from, &Value::Object(payload.clone())),
             Some("ack") => {
                 if let Some(id) = text("id") {
                     self.on_ack(&from, &json!({ "messageId": id, "state": "DELIVERED" }));

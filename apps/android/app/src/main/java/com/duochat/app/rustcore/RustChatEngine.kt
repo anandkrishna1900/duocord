@@ -674,7 +674,8 @@ class RustChatEngine(
     override suspend fun connectBluetooth(uid: String, manual: Boolean): Result<Unit> {
         val failure = { message: String -> Result.failure<Unit>(IllegalStateException(message)) }
         val own = last?.ownUid ?: return failure("Identity is not ready yet.")
-        if (last?.contacts?.none { it.uid == uid } != false) return failure("Add your friend first.")
+        // `uid` may name one of a friend's devices ("uid.device"): the friend is the part before the dot.
+        if (last?.contacts?.none { it.uid == uid.substringBefore('.') } != false) return failure("Add your friend first.")
         if (bleLinks[uid]?.isOpen == true) return Result.success(Unit)
         if (bleLinks.isNotEmpty() && !bleLinks.containsKey(uid)) return failure("Bluetooth is already in use for another friend.")
         when (bleEnv.availability()) {

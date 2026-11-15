@@ -1134,3 +1134,79 @@ fn a_file_reaches_the_other_devices_whole_and_only_when_bulk_work_is_allowed() {
     assert_eq!(pieces.len(), 5, "the hash list and four chunks");
     assert!(pieces.iter().all(|p| !p.contains("beach")));
 }
+
+#[test]
+fn two_devices_of_one_account_sync_directly_without_any_relay() {
+    use privcord_domain::state::ConnectionPath;
+    let clock = FakeClock::at(1_700_000_000_000);
+    let mut relay = Relay::default();
+    let mut phone = Device::new("phone", &clock);
+    phone.core.create_identity().unwrap();
+    let pat = phone.core.own_uid().unwrap().clone();
+    let (card, fran) = friend(&clock);
+    phone
+        .core
+        .add_contact(&card, ContactTrust::Verified)
+        .unwrap();
+    let mut laptop = link_laptop(&mut phone, &mut relay, &clock);
+    let phone_addr =
+        UserId::new(format!("{pat}.{}", phone.core.this_device_id().unwrap())).unwrap();
+    let laptop_addr =
+        UserId::new(format!("{pat}.{}", laptop.core.this_device_id().unwrap())).unwrap();
+
+    // The internet is gone. The two find each other nearby and link with their own device keys.
+    phone.transport.set_signaling(false);
+    laptop.transport.set_signaling(false);
+    phone.transport.set_connected(&laptop_addr, true);
+    laptop.transport.set_connected(&phone_addr, true);
+    phone
+        .core
+        .link_up(&laptop_addr, ConnectionPath::DirectLan)
+        .unwrap();
+    laptop
+        .core
+        .link_up(&phone_addr, ConnectionPath::DirectLan)
+        .unwrap();
+    pump_link(&mut phone, &phone_addr, &mut laptop, &laptop_addr);
+
+    // What the phone writes now reaches the laptop over the link alone: a message and a file.
+    phone
+        .core
+        .send_message(&fran, "written offline", None)
+        .unwrap();
+    let bytes: Vec<u8> = (0..(2 * 32 * 1024 + 9)).map(|i| (i % 241) as u8).collect();
+    let id = phone
+        .core
+        .send_file(&fran, "notes.pdf", "application/pdf", bytes.clone(), None)
+        .unwrap();
+    for _ in 0..4 {
+        phone.core.tick();
+        laptop.core.tick();
+        pump_link(&mut phone, &phone_addr, &mut laptop, &laptop_addr);
+    }
+    assert!(laptop.texts().contains(&"written offline".to_owned()));
+    let got = laptop
+        .core
+        .file(&id)
+        .unwrap()
+        .expect("the file came over the link");
+    assert_eq!(got.bytes, bytes);
+    assert!(
+        relay.boxes.keys().all(|m| !m.starts_with("media-")),
+        "nothing went through a relay"
+    );
+
+    // And back: a delete on the laptop reaches the phone over the link.
+    let mid = laptop.message_id("written offline");
+    laptop.core.delete_message(&mid, false).unwrap();
+    for _ in 0..3 {
+        laptop.core.tick();
+        phone.core.tick();
+        pump_link(&mut phone, &phone_addr, &mut laptop, &laptop_addr);
+    }
+    assert!(!phone.texts().contains(&"written offline".to_owned()));
+    assert_eq!(
+        phone.core.sync_fingerprint(),
+        laptop.core.sync_fingerprint()
+    );
+}

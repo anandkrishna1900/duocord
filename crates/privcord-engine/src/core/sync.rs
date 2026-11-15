@@ -68,6 +68,8 @@ const RELAY_TTL_SEC: u32 = 7 * 24 * 3600;
 const BATCH_BYTES: usize = 24 * 1024;
 /// Entries one answer carries at most; the rest follow on the next hello.
 const ANSWER_MAX: usize = 400;
+/// Entries per frame over a direct link between our devices (a frame may be up to 128 KiB).
+const LINK_BATCH_BYTES: usize = 96 * 1024;
 
 fn entry_key(device: &str, series: u32, seq: u64) -> String {
     format!("sync.e.{device}.{series}.{seq}")
@@ -199,6 +201,8 @@ pub(super) struct SyncState {
     /// This device's inbox (where the sync key is handed over) is being listened on.
     inbox: Option<String>,
     last_ask: i64,
+    /// The summary last told to each of our devices over a direct link (said again only when it changes).
+    link_told: BTreeMap<String, String>,
 }
 
 struct NoFiles;
@@ -358,6 +362,7 @@ impl Core {
             key,
             inbox: None,
             last_ask: i64::MIN / 2,
+            link_told: BTreeMap::new(),
         });
         Ok(())
     }
@@ -612,6 +617,7 @@ impl Core {
         if self.sync.is_none() {
             return;
         }
+        self.tick_link_sync();
         if !self.ports.transport.signal_available() {
             if let Some(s) = self.sync.as_mut() {
                 s.subscribed.clear();
@@ -683,6 +689,90 @@ impl Core {
                 key: KV_PUSHED.into(),
                 value: serde_json::to_vec(&top).unwrap_or_default(),
             }]);
+        }
+    }
+
+    /// A direct link to another device of ours is up (step 7): say where our log stands; it answers with what we lack,
+    /// and with its own summary if we hold what it lacks. No relay, no relay size limits.
+    pub(super) fn link_sync_hello(&mut self, peer: &UserId) {
+        let Some(s) = self.sync.as_mut() else { return };
+        let summary = s.replica.summary();
+        let text = serde_json::to_string(&summary).unwrap_or_default();
+        s.link_told.insert(peer.to_string(), text);
+        let frame = json!({ "v": privcord_domain::limits::PROTOCOL_VERSION, "kind": "sync", "t": "hello", "summary": summary });
+        self.send_secure(peer, &frame);
+    }
+
+    /// Our log changed: tell the devices we are linked to directly.
+    fn tick_link_sync(&mut self) {
+        let Some(s) = self.sync.as_ref() else { return };
+        let now_text = serde_json::to_string(&s.replica.summary()).unwrap_or_default();
+        let due: Vec<UserId> = self
+            .own_other_devices()
+            .into_iter()
+            .filter(|a| self.peers.get(a).is_some_and(super::Peer::ready))
+            .filter(|a| s.link_told.get(a.as_str()) != Some(&now_text))
+            .collect();
+        for peer in due {
+            self.link_sync_hello(&peer);
+        }
+    }
+
+    /// Sync over a direct link with another device of ours. The link is authenticated with that device's own keys from
+    /// the account's list, so what it sends is taken as a post of it would be.
+    pub(super) fn on_sync_frame(&mut self, peer: &UserId, frame: &Value) {
+        let now = self.now();
+        match frame.get("t").and_then(Value::as_str) {
+            Some("hello") => {
+                let theirs: Summary = frame
+                    .get("summary")
+                    .and_then(|s| serde_json::from_value(s.clone()).ok())
+                    .unwrap_or_default();
+                let Some(s) = self.sync.as_ref() else { return };
+                let missing = s.replica.missing_for(&theirs, usize::MAX);
+                let ours = s.replica.summary();
+                let behind = theirs
+                    .iter()
+                    .any(|(k, v)| ours.get(k).copied().unwrap_or(0) < *v);
+                let mut batch: Vec<Value> = Vec::new();
+                let mut size = 0;
+                for e in missing {
+                    let v = serde_json::to_value(&e).unwrap_or(Value::Null);
+                    let n = v.to_string().len();
+                    if !batch.is_empty() && size + n > LINK_BATCH_BYTES {
+                        let entries = std::mem::take(&mut batch);
+                        self.send_secure(
+                            peer,
+                            &json!({ "v": 1, "kind": "sync", "t": "entries", "entries": entries }),
+                        );
+                        size = 0;
+                    }
+                    size += n;
+                    batch.push(v);
+                }
+                if !batch.is_empty() {
+                    self.send_secure(
+                        peer,
+                        &json!({ "v": 1, "kind": "sync", "t": "entries", "entries": batch }),
+                    );
+                }
+                if behind {
+                    self.link_sync_hello(peer);
+                }
+            }
+            Some("entries") => {
+                let entries: Vec<Entry> = frame
+                    .get("entries")
+                    .and_then(Value::as_array)
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|v| serde_json::from_value(v.clone()).ok())
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                self.take_entries(entries, now);
+            }
+            _ => {}
         }
     }
 

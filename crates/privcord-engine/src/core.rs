@@ -1050,6 +1050,11 @@ impl Core {
         }
         self.step(peer, ConnectionEvent::Established(path));
         self.keys_on_link(peer);
+        if self.is_own_person(peer) {
+            // Another device of ours: only sync and files travel here.
+            self.link_sync_hello(peer);
+            return;
+        }
         self.tell_devices_on_link(peer);
         self.send_privacy(peer);
         self.send_group_hello(peer);
@@ -1218,6 +1223,25 @@ impl Core {
     /* ---------------------------------------------------------------- inbound frames */
 
     fn dispatch(&mut self, peer: &UserId, frame: &Value) {
+        if self.is_own_person(peer) {
+            // From another device of ours: the sync log and files, and the link's own upkeep. Nothing else (a device of
+            // ours is not a friend writing to us).
+            match frame.get("kind").and_then(Value::as_str) {
+                Some("keys") => self.on_keys_frame(peer, frame),
+                Some("sync") => self.on_sync_frame(peer, frame),
+                Some("media_want") => self.on_media_want(peer, frame),
+                Some("media_piece") => self.on_media_piece(frame),
+                Some("ping") => {
+                    let at = frame.get("at").cloned().unwrap_or(Value::Null);
+                    self.send_secure(
+                        peer,
+                        &json!({ "v": PROTOCOL_VERSION, "kind": "pong", "at": at }),
+                    );
+                }
+                _ => {}
+            }
+            return;
+        }
         match frame.get("kind").and_then(Value::as_str) {
             Some("message") => self.on_message(peer, frame),
             Some("ack") => self.on_ack(peer, frame),
@@ -1765,11 +1789,13 @@ impl Core {
     /// Ask for a dial to each person whose link is down and whose backoff has passed (5 s doubling to 2 minutes, a few
     /// at a time, never past the open-link cap).
     fn request_dials(&mut self, now: i64) {
-        let addresses: Vec<UserId> = self
+        let mut addresses: Vec<UserId> = self
             .contacts
             .keys()
             .flat_map(|uid| self.addresses_of(uid))
             .collect();
+        // Our own other devices too: they sync directly when they can reach each other (step 7).
+        addresses.extend(self.own_other_devices());
         let links: Vec<LinkInfo> = addresses
             .iter()
             .map(|uid| {
@@ -1800,8 +1826,10 @@ impl Core {
             let p = self.peers.entry(peer.clone()).or_insert_with(Peer::offline);
             p.last_attempt_at = now;
             p.attempts = p.attempts.saturating_add(1);
+            // Compared as the two ends name each other, so two devices of one account agree too.
+            let me = self.as_me(&peer).unwrap_or_else(|| own.clone());
             self.hub.publish(EngineEvent::DialRequested {
-                initiator: is_initiator(own.as_str(), uid.as_str()),
+                initiator: is_initiator(me.as_str(), uid.as_str()),
                 peer,
             });
         }

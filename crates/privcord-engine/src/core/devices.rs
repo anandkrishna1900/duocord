@@ -179,6 +179,17 @@ impl Core {
     /// Whether `addr` is a way to reach a contact of ours: their account, or a device on their list (as we know it).
     pub(super) fn known_address(&self, addr: &UserId) -> bool {
         let person = Self::person_of(addr);
+        if Some(&person) == self.uid.as_ref() {
+            // Another device of ours, never this one and never the bare account.
+            return Self::device_of(addr).is_some_and(|d| {
+                Some(d) != self.device_id.as_deref()
+                    && self
+                        .device_list
+                        .as_ref()
+                        .and_then(|l| l.get(d))
+                        .is_some_and(|e| e.active())
+            });
+        }
         if !self.contacts.contains_key(&person) {
             return false;
         }
@@ -281,6 +292,23 @@ impl Core {
         }
     }
 
+    /// Whether an address is one of our own other devices.
+    pub(super) fn is_own_person(&self, addr: &UserId) -> bool {
+        self.uid.as_ref() == Some(&Self::person_of(addr)) && Self::device_of(addr).is_some()
+    }
+
+    /// Our other devices, by address (only once the account has several and this install has its sync key).
+    pub(super) fn own_other_devices(&self) -> Vec<UserId> {
+        let (Some(uid), Some(list), Some(me)) = (&self.uid, &self.device_list, &self.device_id)
+        else {
+            return Vec::new();
+        };
+        list.active()
+            .filter(|d| &d.id != me)
+            .filter_map(|d| Self::device_address(uid, &d.id))
+            .collect()
+    }
+
     /// Every address of a person with a live link up now.
     pub(super) fn ready_addresses(&self, person: &UserId) -> Vec<UserId> {
         self.peers
@@ -325,6 +353,9 @@ impl Core {
     pub(super) fn as_me(&self, peer: &UserId) -> Option<UserId> {
         if let Some(a) = self.peers.get(peer).and_then(|p| p.as_me.clone()) {
             return Some(a);
+        }
+        if self.is_own_person(peer) {
+            return self.own_address();
         }
         // A friend whose app predates device lists checks only the account key: the install holding it speaks to them
         // as the account (a linked device cannot; what it writes to them goes out from the install that can, see
@@ -399,6 +430,16 @@ impl Core {
 
     /// What we know of a friend's account: the keys on their card and the newest device list of theirs we have seen.
     pub(super) fn contact_keys(&self, uid: &UserId) -> Option<AccountKeys> {
+        if Some(uid) == self.uid.as_ref() {
+            // Ourselves (another device of ours): the account's keys and our own list.
+            let (sign, dh) = self.account.clone()?;
+            return Some(AccountKeys::new(
+                uid.clone(),
+                sign,
+                dh,
+                self.device_list.clone(),
+            ));
+        }
         let card = &self.contacts.get(uid)?.contact.card;
         let list = self
             .ports
@@ -419,7 +460,7 @@ impl Core {
     /// A friend's device list arrived (with something one of their devices sent, or as a notice): kept if it is the
     /// first we have or extends the one we have.
     pub(super) fn learn_contact_list(&mut self, uid: &UserId, list: &DeviceList) {
-        if self.old_version {
+        if self.old_version || Some(uid) == self.uid.as_ref() {
             return;
         }
         let Some(mut keys) = self.contact_keys(uid) else {

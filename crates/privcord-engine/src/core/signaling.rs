@@ -235,6 +235,15 @@ impl Core {
             return;
         }
         self.note_devices(&from, &Value::Object(payload.clone()));
+        // From another device of ours: only connection setup and keys (sync and files have their own paths).
+        if self.is_own_person(&from)
+            && !matches!(
+                payload.get("t").and_then(Value::as_str),
+                Some("ready" | "offer" | "answer" | "keys")
+            )
+        {
+            return;
+        }
         // They reached us at `own`: that is who we are on this route.
         self.peers
             .entry(from.clone())

@@ -13,7 +13,7 @@
 use super::{Core, StorageOp};
 use crate::api::EngineEvent;
 use privcord_crypto::media::{file_key, seal_media_with, MediaAssembler, MediaBox, MediaRef};
-use privcord_domain::{signaling::PutKind, MessageId};
+use privcord_domain::{signaling::PutKind, MessageId, UserId};
 use privcord_ports::StoredFile;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -40,6 +40,10 @@ pub(super) struct Wanted {
 pub(super) struct MediaState {
     /// Files coming down, by mailbox label.
     fetching: HashMap<String, (MessageId, MediaAssembler)>,
+    /// Labels we listen on at the relay.
+    subscribed: std::collections::HashSet<String>,
+    /// (label, device address) pairs already asked for a file over a direct link.
+    asked: std::collections::HashSet<(String, String)>,
     /// Whether bulk work may run now (the background plan; on until a platform says otherwise).
     bulk: bool,
 }
@@ -48,6 +52,8 @@ impl Default for MediaState {
     fn default() -> Self {
         Self {
             fetching: HashMap::new(),
+            subscribed: std::collections::HashSet::new(),
+            asked: std::collections::HashSet::new(),
             bulk: true,
         }
     }
@@ -146,25 +152,44 @@ impl Core {
     /// Bulk work for media, when allowed: one file's pieces go up per tick, and every file still to come down is
     /// listened for.
     pub(super) fn tick_media(&mut self) {
-        if !self.media.bulk || !self.ports.transport.signal_available() {
+        if !self.media.bulk {
             return;
         }
-        self.upload_one();
+        let relay = self.ports.transport.signal_available();
         let wanted: BTreeMap<String, Wanted> = self.kv_json(KV_IN).unwrap_or_default();
-        for (id, w) in wanted {
+        for (id, w) in &wanted {
             let (Ok(mid), Ok(mbox)) = (MessageId::new(id.as_str()), MediaBox::of(&w.reference))
             else {
                 continue;
             };
-            if self.media.fetching.contains_key(&mbox.label) {
-                continue;
+            if !self.media.fetching.contains_key(&mbox.label) {
+                let Some(asm) = MediaAssembler::new(w.reference.clone()) else {
+                    continue;
+                };
+                self.media
+                    .fetching
+                    .insert(mbox.label.clone(), (mid.clone(), asm));
             }
-            let Some(asm) = MediaAssembler::new(w.reference.clone()) else {
-                continue;
-            };
-            if self.ports.transport.signal_subscribe(&mbox.label).is_ok() {
-                self.media.fetching.insert(mbox.label, (mid, asm));
+            // Nearest first: a device of ours we are linked to directly, then the relay.
+            for peer in self.own_other_devices() {
+                if !self.peers.get(&peer).is_some_and(super::Peer::ready) {
+                    continue;
+                }
+                let key = (mbox.label.clone(), peer.to_string());
+                if self.media.asked.insert(key) {
+                    let frame = serde_json::json!({ "v": 1, "kind": "media_want", "id": mid, "ref": w.reference });
+                    self.send_secure(&peer, &frame);
+                }
             }
+            if relay
+                && !self.media.subscribed.contains(&mbox.label)
+                && self.ports.transport.signal_subscribe(&mbox.label).is_ok()
+            {
+                self.media.subscribed.insert(mbox.label);
+            }
+        }
+        if relay {
+            self.upload_one();
         }
     }
 
@@ -223,6 +248,83 @@ impl Core {
         self.media.fetching.contains_key(mailbox)
     }
 
+    /// Another device of ours asks for a file over our direct link: if we hold its bytes, cut them with the key its
+    /// reference names (the same pieces whoever cuts them) and send them, unless they do not match its root.
+    pub(super) fn on_media_want(&mut self, peer: &UserId, frame: &Value) {
+        if !self.media.bulk {
+            return;
+        }
+        let (Some(id), Some(r)) = (
+            frame
+                .get("id")
+                .and_then(Value::as_str)
+                .and_then(|i| MessageId::new(i).ok()),
+            frame
+                .get("ref")
+                .and_then(|r| serde_json::from_value::<MediaRef>(r.clone()).ok()),
+        ) else {
+            return;
+        };
+        let Some(file) = self.ports.storage.file(&id).ok().flatten() else {
+            return;
+        };
+        let Some(key) = privcord_domain::codec::decode(&r.key)
+            .and_then(|k| <[u8; 32]>::try_from(k.as_slice()).ok())
+            .map(Zeroizing::new)
+        else {
+            return;
+        };
+        let Ok(sealed) = seal_media_with(&file.bytes, &key) else {
+            return;
+        };
+        if sealed.reference.root != r.root {
+            return;
+        }
+        let codec = privcord_domain::codec::encode;
+        let piece = |i: Option<usize>, d: &[u8]| serde_json::json!({ "v": 1, "kind": "media_piece", "root": r.root, "i": i, "d": codec(d) });
+        if !self.send_secure(peer, &piece(None, &sealed.leaves)) {
+            return;
+        }
+        for (i, c) in sealed.chunks.iter().enumerate() {
+            if !self.send_secure(peer, &piece(Some(i), c)) {
+                return;
+            }
+        }
+    }
+
+    /// A piece of a file from another device of ours over a direct link: checked against the root like any other.
+    pub(super) fn on_media_piece(&mut self, frame: &Value) {
+        let (Some(root), Some(data)) = (
+            frame.get("root").and_then(Value::as_str),
+            frame
+                .get("d")
+                .and_then(Value::as_str)
+                .and_then(privcord_domain::codec::decode),
+        ) else {
+            return;
+        };
+        let Some((label, (id, asm))) = self
+            .media
+            .fetching
+            .iter_mut()
+            .find(|(_, (_, a))| a.reference().root == root)
+        else {
+            return;
+        };
+        match frame.get("i").and_then(Value::as_u64) {
+            None => {
+                asm.on_leaves(&data);
+            }
+            Some(i) => {
+                asm.on_chunk(u32::try_from(i).unwrap_or(u32::MAX), &data);
+            }
+        }
+        if asm.complete() {
+            let (label, id) = (label.clone(), id.clone());
+            self.media_done(&label, &id);
+        }
+    }
+
     /// A piece of a file we are fetching. Only pieces posted by a device on the account's list, and only what checks
     /// out against the file's root, are kept.
     pub(super) fn media_blob(&mut self, mailbox: &str, blob: &privcord_domain::blob::SealedBlob) {
@@ -258,7 +360,10 @@ impl Core {
         let Some((_, asm)) = self.media.fetching.remove(mailbox) else {
             return;
         };
-        self.ports.transport.signal_unsubscribe(mailbox);
+        if self.media.subscribed.remove(mailbox) {
+            self.ports.transport.signal_unsubscribe(mailbox);
+        }
+        self.media.asked.retain(|(l, _)| l != mailbox);
         let mut wanted: BTreeMap<String, Wanted> = self.kv_json(KV_IN).unwrap_or_default();
         let Some(w) = wanted.remove(id.as_str()) else {
             return;

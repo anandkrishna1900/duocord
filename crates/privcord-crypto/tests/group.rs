@@ -377,3 +377,130 @@ fn tampering_missing_parents_and_foreign_groups_are_refused() {
         AddStatus::Invalid
     );
 }
+
+#[test]
+fn a_device_on_the_members_list_changes_the_group_and_a_removed_one_stops_at_its_removal() {
+    use privcord_crypto::devices::{Author, DeviceEntry, DeviceList};
+    use privcord_crypto::group::sign_group_event_as;
+    let mut rng = SeededEntropy::new("group-devices");
+    let id = |rng: &mut SeededEntropy| Identity::generate(rng).unwrap();
+    let (ann, phone, laptop, bob, cat, eve) = (
+        id(&mut rng),
+        id(&mut rng),
+        id(&mut rng),
+        id(&mut rng),
+        id(&mut rng),
+        id(&mut rng),
+    );
+    let au = ann.uid().unwrap();
+    let laptop_id =
+        privcord_crypto::devices::device_id(&laptop.sign_public(), &laptop.dh_public()).unwrap();
+    let two = DeviceList::first(&ann, &phone, "Phone", 1)
+        .unwrap()
+        .with_added(&ann, DeviceEntry::new(&laptop, "Laptop", 2).unwrap())
+        .unwrap();
+    let card = |i: &Identity, n: &str| ContactCard::of(i, Some(n)).unwrap();
+    let event = |author: &Author<'_>,
+                 group: &str,
+                 kind: EventType,
+                 ts: i64,
+                 deps: Vec<String>,
+                 target: Option<&Identity>,
+                 name: Option<&str>| {
+        sign_group_event_as(
+            author,
+            NewEvent {
+                group_id: group.into(),
+                kind,
+                actor: au.to_string(),
+                ts,
+                deps,
+                target: target.map(|t| t.uid().unwrap().to_string()),
+                card: match kind {
+                    EventType::Create => Some(card(&ann, "Ann")),
+                    EventType::Add => target.map(|t| card(t, "X")),
+                    _ => None,
+                },
+                name: name.map(str::to_owned),
+            },
+        )
+        .unwrap()
+        .to_value()
+    };
+    let as_ann = Author::account(&au, &ann);
+    let as_laptop = Author::device(&au, &laptop, &two);
+    let create = event(
+        &as_ann,
+        "",
+        EventType::Create,
+        1000,
+        vec![],
+        None,
+        Some("G"),
+    );
+    let gid = create["groupId"].as_str().unwrap().to_owned();
+    let mut log = GroupLog::new(&gid);
+    assert_eq!(log.add(&create), AddStatus::Applied);
+    let head = || vec![create["eventId"].as_str().unwrap().to_owned()];
+
+    // The laptop (no account key) adds Bob: its list vouches for it.
+    let add_bob = event(
+        &as_laptop,
+        &gid,
+        EventType::Add,
+        2000,
+        head(),
+        Some(&bob),
+        None,
+    );
+    log.add(&add_bob);
+    assert!(log.is_effective(add_bob["eventId"].as_str().unwrap()));
+    assert!(roster(&log).contains(&bob.uid().unwrap().to_string()));
+
+    // A device not on Ann's list, carrying her list: no effect.
+    let as_eve = Author::device(&au, &eve, &two);
+    let add_cat = event(
+        &as_eve,
+        &gid,
+        EventType::Add,
+        2500,
+        head(),
+        Some(&cat),
+        None,
+    );
+    log.add(&add_cat);
+    assert!(!log.is_effective(add_cat["eventId"].as_str().unwrap()));
+
+    // Ann removes the laptop at 5000; her next change carries the new list.
+    let three = two.with_removed(&ann, &laptop_id, 5000).unwrap();
+    let as_ann_with_list = Author {
+        list: Some(&three),
+        ..as_ann
+    };
+    let rename = event(
+        &as_ann_with_list,
+        &gid,
+        EventType::Rename,
+        6000,
+        vec![add_bob["eventId"].as_str().unwrap().to_owned()],
+        None,
+        Some("H"),
+    );
+    log.add(&rename);
+    assert!(log.is_effective(rename["eventId"].as_str().unwrap()));
+    // Whatever the laptop signs after its removal, with the old list it still has, does nothing...
+    let late = event(
+        &as_laptop,
+        &gid,
+        EventType::Add,
+        7000,
+        vec![rename["eventId"].as_str().unwrap().to_owned()],
+        Some(&cat),
+        None,
+    );
+    log.add(&late);
+    assert!(!log.is_effective(late["eventId"].as_str().unwrap()));
+    // ...and what it did before stands.
+    assert!(log.is_effective(add_bob["eventId"].as_str().unwrap()));
+    assert!(!roster(&log).contains(&cat.uid().unwrap().to_string()));
+}

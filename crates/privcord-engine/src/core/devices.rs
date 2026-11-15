@@ -358,6 +358,22 @@ impl Core {
         }
     }
 
+    /// Who signs a change to a group: the account key where this install holds it (members on older apps check only that),
+    /// else this device. Once the account has several devices the change carries the account's list, so every member
+    /// learns of a device the account removed.
+    pub(super) fn group_author<'a>(
+        uid: Option<&'a UserId>,
+        identity: Option<&'a Identity>,
+        sync: Option<&'a super::sync::SyncState>,
+        list: Option<&'a DeviceList>,
+    ) -> Result<Author<'a>, ErrorCode> {
+        let author = Self::author_of(uid, identity, sync, list)?;
+        Ok(Author {
+            list: list.filter(|l| l.devices.len() > 1),
+            ..author
+        })
+    }
+
     /// The account's card with `name` on it (the name is not part of what the account key signs, so a linked device
     /// can put the current one on the card it was given).
     pub(super) fn own_contact_card(&self, name: Option<&str>) -> Result<ContactCard, ErrorCode> {

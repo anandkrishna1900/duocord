@@ -365,7 +365,7 @@ export function SettingsDialog({
             <p className="muted small">
               {state.holdsAccountKey
                 ? 'Your chats stay in step on every device you link, with no server in between. Your account key stays on this device.'
-                : 'This device was linked to your account. Linking more devices, and changing groups, is done from the device that holds your account key.'}
+                : 'This device was linked to your account. Linking more devices is done from the device that holds your account key.'}
             </p>
             <DeviceLinkDialog open={linking} mode="host" engine={engine} state={state} onClose={() => setLinking(false)} />
           </section>

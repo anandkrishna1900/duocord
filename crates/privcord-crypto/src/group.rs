@@ -9,6 +9,7 @@
 use crate::{
     canonical::canonical_json,
     card::ContactCard,
+    devices::{Author, DeviceList},
     error::CryptoError,
     identity::{uid_from_keys, verify_identity_proof, verify_signature, Identity},
     kdf::sha256_hex,
@@ -68,6 +69,9 @@ pub struct GroupEvent {
     pub card: Option<ContactCard>,
     pub name: Option<String>,
     pub sig: String,
+    /// When a device of the actor's account signed it (not the account key): the account-signed device list that
+    /// vouches for that device. Not part of the event id or of what is signed.
+    pub devices: Option<DeviceList>,
 }
 
 fn card_body(c: &ContactCard) -> Value {
@@ -134,8 +138,14 @@ pub struct NewEvent {
     pub name: Option<String>,
 }
 
-/// Sign an event as `identity`. A `create` event's id becomes the group id.
+/// Sign an event as `identity` (the account key). A `create` event's id becomes the group id.
 pub fn sign_group_event(identity: &Identity, new: NewEvent) -> Result<GroupEvent, CryptoError> {
+    let uid = identity.uid()?;
+    sign_group_event_as(&Author::account(&uid, identity), new)
+}
+
+/// Sign an event as `author`: the account key, or one of its devices (the event then carries the account's list).
+pub fn sign_group_event_as(author: &Author<'_>, new: NewEvent) -> Result<GroupEvent, CryptoError> {
     let mut deps = new.deps;
     deps.sort_by(|a, b| cmp_utf16(a, b));
     let mut e = GroupEvent {
@@ -153,12 +163,13 @@ pub fn sign_group_event(identity: &Identity, new: NewEvent) -> Result<GroupEvent
         card: new.card,
         name: new.name,
         sig: String::new(),
+        devices: author.list.cloned(),
     };
     e.event_id = event_id(&e, &e.group_id)?;
     if e.kind == EventType::Create {
         e.group_id = e.event_id.clone();
     }
-    e.sig = codec::encode(&identity.sign_message(&signed_text(&e)?));
+    e.sig = codec::encode(&author.sign(&signed_text(&e)?));
     Ok(e)
 }
 
@@ -183,6 +194,11 @@ impl GroupEvent {
             o.insert("name".into(), json!(n));
         }
         o.insert("sig".into(), json!(self.sig));
+        if let Some(list) = &self.devices {
+            if let Ok(v) = serde_json::to_value(list) {
+                o.insert("devices".into(), v);
+            }
+        }
         Value::Object(o)
     }
 
@@ -230,6 +246,10 @@ impl GroupEvent {
             }
         };
         let sig = o.get("sig")?.as_str()?.to_owned();
+        let devices = match o.get("devices") {
+            None => None,
+            Some(d) => Some(serde_json::from_value::<DeviceList>(d.clone()).ok()?),
+        };
         let card = match o.get("card") {
             None => None,
             Some(c) => Some(card_from_value(c)?),
@@ -256,6 +276,7 @@ impl GroupEvent {
             card,
             name,
             sig,
+            devices,
         })
     }
 }
@@ -537,22 +558,68 @@ impl GroupLog {
         out
     }
 
-    fn verify_sig(&mut self, e: &GroupEvent, signer: &ContactCard) -> bool {
-        let key = (
-            e.event_id.clone(),
-            format!("{}.{}.{}", signer.sign.x, signer.sign.y, e.sig),
-        );
-        if let Some(hit) = self.sig_cache.get(&key) {
+    fn cached_sig(&mut self, e: &GroupEvent, key: &PublicJwk) -> bool {
+        let k = (e.event_id.clone(), format!("{}.{}.{}", key.x, key.y, e.sig));
+        if let Some(hit) = self.sig_cache.get(&k) {
             return *hit;
         }
-        let ok = signature_valid(e, &signer.sign);
-        self.sig_cache.insert(key, ok);
+        let ok = signature_valid(e, key);
+        self.sig_cache.insert(k, ok);
         ok
+    }
+
+    /// The newest device list of `actor`'s account carried by any event in this log (checked against their card). Every
+    /// member holds the same events once in step, so every member reaches the same answer.
+    fn newest_list(&self, actor: &str, card: &ContactCard) -> Option<DeviceList> {
+        self.events
+            .values()
+            .filter(|e| e.actor == actor)
+            .filter_map(|e| e.devices.as_ref())
+            .filter(|l| l.account == actor && l.verify(&card.sign, &card.dh).is_ok())
+            .max_by_key(|l| l.version)
+            .cloned()
+    }
+
+    /// Whether `e` was signed for its actor (whose card is `card`): by the account key, or by a device on the list the
+    /// event carries. A device that the newest list in the log has removed counts only for events dated before its
+    /// removal.
+    fn verify_sig(
+        &mut self,
+        e: &GroupEvent,
+        card: &ContactCard,
+        newest: &mut HashMap<String, Option<DeviceList>>,
+    ) -> bool {
+        if self.cached_sig(e, &card.sign) {
+            return true;
+        }
+        let Some(list) = e.devices.clone() else {
+            return false;
+        };
+        if list.account != e.actor || list.verify(&card.sign, &card.dh).is_err() {
+            return false;
+        }
+        let Some(device) = list
+            .active()
+            .find(|d| self.cached_sig(e, &d.sign))
+            .map(|d| d.id.clone())
+        else {
+            return false;
+        };
+        let latest = newest
+            .entry(e.actor.clone())
+            .or_insert_with(|| self.newest_list(&e.actor, card))
+            .clone();
+        let removed_at = latest
+            .as_ref()
+            .and_then(|l| l.get(&device))
+            .and_then(|d| d.removed_at);
+        removed_at.is_none_or(|r| e.ts < r)
     }
 
     fn refold(&mut self) {
         let mut state: Option<GroupState> = None;
         let mut valid = BTreeSet::new();
+        let mut newest: HashMap<String, Option<DeviceList>> = HashMap::new();
         for e in self.order() {
             if e.kind == EventType::Create {
                 let Some(card) = e.card.as_ref() else {
@@ -561,7 +628,7 @@ impl GroupLog {
                 if state.is_some() || !e.deps.is_empty() || e.group_id != e.event_id {
                     continue;
                 }
-                if !card_is_valid(card, &e.actor) || !self.verify_sig(&e, card) {
+                if !card_is_valid(card, &e.actor) || !self.verify_sig(&e, card, &mut newest) {
                     continue;
                 }
                 let mut members = BTreeMap::new();
@@ -587,22 +654,7 @@ impl GroupLog {
             let Some(author) = s.members.get(&e.actor).cloned() else {
                 continue;
             };
-            // Borrow juggling: verification needs `self`, so take the state out for the call.
-            let ok_sig = {
-                let key = (
-                    e.event_id.clone(),
-                    format!("{}.{}.{}", author.card.sign.x, author.card.sign.y, e.sig),
-                );
-                match self.sig_cache.get(&key) {
-                    Some(hit) => *hit,
-                    None => {
-                        let ok = signature_valid(&e, &author.card.sign);
-                        self.sig_cache.insert(key, ok);
-                        ok
-                    }
-                }
-            };
-            if !ok_sig {
+            if !self.verify_sig(&e, &author.card, &mut newest) {
                 continue;
             }
             let target = e.target.clone().unwrap_or_default();

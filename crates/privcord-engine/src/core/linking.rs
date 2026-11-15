@@ -8,8 +8,8 @@
 //! and the device list with itself in it. The account's private keys never leave the first device.
 //!
 //! The new device then asks the others for the sync key (its device inbox, `core/sync.rs`) and catches up on the
-//! account's history. It talks to friends as itself (per-device delivery, docs/design/syncengine.md §4); what needs the
-//! account key (changing a group, linking another device) answers [`ErrorCode::NeedsAccountKey`].
+//! account's history. It talks to friends and changes groups as itself (docs/design/syncengine.md §4); linking another
+//! device needs the account key and answers [`ErrorCode::NeedsAccountKey`].
 //!
 //! An offer lasts ten minutes and serves one new device.
 

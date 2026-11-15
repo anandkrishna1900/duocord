@@ -51,7 +51,7 @@ fun DevicesSection(state: ChatState, onLinkNew: () -> Unit) {
         if (state.holdsAccountKey) {
             "Your chats stay in step on every device you link, with no server in between. Your account key stays on this phone."
         } else {
-            "This device was linked to your account. Linking more devices, and changing groups, is done from the device that holds your account key."
+            "This device was linked to your account. Linking more devices is done from the device that holds your account key."
         },
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,

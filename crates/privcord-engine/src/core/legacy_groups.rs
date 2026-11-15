@@ -139,8 +139,6 @@ impl Core {
     /// group. Returns the new group's id.
     pub fn recreate_legacy_group(&mut self, old_id: &str) -> Result<String, ErrorCode> {
         self.require_live()?;
-        // Changes the group, which is signed by the account key: not from a linked device (step 5e).
-        self.identity()?;
         let g = self
             .legacy_groups
             .iter()

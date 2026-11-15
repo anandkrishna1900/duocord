@@ -500,13 +500,9 @@ fn a_device_linked_by_code_gets_the_history_but_never_the_account_key() {
         .any(|c| c.uid == fran));
     assert_eq!(laptop.texts(), ["before the laptop"]);
 
-    // Changing a group needs the account key (its history is signed by it): the laptop says so, before storing
-    // anything.
+    // Linking another device needs the account key (it signs the list): the laptop says so.
     assert_eq!(
-        laptop
-            .core
-            .create_group("Laptop group", std::slice::from_ref(&fran))
-            .err(),
+        laptop.core.start_device_link().err(),
         Some(privcord_engine::ErrorCode::NeedsAccountKey)
     );
 
@@ -937,4 +933,69 @@ fn a_friend_on_an_old_version_is_still_reached_from_every_device() {
     laptop.online(&mut relay);
     assert!(phone.texts().contains(&"hi Pat".to_owned()));
     assert!(laptop.texts().contains(&"hi Pat".to_owned()));
+}
+
+#[test]
+fn a_linked_device_creates_and_changes_a_group() {
+    use privcord_domain::state::ConnectionPath;
+    let clock = FakeClock::at(1_700_000_000_000);
+    let mut relay = Relay::default();
+    let mut phone = Device::new("phone", &clock);
+    phone.core.create_identity().unwrap();
+    let mut fran = Device::new("fran", &clock);
+    fran.core.create_identity().unwrap();
+    let fran_uid = fran.core.own_uid().unwrap().clone();
+    let pat = phone.core.own_uid().unwrap().clone();
+    phone
+        .core
+        .add_contact(
+            &fran.core.own_card(Some("Fran")).unwrap(),
+            ContactTrust::Verified,
+        )
+        .unwrap();
+    fran.core
+        .add_contact(
+            &phone.core.own_card(Some("Pat")).unwrap(),
+            ContactTrust::Verified,
+        )
+        .unwrap();
+    let mut laptop = link_laptop(&mut phone, &mut relay, &clock);
+    fran.online(&mut relay);
+    let laptop_addr =
+        UserId::new(format!("{pat}.{}", laptop.core.this_device_id().unwrap())).unwrap();
+    laptop.transport.set_connected(&fran_uid, true);
+    fran.transport.set_connected(&laptop_addr, true);
+    laptop
+        .core
+        .link_up(&fran_uid, ConnectionPath::DirectLan)
+        .unwrap();
+    fran.core
+        .link_up(&laptop_addr, ConnectionPath::DirectLan)
+        .unwrap();
+    pump_link(&mut laptop, &laptop_addr, &mut fran, &fran_uid);
+
+    // The laptop has no account key, and still makes the group: Fran's app checks the laptop against Pat's list.
+    let gid = laptop
+        .core
+        .create_group("Weekend", std::slice::from_ref(&fran_uid))
+        .unwrap();
+    pump_link(&mut laptop, &laptop_addr, &mut fran, &fran_uid);
+    let group_on = |d: &Device| {
+        d.core
+            .snapshot()
+            .groups
+            .into_iter()
+            .find(|g| g.group_id == gid)
+    };
+    let on_fran = group_on(&fran).expect("Fran is in the group");
+    assert_eq!(on_fran.name, "Weekend");
+    laptop.core.rename_group(&gid, "Long weekend").unwrap();
+    pump_link(&mut laptop, &laptop_addr, &mut fran, &fran_uid);
+    assert_eq!(group_on(&fran).unwrap().name, "Long weekend");
+
+    // The phone has the group through sync.
+    laptop.online(&mut relay);
+    phone.online(&mut relay);
+    phone.online(&mut relay);
+    assert_eq!(group_on(&phone).expect("on the phone").name, "Long weekend");
 }

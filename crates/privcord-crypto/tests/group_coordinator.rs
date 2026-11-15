@@ -7,6 +7,7 @@
     clippy::indexing_slicing
 )]
 
+use privcord_crypto::devices::Author;
 use privcord_crypto::{
     card::ContactCard,
     group_coordinator::{
@@ -21,6 +22,7 @@ use std::collections::BTreeSet;
 
 struct Person {
     id: Identity,
+    user: privcord_domain::UserId,
     card: ContactCard,
     uid: String,
     coord: GroupCoordinator,
@@ -37,6 +39,7 @@ fn person(n: u8) -> Person {
     let uid = id.uid().unwrap().to_string();
     let coord = GroupCoordinator::new(&uid, card.clone());
     Person {
+        user: id.uid().unwrap(),
         id,
         card,
         uid,
@@ -119,7 +122,7 @@ fn a_group_forms_by_introduction_with_nobody_sharing_codes() {
     let (gid, created) = ann
         .coord
         .create_group(
-            &ann.id,
+            &Author::account(&ann.user, &ann.id),
             "Friends",
             &[bob.card.clone(), cat.card.clone()],
             1000,
@@ -166,7 +169,12 @@ fn news_is_gossiped_to_members_the_author_cannot_reach() {
     dan.known = BTreeSet::from([ann.uid.clone()]);
     let (gid, created) = ann
         .coord
-        .create_group(&ann.id, "G", &[bob.card.clone(), cat.card.clone()], 1000)
+        .create_group(
+            &Author::account(&ann.user, &ann.id),
+            "G",
+            &[bob.card.clone(), cat.card.clone()],
+            1000,
+        )
         .unwrap();
     let a = ann.uid.clone();
     flood(&mut [&mut bob, &mut cat], &a, created.outgoing);
@@ -174,7 +182,7 @@ fn news_is_gossiped_to_members_the_author_cannot_reach() {
     // Bob adds Dan. Bob is linked to Ann only: Ann learns it from Bob's push, and Ann gossips it to Cat.
     let added = bob
         .coord
-        .add_member(&bob.id, &gid, &dan.card, 2000)
+        .add_member(&Author::account(&bob.user, &bob.id), &gid, &dan.card, 2000)
         .unwrap();
     let b = bob.uid.clone();
     // Bob's frames to Cat are dropped (no link); only Ann and Dan are reachable.
@@ -201,7 +209,12 @@ fn history_syncs_on_link_open_and_a_missing_group_is_pushed() {
     bob.known = BTreeSet::from([ann.uid.clone()]);
     let (gid, created) = ann
         .coord
-        .create_group(&ann.id, "G", std::slice::from_ref(&bob.card), 1000)
+        .create_group(
+            &Author::account(&ann.user, &ann.id),
+            "G",
+            std::slice::from_ref(&bob.card),
+            1000,
+        )
         .unwrap();
     // Bob never got the frames (he was offline). When the link opens he says "I have nothing"; Ann pushes the group.
     drop(created);
@@ -214,7 +227,9 @@ fn history_syncs_on_link_open_and_a_missing_group_is_pushed() {
     assert!(bob.coord.is_member(&gid, &b));
 
     // After that, one more event Bob lacks is sent when Ann reports what she has.
-    ann.coord.rename(&ann.id, &gid, "Renamed", 3000).unwrap();
+    ann.coord
+        .rename(&Author::account(&ann.user, &ann.id), &gid, "Renamed", 3000)
+        .unwrap();
     let have = ann.coord.on_link_open(&b);
     flood(&mut [&mut ann, &mut bob], &a, have);
     assert_eq!(bob.coord.state(&gid).unwrap().name, "Renamed");
@@ -227,7 +242,12 @@ fn only_members_can_pull_history_and_spam_for_a_foreign_group_is_forgotten() {
     eve.known = BTreeSet::from([ann.uid.clone()]);
     let (gid, _) = ann
         .coord
-        .create_group(&ann.id, "Secret", std::slice::from_ref(&bob.card), 1000)
+        .create_group(
+            &Author::account(&ann.user, &ann.id),
+            "Secret",
+            std::slice::from_ref(&bob.card),
+            1000,
+        )
         .unwrap();
     // Eve is a contact but not a member: asking about the group gets nothing back, not even a hint it exists.
     let ask = GroupFrame::Have {
@@ -238,7 +258,10 @@ fn only_members_can_pull_history_and_spam_for_a_foreign_group_is_forgotten() {
     assert!(r.outgoing.is_empty());
 
     // Eve (a known contact) pushes Bob a group he is not in: it is not kept.
-    let (spam_gid, spam) = eve.coord.create_group(&eve.id, "Spam", &[], 1000).unwrap();
+    let (spam_gid, spam) = eve
+        .coord
+        .create_group(&Author::account(&eve.user, &eve.id), "Spam", &[], 1000)
+        .unwrap();
     bob.known = BTreeSet::from([eve.uid.clone(), ann.uid.clone()]);
     let eve_uid = eve.uid.clone();
     let frames: Vec<GroupFrame> = eve.coord.export()[&spam_gid]
@@ -260,7 +283,12 @@ fn only_members_can_pull_history_and_spam_for_a_foreign_group_is_forgotten() {
     let mut mallory = person(6);
     let (m_gid, _) = mallory
         .coord
-        .create_group(&mallory.id, "Hi", std::slice::from_ref(&bob.card), 1000)
+        .create_group(
+            &Author::account(&mallory.user, &mallory.id),
+            "Hi",
+            std::slice::from_ref(&bob.card),
+            1000,
+        )
         .unwrap();
     let m_frames: Vec<GroupFrame> = mallory.coord.export()[&m_gid]
         .iter()
@@ -286,24 +314,29 @@ fn the_ten_member_cap_removal_leaving_and_messages_are_enforced() {
     let cards: Vec<ContactCard> = members.iter().map(|m| m.card.clone()).collect();
     assert_eq!(
         ann.coord
-            .create_group(&ann.id, "Big", &cards, 1000)
+            .create_group(&Author::account(&ann.user, &ann.id), "Big", &cards, 1000)
             .unwrap_err(),
         GroupError::TooManyMembers
     );
     let (gid, _) = ann
         .coord
-        .create_group(&ann.id, "Big", &cards[..9], 1000)
+        .create_group(
+            &Author::account(&ann.user, &ann.id),
+            "Big",
+            &cards[..9],
+            1000,
+        )
         .unwrap();
     assert_eq!(ann.coord.state(&gid).unwrap().members.len(), 10);
     assert_eq!(
         ann.coord
-            .add_member(&ann.id, &gid, &cards[9], 2000)
+            .add_member(&Author::account(&ann.user, &ann.id), &gid, &cards[9], 2000)
             .unwrap_err(),
         GroupError::Full
     );
     assert_eq!(
         ann.coord
-            .add_member(&ann.id, &gid, &cards[0], 2000)
+            .add_member(&Author::account(&ann.user, &ann.id), &gid, &cards[0], 2000)
             .unwrap_err(),
         GroupError::AlreadyMember
     );
@@ -313,24 +346,34 @@ fn the_ten_member_cap_removal_leaving_and_messages_are_enforced() {
     bob.known = BTreeSet::from([ann.uid.clone()]);
     let (gid2, created) = ann
         .coord
-        .create_group(&ann.id, "Small", std::slice::from_ref(&bob.card), 3000)
+        .create_group(
+            &Author::account(&ann.user, &ann.id),
+            "Small",
+            std::slice::from_ref(&bob.card),
+            3000,
+        )
         .unwrap();
     let a = ann.uid.clone();
     flood(&mut [&mut bob], &a, created.outgoing);
     assert_eq!(
         bob.coord
-            .remove_member(&bob.id, &gid2, &a, 4000)
+            .remove_member(&Author::account(&bob.user, &bob.id), &gid2, &a, 4000)
             .unwrap_err(),
         GroupError::NotAllowed
     );
-    let left = bob.coord.leave(&bob.id, &gid2, 5000).unwrap();
+    let left = bob
+        .coord
+        .leave(&Author::account(&bob.user, &bob.id), &gid2, 5000)
+        .unwrap();
     assert_eq!(left.left, vec![gid2.clone()]);
     assert_eq!(
         bob.coord.check_message(&a, &gid2),
         MessageVerdict::NotMember
     );
     assert_eq!(
-        bob.coord.rename(&bob.id, &gid2, "x", 6000).unwrap_err(),
+        bob.coord
+            .rename(&Author::account(&bob.user, &bob.id), &gid2, "x", 6000)
+            .unwrap_err(),
         GroupError::NotMember
     );
     // Ann first asks for the rejected attempt Bob's leave was written after (it stays in his log), then applies the leave.
@@ -353,11 +396,21 @@ fn big_histories_travel_in_batches_and_saved_groups_reload() {
     let bob = person(2);
     let (gid, _) = ann
         .coord
-        .create_group(&ann.id, "Chatty", std::slice::from_ref(&bob.card), 1000)
+        .create_group(
+            &Author::account(&ann.user, &ann.id),
+            "Chatty",
+            std::slice::from_ref(&bob.card),
+            1000,
+        )
         .unwrap();
     for i in 0..(MAX_EVENTS_PER_FRAME + 5) {
         ann.coord
-            .rename(&ann.id, &gid, &format!("name {i}"), 2000 + i as i64)
+            .rename(
+                &Author::account(&ann.user, &ann.id),
+                &gid,
+                &format!("name {i}"),
+                2000 + i as i64,
+            )
             .unwrap();
     }
     let have = GroupFrame::Have {

@@ -1978,18 +1978,22 @@ impl Core {
 
     pub fn create_group(&mut self, name: &str, members: &[UserId]) -> Result<String, ErrorCode> {
         self.require_live()?;
-        // Changes the group, which is signed by the account key: not from a linked device (step 5e).
-        self.identity()?;
         let cards = members
             .iter()
             .map(|u| self.card_of(u))
             .collect::<Result<Vec<_>, _>>()?;
         let now = self.now();
-        let (Some(groups), Some(id)) = (self.groups.as_mut(), self.identity.as_ref()) else {
+        let author = Self::group_author(
+            self.uid.as_ref(),
+            self.identity.as_ref(),
+            self.sync.as_ref(),
+            self.device_list.as_ref(),
+        )?;
+        let Some(groups) = self.groups.as_mut() else {
             return Err(ErrorCode::NoIdentity);
         };
         let (group_id, result) = groups
-            .create_group(id, name, &cards, now)
+            .create_group(&author, name, &cards, now)
             .map_err(|e| Self::group_error(&e))?;
         self.finish_group_result(result)?;
         Ok(group_id)
@@ -1997,57 +2001,73 @@ impl Core {
 
     pub fn add_group_member(&mut self, group_id: &str, uid: &UserId) -> Result<(), ErrorCode> {
         self.require_live()?;
-        // Changes the group, which is signed by the account key: not from a linked device (step 5e).
-        self.identity()?;
         let card = self.card_of(uid)?;
         let now = self.now();
-        let (Some(groups), Some(id)) = (self.groups.as_mut(), self.identity.as_ref()) else {
+        let author = Self::group_author(
+            self.uid.as_ref(),
+            self.identity.as_ref(),
+            self.sync.as_ref(),
+            self.device_list.as_ref(),
+        )?;
+        let Some(groups) = self.groups.as_mut() else {
             return Err(ErrorCode::NoIdentity);
         };
         let result = groups
-            .add_member(id, group_id, &card, now)
+            .add_member(&author, group_id, &card, now)
             .map_err(|e| Self::group_error(&e))?;
         self.finish_group_result(result)
     }
 
     pub fn remove_group_member(&mut self, group_id: &str, uid: &UserId) -> Result<(), ErrorCode> {
         self.require_live()?;
-        // Changes the group, which is signed by the account key: not from a linked device (step 5e).
-        self.identity()?;
         let now = self.now();
-        let (Some(groups), Some(id)) = (self.groups.as_mut(), self.identity.as_ref()) else {
+        let author = Self::group_author(
+            self.uid.as_ref(),
+            self.identity.as_ref(),
+            self.sync.as_ref(),
+            self.device_list.as_ref(),
+        )?;
+        let Some(groups) = self.groups.as_mut() else {
             return Err(ErrorCode::NoIdentity);
         };
         let result = groups
-            .remove_member(id, group_id, uid.as_str(), now)
+            .remove_member(&author, group_id, uid.as_str(), now)
             .map_err(|e| Self::group_error(&e))?;
         self.finish_group_result(result)
     }
 
     pub fn leave_group(&mut self, group_id: &str) -> Result<(), ErrorCode> {
         self.require_live()?;
-        // Changes the group, which is signed by the account key: not from a linked device (step 5e).
-        self.identity()?;
         let now = self.now();
-        let (Some(groups), Some(id)) = (self.groups.as_mut(), self.identity.as_ref()) else {
+        let author = Self::group_author(
+            self.uid.as_ref(),
+            self.identity.as_ref(),
+            self.sync.as_ref(),
+            self.device_list.as_ref(),
+        )?;
+        let Some(groups) = self.groups.as_mut() else {
             return Err(ErrorCode::NoIdentity);
         };
         let result = groups
-            .leave(id, group_id, now)
+            .leave(&author, group_id, now)
             .map_err(|e| Self::group_error(&e))?;
         self.finish_group_result(result)
     }
 
     pub fn rename_group(&mut self, group_id: &str, name: &str) -> Result<(), ErrorCode> {
         self.require_live()?;
-        // Changes the group, which is signed by the account key: not from a linked device (step 5e).
-        self.identity()?;
         let now = self.now();
-        let (Some(groups), Some(id)) = (self.groups.as_mut(), self.identity.as_ref()) else {
+        let author = Self::group_author(
+            self.uid.as_ref(),
+            self.identity.as_ref(),
+            self.sync.as_ref(),
+            self.device_list.as_ref(),
+        )?;
+        let Some(groups) = self.groups.as_mut() else {
             return Err(ErrorCode::NoIdentity);
         };
         let result = groups
-            .rename(id, group_id, name, now)
+            .rename(&author, group_id, name, now)
             .map_err(|e| Self::group_error(&e))?;
         self.finish_group_result(result)
     }

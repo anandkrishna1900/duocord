@@ -8,13 +8,13 @@ Status meanings: **Ported, tested** = the Rust implementation exists and is chec
 
 | Status | Files | Lines |
 |---|---:|---:|
-| Ported, tested | 66 | 9797 |
-| Partly ported | 1 | 2193 |
+| Ported, tested | 66 | 9799 |
+| Partly ported | 1 | 2195 |
 | Not yet ported | 0 | 0 |
-| Stays (UI) | 61 | 13494 |
-| Stays (platform adapter) | 55 | 11246 |
+| Stays (UI) | 61 | 13510 |
+| Stays (platform adapter) | 55 | 11249 |
 | Replaced by a library | 4 | 333 |
-| **All mapped files** | **187** | **37063** |
+| **All mapped files** | **187** | **37086** |
 
 Ported does not mean retired: the TypeScript and Kotlin versions stay in production until the apps call the Rust engine (M7 desktop, M8 Android) and the compatibility gates pass (PRD section 16).
 
@@ -82,7 +82,7 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 | `apps/desktop/src/components/QrCode.tsx` | 18 | `QrCode` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/RecoveryDialogs.tsx` | 402 | `RecoveryDialogProps`, `RecoveryDialog` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/RequestDialog.tsx` | 57 | `RequestDialog` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
-| `apps/desktop/src/components/SettingsDialog.tsx` | 603 | `SettingsSection`, `SettingsDialog` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
+| `apps/desktop/src/components/SettingsDialog.tsx` | 610 | `SettingsSection`, `SettingsDialog` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/config.ts` | 14 | `config`, `isTauri` | App shell | UI | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/hooks/useChatEngine.ts` | 103 | `UseChatEngine`, `useChatEngine` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/hooks/useSettings.ts` | 33 | `useSettings` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
@@ -95,7 +95,7 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 | `apps/desktop/src/lib/clipboard.test.ts` | 25 | (none) | Presentation helpers, UI settings, themes, notifications bridge | UI / adapter (stays) | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/lib/clipboard.ts` | 24 | `copyText` | Presentation helpers, UI settings, themes, notifications bridge | UI / adapter (stays) | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/lib/encryption.ts` | 78 | `TextCipher`, `createTextCipher` | Secure storage and at-rest encryption helpers | SecureStore adapter (Tauri keyring) | Adapter | Stays (platform adapter) | Stays | n/a |
-| `apps/desktop/src/lib/engine.ts` | 2193 | `EnginePhase`, `Trust`, `ConnState`, `ContactRecord`, `LastMessage`, `ContactView` +13 | The desktop chat engine | engine: every rule, the chat list (last message, unread, delivery detail), group views, search, backups, invites, signaling, groups, files, channels, mesh, deletion. Left in TypeScript: starting and driving the WebRTC links and the Bluetooth bridge, turning events into screen state, notices and toasts, settings | Engine/Adapter | Partly ported | M7: rewire onto the engine; the WebRTC and Bluetooth driving becomes the adapter | engine integration tests |
+| `apps/desktop/src/lib/engine.ts` | 2195 | `EnginePhase`, `Trust`, `ConnState`, `ContactRecord`, `LastMessage`, `ContactView` +13 | The desktop chat engine | engine: every rule, the chat list (last message, unread, delivery detail), group views, search, backups, invites, signaling, groups, files, channels, mesh, deletion. Left in TypeScript: starting and driving the WebRTC links and the Bluetooth bridge, turning events into screen state, notices and toasts, settings | Engine/Adapter | Partly ported | M7: rewire onto the engine; the WebRTC and Bluetooth driving becomes the adapter | engine integration tests |
 | `apps/desktop/src/lib/engineApi.ts` | 80 | `SendResult`, `ChatEngineApi` | The interface the screens use to talk to a chat engine (TypeScript or Rust) | Platform seam (stays) | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/desktop/src/lib/engineBridge.test.ts` | 65 | (none) | Page side of the hosted engine: ordered inbound calls, Busy retry, Tauri events | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; M7 seam (page not rewired yet) | n/a |
 | `apps/desktop/src/lib/engineBridge.ts` | 116 | `EngineBridge`, `PathName`, `LinkKindName`, `HostedEngine`, `tauriEngineBridge` | Page side of the hosted engine: ordered inbound calls, Busy retry, Tauri events | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; M7 seam (page not rewired yet) | n/a |
@@ -107,7 +107,7 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 | `apps/desktop/src/lib/hosted/runtime.test.ts` | 308 | (none) | WebRTC and relay adapters for the hosted engine | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/desktop/src/lib/hosted/runtime.ts` | 600 | `LinkTransport`, `BleLike`, `RelayHub`, `RuntimeOptions`, `HostedRuntime` | WebRTC and relay adapters for the hosted engine | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/desktop/src/lib/hosted/shape.test.ts` | 116 | (none) | Shapes the Rust engine's snapshot into the screens' state | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; tested on a real engine snapshot | n/a |
-| `apps/desktop/src/lib/hosted/shape.ts` | 392 | `LinkStateJson`, `PathKindJson`, `DeliveryJson`, `ContactJson`, `MessageJson`, `ConversationJson` +7 | Shapes the Rust engine's snapshot into the screens' state | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; tested on a real engine snapshot | n/a |
+| `apps/desktop/src/lib/hosted/shape.ts` | 394 | `LinkStateJson`, `PathKindJson`, `DeliveryJson`, `ContactJson`, `MessageJson`, `ConversationJson` +7 | Shapes the Rust engine's snapshot into the screens' state | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; tested on a real engine snapshot | n/a |
 | `apps/desktop/src/lib/hosted/start.ts` | 36 | `startHostedEngine` | The desktop chat engine on the Rust engine: commands, state, identity migration, the on/off switch | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; opt-in until M9 | n/a |
 | `apps/desktop/src/lib/identity.ts` | 182 | `LOCAL_ID`, `DeviceIdentity`, `localDeviceId`, `createIdentityFromPhrase`, `loadIdentity`, `contactCardOf` +6 | Identity load and create | crypto::identity + engine | Engine | Ported, tested | M7 | n/a |
 | `apps/desktop/src/lib/killSwitch.test.ts` | 263 | (none) | Emergency erase steps for the webview (local storage, IndexedDB, files, Tauri commands) | engine::core::privacy runs the plan and the report; these files only call web and OS APIs | Adapter | Stays (platform adapter) | Stays | n/a |
@@ -164,7 +164,7 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 | `apps/android/app/src/main/java/com/duochat/app/data/Diagnosis.kt` | 77 | `CandidateCounts`, `ConnectionFacts`, `DiagnosisAction`, `Diagnosis`, `diagnoseConnection`, `countSdpCandidates` | Domain rules duplicated from TypeScript | domain | Domain | Ported, tested | M8 | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/data/Files.kt` | 270 | `MessageType`, `ReplyRef`, `makeReplyRef`, `FileMeta`, `DeclineReason`, `declinedFrame` +15 | Domain rules duplicated from TypeScript | domain | Domain | Ported, tested | M8 | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/data/MessageStore.kt` | 243 | `MessageStore` | Chat state models and the in-memory message store over Room | engine state (snapshot, events) and storage::SqliteStorage | Engine | Ported, tested | M8: the engine owns this state | engine and storage tests |
-| `apps/android/app/src/main/java/com/duochat/app/data/Models.kt` | 361 | `DeliveryState`, `TransportKind`, `needsDelivery`, `ChatMessage`, `OutboxRow`, `EnginePhase` +33 | Chat state models and the in-memory message store over Room | engine state (snapshot, events) and storage::SqliteStorage | Engine | Ported, tested | M8: the engine owns this state | engine and storage tests |
+| `apps/android/app/src/main/java/com/duochat/app/data/Models.kt` | 363 | `DeliveryState`, `TransportKind`, `needsDelivery`, `ChatMessage`, `OutboxRow`, `EnginePhase` +33 | Chat state models and the in-memory message store over Room | engine state (snapshot, events) and storage::SqliteStorage | Engine | Ported, tested | M8: the engine owns this state | engine and storage tests |
 | `apps/android/app/src/main/java/com/duochat/app/data/NetworkConfig.kt` | 197 | `TransportMode`, `TurnServer`, `SignalingConfig`, `NetworkConfig`, `TurnShare` | Domain rules duplicated from TypeScript | domain | Domain | Ported, tested | M8 | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/data/Preferences.kt` | 104 | `AppSettings`, `SettingsRepository` | App settings storage | UI state (stays) | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/data/Social.kt` | 106 | `deleteFrame`, `reactFrame`, `parseDelete`, `ReactionEvent`, `parseReact`, `ReactionChip` +3 | Delete/react frames, backup | domain::social, crypto::backup | Domain/Crypto | Ported, tested | M8 | n/a |
@@ -182,7 +182,7 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 | `apps/android/app/src/main/java/com/duochat/app/p2p/WebRtcTransport.kt` | 418 | `WebRtcTransport`, `PeerConnectionFactoryHolder` | ICE servers, WebRTC data channel | WebRTC adapter | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/rustcore/AndroidLan.kt` | 154 | `AndroidLan` | Android adapters for the Rust engine (Keystore secret store, on-device probe) | Platform adapter for engine ports | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/rustcore/KeystoreSecureStore.kt` | 124 | `KeystoreSecureStore` | Android adapters for the Rust engine (Keystore secret store, on-device probe) | Platform adapter for engine ports | Adapter | Stays (platform adapter) | Stays | n/a |
-| `apps/android/app/src/main/java/com/duochat/app/rustcore/RustChatEngine.kt` | 1452 | `RustChatEngine` | Android adapters for the Rust engine (Keystore secret store, on-device probe) | Platform adapter for engine ports | Adapter | Stays (platform adapter) | Stays | n/a |
+| `apps/android/app/src/main/java/com/duochat/app/rustcore/RustChatEngine.kt` | 1453 | `RustChatEngine` | Android adapters for the Rust engine (Keystore secret store, on-device probe) | Platform adapter for engine ports | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/rustcore/RustEngineProbe.kt` | 62 | `RustEngineProbe` | Android adapters for the Rust engine (Keystore secret store, on-device probe) | Platform adapter for engine ports | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/security/AndroidIdentity.kt` | 252 | `PublicJwk`, `DeviceIdentity`, `PinnedPeer`, `AndroidIdentityManager` | Keystore identity storage, at-rest encryption, biometric lock | SecureStore adapter | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/security/AppLock.kt` | 51 | `AppLock` | Keystore identity storage, at-rest encryption, biometric lock | SecureStore adapter | Adapter | Stays (platform adapter) | Stays | n/a |
@@ -209,7 +209,7 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 | `apps/android/app/src/main/java/com/duochat/app/ui/ChannelsDialog.kt` | 90 | `ChannelsDialog` | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/ui/ChatScreen.kt` | 1514 | `ChatScreen`, `Banner`, `MessageList`, `DaySeparator`, `MessageBubble`, `FileContent` +15 | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/ui/Clipboard.kt` | 34 | `copySensitive` | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
-| `apps/android/app/src/main/java/com/duochat/app/ui/DeviceLink.kt` | 262 | `DevicesSection`, `LinkHostDialog`, `LinkJoinContent`, `Digits`, `endText` | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
+| `apps/android/app/src/main/java/com/duochat/app/ui/DeviceLink.kt` | 271 | `DevicesSection`, `LinkHostDialog`, `LinkJoinContent`, `Digits`, `endText` | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/ui/GroupScreens.kt` | 423 | `NewGroupScreen`, `FriendCheckRow`, `GroupDetailsScreen`, `FriendDetailsDialog` | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/ui/HomeScreen.kt` | 481 | `Filter`, `HomeScreen`, `Header`, `Notice`, `OldGroup`, `SearchField` +5 | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/ui/KillSwitchDialogs.kt` | 240 | `statusColor`, `StepList`, `NukeDialog` | Compose screens | UI | UI | Stays (UI) | Stays | n/a |

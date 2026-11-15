@@ -77,12 +77,50 @@ impl Core {
         Some(Zeroizing::new(fresh))
     }
 
-    /// The pieces of one of our stored files, cut again from its bytes.
+    pub(super) fn media_secret_pub(&mut self) -> Option<Zeroizing<[u8; 32]>> {
+        self.media_secret()
+    }
+
+    /// The pieces of one of our stored files (or a snapshot we hold), cut again from its bytes.
     fn sealed_media(&mut self, id: &MessageId) -> Option<privcord_crypto::media::SealedMedia> {
+        if let Some(sh) = id.as_str().strip_prefix(super::snapshots::SNAP_PREFIX) {
+            let (bytes, key) = self.snapshot_piece_source(sh)?;
+            return seal_media_with(&bytes, &key).ok();
+        }
         let file = self.ports.storage.file(id).ok()??;
         let secret = self.media_secret()?;
         let key = file_key(&secret, id.as_str()).ok()?;
         seal_media_with(&file.bytes, &key).ok()
+    }
+
+    /// Puts something on the list of what goes up to the relay (pieces are cut when it is its turn).
+    pub(super) fn queue_upload(&mut self, id: &str) {
+        let mut out: Vec<String> = self.kv_json(KV_OUT).unwrap_or_default();
+        if !out.iter().any(|o| o == id) {
+            out.push(id.to_owned());
+            self.save_json(KV_OUT, &out);
+        }
+    }
+
+    /// A snapshot to fetch (from a device of ours we are linked to, or the relay).
+    pub(super) fn want_snapshot(&mut self, short: &str, reference: MediaRef) {
+        if !reference.plausible() {
+            return;
+        }
+        let mut wanted: BTreeMap<String, Wanted> = self.kv_json(KV_IN).unwrap_or_default();
+        let id = format!("{}{short}", super::snapshots::SNAP_PREFIX);
+        if wanted.contains_key(&id) {
+            return;
+        }
+        wanted.insert(
+            id,
+            Wanted {
+                reference,
+                name: String::new(),
+                mime: String::new(),
+            },
+        );
+        self.save_json(KV_IN, &wanted);
     }
 
     /// The reference for a file message this install holds the bytes of, when other devices of the account need it;
@@ -265,8 +303,15 @@ impl Core {
         ) else {
             return;
         };
-        let Some(file) = self.ports.storage.file(&id).ok().flatten() else {
-            return;
+        let bytes = match id.as_str().strip_prefix(super::snapshots::SNAP_PREFIX) {
+            Some(sh) => match self.snapshot_piece_source(sh) {
+                Some((b, _)) => b,
+                None => return,
+            },
+            None => match self.ports.storage.file(&id).ok().flatten() {
+                Some(f) => f.bytes,
+                None => return,
+            },
         };
         let Some(key) = privcord_domain::codec::decode(&r.key)
             .and_then(|k| <[u8; 32]>::try_from(k.as_slice()).ok())
@@ -274,7 +319,7 @@ impl Core {
         else {
             return;
         };
-        let Ok(sealed) = seal_media_with(&file.bytes, &key) else {
+        let Ok(sealed) = seal_media_with(&bytes, &key) else {
             return;
         };
         if sealed.reference.root != r.root {
@@ -371,6 +416,12 @@ impl Core {
         let Some(bytes) = asm.finish() else {
             return;
         };
+        if let Some(sh) = id.as_str().strip_prefix(super::snapshots::SNAP_PREFIX) {
+            self.save_json(KV_IN, &wanted);
+            let sh = sh.to_owned();
+            self.snapshot_arrived(&sh, bytes);
+            return;
+        }
         let stored = self.ports.storage.apply(&[StorageOp::PutFile(StoredFile {
             message_id: id.clone(),
             name: w.name,

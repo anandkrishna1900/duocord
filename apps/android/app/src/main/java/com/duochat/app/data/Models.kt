@@ -230,6 +230,8 @@ data class ChatState(
     /** The account's devices, this one included, and whether this one holds the account key. */
     val devices: List<DeviceInfo> = emptyList(),
     val holdsAccountKey: Boolean = false,
+    /** Items from other devices that could not be recovered (that device was gone before they were sent on). */
+    val syncLost: Long = 0,
     val deviceLink: DeviceLinkState? = null,
     val answer: InviteAnswer? = null,
     val channels: List<ChannelView> = emptyList(),

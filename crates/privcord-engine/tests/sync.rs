@@ -632,9 +632,18 @@ fn friends_hear_of_a_linked_device_once_and_keep_the_newest_list() {
 
 /// Links a laptop to `phone` by code, through `relay`.
 fn link_laptop(phone: &mut Device, relay: &mut Relay, clock: &Arc<FakeClock>) -> Device {
-    let mut laptop = Device::new("laptop", clock);
+    link_device(phone, relay, clock, "laptop")
+}
+
+fn link_device(
+    phone: &mut Device,
+    relay: &mut Relay,
+    clock: &Arc<FakeClock>,
+    seed: &str,
+) -> Device {
+    let mut laptop = Device::new(seed, clock);
     let code = phone.core.start_device_link().unwrap();
-    laptop.core.join_device_link(&code, "Laptop").unwrap();
+    laptop.core.join_device_link(&code, seed).unwrap();
     for _ in 0..3 {
         laptop.online(relay);
         phone.online(relay);
@@ -644,7 +653,12 @@ fn link_laptop(phone: &mut Device, relay: &mut Relay, clock: &Arc<FakeClock>) ->
         laptop.online(relay);
         phone.online(relay);
     }
-    assert_eq!(phone.core.device_list().unwrap().active().count(), 2);
+    assert!(phone
+        .core
+        .device_list()
+        .unwrap()
+        .get(laptop.core.this_device_id().unwrap())
+        .is_some());
     laptop
 }
 
@@ -1251,4 +1265,154 @@ fn devices_of_one_account_find_each_other_on_the_local_network_and_nobody_else_c
     // A beacon recorded and played back much later is ignored.
     clock.advance(10 * 60 * 1000);
     assert!(laptop.core.lan_beacon_seen(&from_phone).is_none());
+}
+
+#[test]
+fn a_snapshot_lets_every_device_prune_and_a_device_linked_later_gets_the_whole_history() {
+    let clock = FakeClock::at(1_700_000_000_000);
+    let mut relay = Relay::default();
+    let (storage, secure) = (MemoryStorage::new(), MemorySecureStore::new());
+    let mut phone = Device::on("phone", &clock, storage.clone(), secure.clone());
+    phone.core.create_identity().unwrap();
+    let (card, fran) = friend(&clock);
+    phone
+        .core
+        .add_contact(&card, ContactTrust::Verified)
+        .unwrap();
+    let mut laptop = link_laptop(&mut phone, &mut relay, &clock);
+    for i in 0..6 {
+        phone
+            .core
+            .send_message(&fran, &format!("old {i}"), None)
+            .unwrap();
+    }
+    let first = phone.message_id("old 0");
+    phone.core.react(&first, "👍").unwrap();
+    phone
+        .core
+        .delete_message(&phone.message_id("old 5"), false)
+        .unwrap();
+    for _ in 0..2 {
+        phone.online(&mut relay);
+        laptop.online(&mut relay);
+    }
+    assert_eq!(
+        phone.core.sync_fingerprint(),
+        laptop.core.sync_fingerprint()
+    );
+    let before = phone.core.sync_log_len();
+
+    // A snapshot; both devices fetch or hold it and say so; then both prune.
+    assert!(phone.core.make_snapshot());
+    for _ in 0..4 {
+        phone.online(&mut relay);
+        laptop.online(&mut relay);
+    }
+    assert!(
+        phone.core.sync_log_len() < before,
+        "{} of {before}",
+        phone.core.sync_log_len()
+    );
+    assert!(laptop.core.sync_log_len() < before);
+    assert_eq!(
+        phone.core.sync_fingerprint(),
+        laptop.core.sync_fingerprint()
+    );
+
+    // The phone starts again from storage: from its snapshot, with nothing lost.
+    let fp = phone.core.sync_fingerprint();
+    let texts = phone.texts();
+    drop(phone);
+    let mut phone = Device::on("phone2", &clock, storage, secure);
+    assert_eq!(phone.core.sync_fingerprint(), fp);
+    assert_eq!(phone.texts(), texts);
+
+    // A tablet linked now gets the old history from the snapshot, and what came after from the log.
+    phone
+        .core
+        .send_message(&fran, "after the snapshot", None)
+        .unwrap();
+    let mut tablet = link_device(&mut phone, &mut relay, &clock, "tablet");
+    for _ in 0..5 {
+        phone.online(&mut relay);
+        tablet.online(&mut relay);
+        laptop.online(&mut relay);
+    }
+    assert!(
+        tablet.texts().contains(&"old 1".to_owned()),
+        "{:?}",
+        tablet.texts()
+    );
+    assert!(tablet.texts().contains(&"after the snapshot".to_owned()));
+    assert!(
+        !tablet.texts().contains(&"old 5".to_owned()),
+        "deleted stays deleted"
+    );
+    let reactions = tablet.core.snapshot().reactions;
+    assert!(reactions
+        .iter()
+        .any(|(id, r)| id == &first && r.iter().any(|(_, e)| e == "👍")));
+    assert_eq!(
+        tablet.core.sync_fingerprint(),
+        phone.core.sync_fingerprint()
+    );
+}
+
+#[test]
+fn a_gap_left_by_a_device_that_is_gone_is_closed_by_the_account_and_what_came_after_shows() {
+    let clock = FakeClock::at(1_700_000_000_000);
+    let mut relay = Relay::default();
+    let mut phone = Device::new("phone", &clock);
+    phone.core.create_identity().unwrap();
+    let (card, fran) = friend(&clock);
+    phone
+        .core
+        .add_contact(&card, ContactTrust::Verified)
+        .unwrap();
+    let mut laptop = link_laptop(&mut phone, &mut relay, &clock);
+    for _ in 0..2 {
+        laptop.online(&mut relay);
+        phone.online(&mut relay);
+    }
+    // What the laptop posts next never reaches anyone (lost on the way).
+    let sizes: HashMap<String, usize> = relay
+        .boxes
+        .iter()
+        .map(|(m, b)| (m.clone(), b.len()))
+        .collect();
+    laptop
+        .core
+        .send_message(&fran, "never arrives", None)
+        .unwrap();
+    laptop.online(&mut relay);
+    for (m, b) in relay.boxes.iter_mut() {
+        if m.starts_with("self-") {
+            b.truncate(sizes.get(m).copied().unwrap_or(0));
+        }
+    }
+    // Then one more, and the laptop is gone for good.
+    laptop
+        .core
+        .send_message(&fran, "after the gap", None)
+        .unwrap();
+    laptop.online(&mut relay);
+    drop(laptop);
+    phone.online(&mut relay);
+    assert!(
+        !phone.texts().contains(&"after the gap".to_owned()),
+        "it waits for the gap"
+    );
+    assert_eq!(phone.core.snapshot().sync_lost, 0);
+
+    // A week and more later, the phone (it holds the account key) gives the gap up, and goes on.
+    clock.advance(9 * 24 * 3600 * 1000);
+    phone.online(&mut relay);
+    phone.online(&mut relay);
+    assert!(
+        phone.texts().contains(&"after the gap".to_owned()),
+        "{:?}",
+        phone.texts()
+    );
+    assert!(!phone.texts().contains(&"never arrives".to_owned()));
+    assert!(phone.core.snapshot().sync_lost >= 1);
 }

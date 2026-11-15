@@ -77,6 +77,15 @@ fun DevicesSection(state: ChatState, onLinkNew: () -> Unit) {
             }
         }
     }
+    if (state.syncLost > 0) {
+        Spacer(Modifier.height(8.dp))
+        Text(
+            if (state.syncLost == 1L) "1 item from another device could not be recovered (that device was gone before it was sent on)."
+            else "${state.syncLost} items from another device could not be recovered (that device was gone before they were sent on).",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
     if (state.holdsAccountKey) {
         Spacer(Modifier.height(10.dp))
         Button(onClick = onLinkNew) { Text("Link a new device") }

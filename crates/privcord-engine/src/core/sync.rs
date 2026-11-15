@@ -27,7 +27,7 @@ use privcord_crypto::{
     devices::DeviceList,
     identity::Identity,
     selfbox::{device_inbox, open_from_device, seal_to_device, signed_by, SelfBox, SyncKey},
-    synclog::{kind, Entry, Replica, Summary, Writer},
+    synclog::{kind, Entry, Replica, Snapshot, Summary, Writer},
 };
 use privcord_domain::{
     blob::SealedBlob, message::DeliveryState, signaling::PutKind, ConversationId, MessageId, UserId,
@@ -44,7 +44,7 @@ use std::sync::{
 };
 
 const KV_WRITER: &str = "sync.writer";
-const KV_INDEX: &str = "sync.index";
+pub(super) const KV_INDEX: &str = "sync.index";
 const KV_LISTS: &str = "sync.lists";
 const KV_PUSHED: &str = "sync.pushed";
 /// The account's sync key (not the account key): `{ "v": version, "key": base64 }`.
@@ -71,7 +71,7 @@ const ANSWER_MAX: usize = 400;
 /// Entries per frame over a direct link between our devices (a frame may be up to 128 KiB).
 const LINK_BATCH_BYTES: usize = 96 * 1024;
 
-fn entry_key(device: &str, series: u32, seq: u64) -> String {
+pub(super) fn entry_key(device: &str, series: u32, seq: u64) -> String {
     format!("sync.e.{device}.{series}.{seq}")
 }
 
@@ -263,6 +263,14 @@ impl SyncState {
         &self.device
     }
 
+    pub(super) fn replica(&self) -> &Replica {
+        &self.replica
+    }
+
+    pub(super) fn replica_mut(&mut self) -> &mut Replica {
+        &mut self.replica
+    }
+
     /// The account's sync key, once this device has it.
     pub(super) fn sync_key(&self) -> Option<&SyncKey> {
         self.key.as_ref()
@@ -299,6 +307,14 @@ impl Core {
             .filter(|w| w.device == id)
             .unwrap_or_else(|| Writer::new(&id, 1));
         let mut replica = Replica::new(list);
+        if let Some((sign, _)) = &self.account {
+            replica.set_account(sign.clone());
+        }
+        // Where the log starts, once older entries were pruned: the snapshot kept then.
+        let base = self.stored_base();
+        if let Some(b) = &base {
+            replica.restore(b.clone(), now);
+        }
         let mut others = BTreeSet::new();
         let lists: Vec<String> = self.kv_json(KV_LISTS).unwrap_or_default();
         if let Some(account) = &self.identity {
@@ -312,7 +328,7 @@ impl Core {
                 }
             }
         }
-        // ponytail: every entry is read and checked again at start; a stored snapshot when logs get long (step 8).
+        // Every entry after the base is read and checked again at start (the pruned ones are in the base).
         let index: BTreeMap<String, u64> = self.kv_json(KV_INDEX).unwrap_or_default();
         for (stream, have) in &index {
             let Some((dev, series)) = stream.rsplit_once('/') else {
@@ -321,7 +337,13 @@ impl Core {
             let Ok(series) = series.parse::<u32>() else {
                 continue;
             };
-            for seq in 1..=*have {
+            let from = base
+                .as_ref()
+                .and_then(|b| b.upto.get(stream))
+                .copied()
+                .unwrap_or(0)
+                + 1;
+            for seq in from..=*have {
                 if let Some(e) = self.kv_json::<Entry>(&entry_key(dev, series, seq)) {
                     replica.receive(e, now);
                 }
@@ -404,7 +426,7 @@ impl Core {
         self.sync.as_ref().map(|s| s.replica.state().fingerprint())
     }
 
-    fn index_value(replica: &Replica) -> Vec<u8> {
+    pub(super) fn index_value(replica: &Replica) -> Vec<u8> {
         serde_json::to_vec(&replica.summary()).unwrap_or_default()
     }
 
@@ -414,7 +436,6 @@ impl Core {
         if ops.is_empty() || self.sync.is_none() {
             return;
         }
-        let now = self.now();
         let mut items: Vec<(&'static str, Value)> = Vec::new();
         for op in ops {
             match op {
@@ -511,6 +532,12 @@ impl Core {
                 _ => {}
             }
         }
+        self.append_items(items);
+    }
+
+    /// Writes entries of this device's log, saved with its counter and index in one batch.
+    pub(super) fn append_items(&mut self, items: Vec<(&'static str, Value)>) {
+        let now = self.now();
         let Some(sync) = self.sync.as_mut() else {
             return;
         };
@@ -534,11 +561,10 @@ impl Core {
             key: KV_WRITER.into(),
             value: serde_json::to_vec(&sync.writer).unwrap_or_default(),
         });
-        batch.push(StorageOp::SetKv {
-            key: KV_INDEX.into(),
-            value: Self::index_value(&sync.replica),
-        });
         let _ = self.ports.storage.apply(&batch);
+        // Our entries may have let others' through (a lost marker closing a gap): store and apply those, and the index
+        // with them.
+        self.take_entries(Vec::new(), now);
     }
 
     /// Posts `payload` to this week's self-mailbox.
@@ -623,6 +649,7 @@ impl Core {
             return;
         }
         self.tick_link_sync();
+        self.tick_snapshots();
         if !self.ports.transport.signal_available() {
             if let Some(s) = self.sync.as_mut() {
                 s.subscribed.clear();
@@ -1129,6 +1156,7 @@ impl Core {
         if now - s.last_answer < ANSWER_GAP_MS {
             return;
         }
+        let needs = s.replica.needs_base(theirs).map(Snapshot::id);
         let missing = s.replica.missing_for(theirs, ANSWER_MAX);
         let ours = s.replica.summary();
         let behind = theirs
@@ -1142,10 +1170,13 @@ impl Core {
         if behind {
             self.post_hello();
         }
+        if let Some(id) = needs {
+            self.offer_base(&id);
+        }
     }
 
     /// Entries from another device (or echoes of ours): through the merge rules, then into storage.
-    fn take_entries(&mut self, entries: Vec<Entry>, now: i64) {
+    pub(super) fn take_entries(&mut self, entries: Vec<Entry>, now: i64) {
         let own = self.device_id.clone().unwrap_or_default();
         if let Some(s) = self.sync.as_mut() {
             for e in entries {
@@ -1180,7 +1211,7 @@ impl Core {
     }
 
     /// Writes other devices' entries into storage, without recording them again.
-    fn apply_entries(&mut self, entries: &[Entry]) {
+    pub(super) fn apply_entries(&mut self, entries: &[Entry]) {
         if entries.is_empty() {
             return;
         }

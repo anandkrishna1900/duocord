@@ -608,6 +608,8 @@ pub struct SnapshotDto {
     pub devices: Vec<DeviceDto>,
     /// Whether this install holds the account key (it can link other devices and change groups).
     pub holds_account_key: bool,
+    /// Items from other devices of the account that could not be recovered.
+    pub sync_lost: u64,
 }
 
 /// Another device of ours heard on the local network.
@@ -1639,6 +1641,7 @@ impl PrivcordEngine {
                 })
                 .collect(),
             holds_account_key: s.holds_account_key,
+            sync_lost: s.sync_lost,
         })
     }
 

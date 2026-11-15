@@ -1016,6 +1016,7 @@ class RustChatEngine(
                 requests = s.requests.map { r -> InviteRequest(r.uid, r.name, r.safetyNumber) },
                 devices = s.devices.map { d -> com.duochat.app.data.DeviceInfo(d.id, d.name, d.addedAt, d.thisDevice) },
                 holdsAccountKey = s.holdsAccountKey,
+                syncLost = s.syncLost.toLong(),
                 legacyGroups = s.legacyGroups.map { g ->
                     com.duochat.app.data.LegacyGroup(g.oldId, g.name, g.members.map { m -> nameOf(s, m) }, g.missing.toInt())
                 },

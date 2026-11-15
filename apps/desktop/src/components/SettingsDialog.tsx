@@ -355,6 +355,13 @@ export function SettingsDialog({
             ) : (
               <p className="muted small">Only this device so far.</p>
             )}
+            {state.syncLost ? (
+              <p className="muted small">
+                {state.syncLost === 1
+                  ? '1 item from another device could not be recovered (that device was gone before it was sent on).'
+                  : `${state.syncLost} items from another device could not be recovered (that device was gone before they were sent on).`}
+              </p>
+            ) : null}
             {engine?.startDeviceLink && state.holdsAccountKey ? (
               <div className="button-row">
                 <button type="button" className="button primary" onClick={() => setLinking(true)}>

@@ -154,6 +154,8 @@ pub struct Snapshot {
     pub devices: Vec<DeviceView>,
     /// Whether this install holds the account key (it can link other devices and change groups).
     pub holds_account_key: bool,
+    /// Items from other devices of the account that could not be recovered (a device gone before they left it).
+    pub sync_lost: u64,
 }
 
 /// One device of the account.

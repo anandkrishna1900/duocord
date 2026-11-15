@@ -69,6 +69,7 @@ mod linking;
 mod media;
 mod privacy;
 mod signaling;
+mod snapshots;
 mod social;
 mod sync;
 
@@ -3063,6 +3064,7 @@ impl Core {
                 })
                 .unwrap_or_default(),
             holds_account_key: self.identity.is_some(),
+            sync_lost: self.sync_lost(),
         }
     }
 

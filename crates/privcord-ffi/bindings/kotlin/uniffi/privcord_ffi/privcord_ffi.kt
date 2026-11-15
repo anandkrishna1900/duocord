@@ -6400,7 +6400,11 @@ data class SnapshotDto (
     /**
      * Whether this install holds the account key (it can link other devices and change groups).
      */
-    var `holdsAccountKey`: kotlin.Boolean
+    var `holdsAccountKey`: kotlin.Boolean, 
+    /**
+     * Items from other devices of the account that could not be recovered.
+     */
+    var `syncLost`: kotlin.ULong
 ) {
     
     companion object
@@ -6428,6 +6432,7 @@ public object FfiConverterTypeSnapshotDto: FfiConverterRustBuffer<SnapshotDto> {
             FfiConverterSequenceTypeLegacyGroupDto.read(buf),
             FfiConverterSequenceTypeDeviceDto.read(buf),
             FfiConverterBoolean.read(buf),
+            FfiConverterULong.read(buf),
         )
     }
 
@@ -6447,7 +6452,8 @@ public object FfiConverterTypeSnapshotDto: FfiConverterRustBuffer<SnapshotDto> {
             FfiConverterSequenceTypeChannelPersonDto.allocationSize(value.`channelPeople`) +
             FfiConverterSequenceTypeLegacyGroupDto.allocationSize(value.`legacyGroups`) +
             FfiConverterSequenceTypeDeviceDto.allocationSize(value.`devices`) +
-            FfiConverterBoolean.allocationSize(value.`holdsAccountKey`)
+            FfiConverterBoolean.allocationSize(value.`holdsAccountKey`) +
+            FfiConverterULong.allocationSize(value.`syncLost`)
     )
 
     override fun write(value: SnapshotDto, buf: ByteBuffer) {
@@ -6467,6 +6473,7 @@ public object FfiConverterTypeSnapshotDto: FfiConverterRustBuffer<SnapshotDto> {
             FfiConverterSequenceTypeLegacyGroupDto.write(value.`legacyGroups`, buf)
             FfiConverterSequenceTypeDeviceDto.write(value.`devices`, buf)
             FfiConverterBoolean.write(value.`holdsAccountKey`, buf)
+            FfiConverterULong.write(value.`syncLost`, buf)
     }
 }
 

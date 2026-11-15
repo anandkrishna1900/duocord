@@ -230,21 +230,21 @@ impl Writer {
 /* ------------------------------------------------------------------ merge rules */
 
 /// Where an entry sits in the shared order: clock, then device, then number. The same on every device.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Order {
     pub hlc: Hlc,
     pub device: String,
     pub seq: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 struct MessageRec {
     order: Order,
     hash: String,
     body: Value,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 struct Lww<T> {
     hlc: Hlc,
     device: String,
@@ -275,7 +275,7 @@ fn put_lww<K: Ord, T>(map: &mut BTreeMap<K, Lww<T>>, key: K, next: Lww<T>) {
 }
 
 /// The merged result of every applied entry.
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct State {
     messages: BTreeMap<String, MessageRec>,
     edits: BTreeMap<String, Lww<String>>,
@@ -283,11 +283,19 @@ pub struct State {
     hidden: BTreeSet<String>,
     /// Messages read on some device: read everywhere (risk 21).
     seen: BTreeSet<String>,
-    reactions: BTreeMap<(String, String), Lww<Option<String>>>,
+    /// message → who → their reaction (`None`: taken back).
+    reactions: BTreeMap<String, BTreeMap<String, Lww<Option<String>>>>,
     read: BTreeMap<String, Hlc>,
     settings: BTreeMap<String, Lww<Value>>,
     /// How far our own messages got with the person they went to (1 delivered, 2 read): the furthest any device saw.
     ticks: BTreeMap<String, u8>,
+    /// Contacts as last written (by uid).
+    contacts: BTreeMap<String, Lww<Value>>,
+    /// Each group's signed events (canonical text), all of them: groups merge event by event.
+    groups: BTreeMap<String, BTreeSet<String>>,
+    /// Snapshots announced (by id), and which devices hold each.
+    snapshots: BTreeMap<String, Value>,
+    haves: BTreeMap<String, BTreeSet<String>>,
 }
 
 /// The kinds this version understands. Anything else is kept in the log as it is.
@@ -302,6 +310,22 @@ pub mod kind {
     pub const SETTING: &str = "setting";
     /// One of our messages reached the other side (`"delivered"`) or was read there (`"read"`).
     pub const TICK: &str = "tick";
+    pub const CONTACT: &str = "contact";
+    pub const GROUP: &str = "group";
+    /// A snapshot of the merged state up to a cut (§7): `{ id, upto }`; the snapshot itself travels apart.
+    pub const SNAPSHOT: &str = "snapshot";
+    /// The writing device holds a snapshot and everything up to its cut: `{ snapshot }`.
+    pub const HAVE: &str = "have";
+    /// Signed by the account: a stretch of one device's log that can never be recovered (risk 49).
+    pub const LOST: &str = "lost";
+    /// Signed by the account: an entry a buggy release wrote is replaced (or voided); entries never change (risk 123).
+    pub const CORRECTION: &str = "correction";
+
+    /// Every kind this version understands. A snapshot is made only when nothing else is in the log (risk 47).
+    pub const ALL: &[&str] = &[
+        MESSAGE, EDIT, DELETE, HIDE, SEEN, REACT, READ, SETTING, TICK, CONTACT, GROUP, SNAPSHOT,
+        HAVE, LOST, CORRECTION,
+    ];
 }
 
 fn id_field<'a>(body: &'a Value, name: &str) -> Result<&'a str, &'static str> {
@@ -370,7 +394,7 @@ impl State {
                     Some(Value::Null) | None => None,
                     _ => return Err("bad emoji"),
                 };
-                put_lww(&mut self.reactions, (target, by), lww(e, emoji));
+                put_lww(self.reactions.entry(target).or_default(), by, lww(e, emoji));
             }
             kind::READ => {
                 let conv = id_field(b, "conv")?.to_owned();
@@ -390,6 +414,31 @@ impl State {
                 let cur = self.ticks.entry(target).or_default();
                 *cur = (*cur).max(level);
             }
+            kind::CONTACT => {
+                let uid = id_field(b, "uid")?.to_owned();
+                put_lww(&mut self.contacts, uid, lww(e, b.clone()));
+            }
+            kind::GROUP => {
+                let id = id_field(b, "id")?.to_owned();
+                let events = b
+                    .get("events")
+                    .and_then(Value::as_array)
+                    .ok_or("missing events")?;
+                let set = self.groups.entry(id).or_default();
+                for ev in events {
+                    set.insert(canonical_json(ev).map_err(|_| "bad event")?);
+                }
+            }
+            kind::SNAPSHOT => {
+                let id = id_field(b, "id")?.to_owned();
+                self.snapshots.insert(id, b.clone());
+            }
+            kind::HAVE => {
+                let id = id_field(b, "snapshot")?.to_owned();
+                self.haves.entry(id).or_default().insert(e.device.clone());
+            }
+            // Handled by the replica (they need the account's key); nothing to merge.
+            kind::LOST | kind::CORRECTION => {}
             kind::SETTING => {
                 let key = id_field(b, "key")?.to_owned();
                 let value = b.get("value").cloned().ok_or("missing value")?;
@@ -438,9 +487,10 @@ impl State {
             return BTreeMap::new();
         }
         self.reactions
-            .range((message.to_owned(), String::new())..)
-            .take_while(|((m, _), _)| m == message)
-            .filter_map(|((_, by), r)| r.value.clone().map(|e| (by.clone(), e)))
+            .get(message)
+            .into_iter()
+            .flatten()
+            .filter_map(|(by, r)| r.value.clone().map(|e| (by.clone(), e)))
             .collect()
     }
 
@@ -459,15 +509,80 @@ impl State {
     /// Every reaction recorded for a message, removed ones (`None`) included, whether the message has arrived or not.
     pub fn reactions_raw(&self, message: &str) -> Vec<(String, Option<String>)> {
         self.reactions
-            .range((message.to_owned(), String::new())..)
-            .take_while(|((m, _), _)| m == message)
-            .map(|((_, by), r)| (by.clone(), r.value.clone()))
+            .get(message)
+            .into_iter()
+            .flatten()
+            .map(|(by, r)| (by.clone(), r.value.clone()))
             .collect()
     }
 
     /// How far one of our messages got: 1 delivered, 2 read.
     pub fn tick(&self, message: &str) -> Option<u8> {
         self.ticks.get(message).copied()
+    }
+
+    /// Every message, as written (its body), by id.
+    pub fn message_bodies(&self) -> impl Iterator<Item = (&String, &Value)> {
+        self.messages.iter().map(|(id, m)| (id, &m.body))
+    }
+
+    pub fn deleted(&self) -> &BTreeSet<String> {
+        &self.deleted
+    }
+
+    pub fn hidden(&self) -> &BTreeSet<String> {
+        &self.hidden
+    }
+
+    pub fn contacts(&self) -> impl Iterator<Item = &Value> {
+        self.contacts.values().map(|c| &c.value)
+    }
+
+    /// Each group's events, parsed back.
+    pub fn groups(&self) -> impl Iterator<Item = (&String, Vec<Value>)> {
+        self.groups.iter().map(|(id, evs)| {
+            (
+                id,
+                evs.iter()
+                    .filter_map(|t| serde_json::from_str(t).ok())
+                    .collect(),
+            )
+        })
+    }
+
+    /// Every message that has reactions recorded, for applying a snapshot.
+    pub fn reacted(&self) -> impl Iterator<Item = &String> {
+        self.reactions.keys()
+    }
+
+    /// Messages with a tick, or read, for applying a snapshot.
+    pub fn ticked(&self) -> impl Iterator<Item = &String> {
+        self.ticks.keys()
+    }
+
+    pub fn seen_all(&self) -> &BTreeSet<String> {
+        &self.seen
+    }
+
+    /// A snapshot announced in the log, and the devices that hold it.
+    pub fn snapshot_note(&self, id: &str) -> Option<&Value> {
+        self.snapshots.get(id)
+    }
+
+    pub fn holders(&self, id: &str) -> BTreeSet<String> {
+        self.haves.get(id).cloned().unwrap_or_default()
+    }
+
+    /// The newest snapshot announced (by its cut's size), if any.
+    pub fn latest_snapshot(&self) -> Option<(&String, &Value)> {
+        self.snapshots.iter().max_by_key(|(id, v)| {
+            let n: u64 = v
+                .get("upto")
+                .and_then(Value::as_object)
+                .map(|o| o.values().filter_map(Value::as_u64).sum())
+                .unwrap_or(0);
+            (n, (*id).clone())
+        })
     }
 
     pub fn read_upto(&self, conv: &str) -> Option<Hlc> {
@@ -483,7 +598,11 @@ impl State {
     pub fn fingerprint(&self) -> String {
         // ponytail: recomputed over the whole state each time; an incremental hash tree when histories get large
         // (risk 115).
-        let value = normalise(serde_json::to_value(self).unwrap_or(Value::Null));
+        // Every key of the state is a string, so this cannot fail; if it ever did, the fingerprint says so rather than
+        // making every state look the same.
+        let Ok(value) = serde_json::to_value(self).map(normalise) else {
+            return "unserialisable".into();
+        };
         codec::hex(&sha256(
             canonical_json(&value).unwrap_or_default().as_bytes(),
         ))
@@ -559,6 +678,80 @@ pub struct Replica {
     state: State,
     /// The latest clock reading seen, for this device's own writer.
     pub clock: Hlc,
+    /// Entries of kinds this version does not understand (while there are any, no snapshot is made: risk 47).
+    unknown: usize,
+    /// The snapshot the log starts from once older entries were pruned.
+    base: Option<Snapshot>,
+    /// Snapshots held whole (checked against an announcement in the log), by id.
+    held: BTreeMap<String, Snapshot>,
+    /// The account's signing key, for lost markers and corrections.
+    account_sign: Option<crate::devices::PublicJwkAlias>,
+    /// Corrections in force: entry hash → its replacement body (`Null`: voided).
+    corrections: BTreeMap<String, Value>,
+    /// Entries given up on by lost markers.
+    lost: u64,
+}
+
+/// After a lost marker, the next entry of that stream is taken whatever it names as the one before it.
+const LOST_LINK: &str = "*lost*";
+/// What the account signs on a lost marker or a correction.
+const RULING_TAG: &str = "duocord-account-ruling-v1";
+
+/// The merged state at a cut of the log (§7). Announced in the log by a `snapshot` entry carrying its id, which is a hash
+/// of all of it, so it can travel apart (it is large) and still be checked.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Snapshot {
+    /// The device that made it.
+    pub by: String,
+    /// The cut: for each stream, the last entry it covers.
+    pub upto: Summary,
+    /// For each stream, the hash of that last entry (so the log goes on from the cut).
+    pub heads: BTreeMap<String, String>,
+    pub state: State,
+}
+
+impl Snapshot {
+    pub fn id(&self) -> String {
+        let v = serde_json::to_value(self).unwrap_or(Value::Null);
+        codec::hex(&sha256(canonical_json(&v).unwrap_or_default().as_bytes()))
+    }
+
+    pub fn to_json(&self) -> String {
+        serde_json::to_string(self).unwrap_or_default()
+    }
+
+    pub fn from_json(text: &str) -> Option<Self> {
+        serde_json::from_str(text).ok()
+    }
+}
+
+/// A body the account signs (a lost marker or a correction): the body with `accountSig` added.
+pub fn account_ruling(account: &Identity, body: &Value) -> Result<Value, CryptoError> {
+    let text = format!("{RULING_TAG}\n{}", canonical_json(body)?);
+    let mut out = body.clone();
+    if let Some(o) = out.as_object_mut() {
+        o.insert(
+            "accountSig".into(),
+            json!(codec::encode(&account.sign_message(text.as_bytes()))),
+        );
+    }
+    Ok(out)
+}
+
+fn ruling_valid(body: &Value, account: &crate::devices::PublicJwkAlias) -> bool {
+    let Some(sig) = body
+        .get("accountSig")
+        .and_then(Value::as_str)
+        .and_then(codec::decode)
+    else {
+        return false;
+    };
+    let mut rest = body.clone();
+    if let Some(o) = rest.as_object_mut() {
+        o.remove("accountSig");
+    }
+    canonical_json(&rest)
+        .is_ok_and(|t| verify_signature(account, &sig, format!("{RULING_TAG}\n{t}").as_bytes()))
 }
 
 /// How far each device's log a replica holds: "device/series" → highest number held with no gap before it.
@@ -578,7 +771,266 @@ impl Replica {
             pending_total: 0,
             state: State::default(),
             clock: Hlc::default(),
+            unknown: 0,
+            base: None,
+            held: BTreeMap::new(),
+            account_sign: None,
+            corrections: BTreeMap::new(),
+            lost: 0,
         }
+    }
+
+    /// The account's public signing key: lost markers and corrections are believed only when it signed them.
+    pub fn set_account(&mut self, sign: crate::devices::PublicJwkAlias) {
+        self.account_sign = Some(sign);
+    }
+
+    /* ---- snapshots (§7) */
+
+    /// A snapshot of the merged state as it is now, by device `by`. `None` while the log holds a kind this version does
+    /// not understand (it would be lost from the snapshot: risk 47).
+    pub fn make_snapshot(&self, by: &str) -> Option<Snapshot> {
+        if self.unknown > 0 {
+            return None;
+        }
+        let mut upto = Summary::new();
+        let mut heads = BTreeMap::new();
+        for ((d, series), s) in &self.streams {
+            if s.have > 0 {
+                upto.insert(format!("{d}/{series}"), s.have);
+                heads.insert(format!("{d}/{series}"), s.last_hash.clone());
+            }
+        }
+        Some(Snapshot {
+            by: by.to_owned(),
+            upto,
+            heads,
+            state: self.state.clone(),
+        })
+    }
+
+    /// Whether the log (applied or still waiting) announces a snapshot with this id, in an entry signed by its author.
+    fn announced(&self, id: &str) -> bool {
+        self.state.snapshots.contains_key(id)
+            || self.streams.values().any(|s| {
+                s.pending.values().any(|e| {
+                    e.kind == kind::SNAPSHOT && e.body.get("id").and_then(Value::as_str) == Some(id)
+                })
+            })
+    }
+
+    /// Keeps a snapshot this replica now holds whole. Only one the log announces is kept.
+    pub fn hold(&mut self, snap: Snapshot) -> bool {
+        let id = snap.id();
+        if !self.announced(&id) {
+            return false;
+        }
+        self.held.insert(id, snap);
+        true
+    }
+
+    pub fn held(&self, id: &str) -> Option<&Snapshot> {
+        self.held.get(id)
+    }
+
+    /// Whether this replica has every entry a snapshot covers.
+    pub fn covers(&self, snap: &Snapshot) -> bool {
+        let ours = self.summary();
+        snap.upto
+            .iter()
+            .all(|(k, v)| ours.get(k).copied().unwrap_or(0) >= *v)
+    }
+
+    /// Drops the entries a snapshot covers, once every active device of the account holds it and everything up to its
+    /// cut (risks 12, 13): nobody will ever need them again, and a new device starts from the snapshot. Returns how
+    /// many entries went.
+    pub fn prune(&mut self, id: &str) -> usize {
+        let Some(snap) = self.held.get(id).cloned() else {
+            return 0;
+        };
+        let holders = self.state.holders(id);
+        if !self.covers(&snap) || !self.devices.active().all(|d| holders.contains(&d.id)) {
+            return 0;
+        }
+        let before = self.log.len();
+        let cut = |d: &str, series: u32| {
+            snap.upto
+                .get(&format!("{d}/{series}"))
+                .copied()
+                .unwrap_or(0)
+        };
+        self.log
+            .retain(|(d, series, seq), _| *seq > cut(d, *series));
+        self.hashes
+            .retain(|(d, series, seq), _| *seq > cut(d, *series));
+        self.base = Some(snap);
+        before - self.log.len()
+    }
+
+    pub fn base(&self) -> Option<&Snapshot> {
+        self.base.as_ref()
+    }
+
+    /// The snapshot a replica with summary `theirs` needs first, when entries it lacks were pruned here.
+    pub fn needs_base(&self, theirs: &Summary) -> Option<&Snapshot> {
+        let base = self.base.as_ref()?;
+        base.upto
+            .iter()
+            .any(|(k, v)| theirs.get(k).copied().unwrap_or(0) < *v)
+            .then_some(base)
+    }
+
+    /// Starts from a snapshot (a new device, joining after older entries were pruned). Only one the log announces, and
+    /// only when this replica holds nothing past its cut.
+    pub fn install(&mut self, snap: Snapshot, now: i64) -> bool {
+        let id = snap.id();
+        if !self.announced(&id) {
+            return false;
+        }
+        let ours = self.summary();
+        let behind = ours
+            .iter()
+            .all(|(k, v)| *v <= snap.upto.get(k).copied().unwrap_or(0));
+        if !behind {
+            return false;
+        }
+        self.set_base(snap, now);
+        true
+    }
+
+    /// Starts a fresh replica from this device's own stored base snapshot (at startup; it was checked when kept).
+    pub fn restore(&mut self, snap: Snapshot, now: i64) {
+        self.set_base(snap, now);
+    }
+
+    fn set_base(&mut self, snap: Snapshot, now: i64) {
+        let id = snap.id();
+        for (k, have) in &snap.upto {
+            let Some((d, series)) = k.rsplit_once('/') else {
+                continue;
+            };
+            let Ok(series) = series.parse::<u32>() else {
+                continue;
+            };
+            let s = self.streams.entry((d.to_owned(), series)).or_default();
+            s.have = *have;
+            s.last_hash = snap.heads.get(k).cloned().unwrap_or_default();
+            let dropped = s.pending.len();
+            s.pending.retain(|seq, _| *seq > *have);
+            self.pending_total -= dropped - s.pending.len();
+        }
+        let cut = snap.upto.clone();
+        self.log.retain(|(d, series, seq), _| {
+            *seq > cut.get(&format!("{d}/{series}")).copied().unwrap_or(0)
+        });
+        self.hashes.retain(|(d, series, seq), _| {
+            *seq > cut.get(&format!("{d}/{series}")).copied().unwrap_or(0)
+        });
+        self.state = snap.state.clone();
+        self.held.insert(id, snap.clone());
+        self.base = Some(snap);
+        let keys: Vec<(String, u32)> = self.streams.keys().cloned().collect();
+        for key in keys {
+            self.drain(&key, now);
+        }
+    }
+
+    /// Gaps entries are waiting on: `(device, series, first missing, last missing)` per stream.
+    pub fn gaps(&self) -> Vec<(String, u32, u64, u64)> {
+        self.streams
+            .iter()
+            .filter_map(|((d, series), s)| {
+                let next = *s.pending.keys().next()?;
+                (next > s.have + 1).then(|| (d.clone(), *series, s.have + 1, next - 1))
+            })
+            .collect()
+    }
+
+    /// How many entries lost markers have given up on.
+    pub fn lost_count(&self) -> u64 {
+        self.lost
+    }
+
+    /// Snapshot announcements in the log, applied or still waiting (a new device sees them before it can apply them).
+    pub fn snapshot_notes(&self) -> Vec<Value> {
+        let mut out: Vec<Value> = self.state.snapshots.values().cloned().collect();
+        for s in self.streams.values() {
+            for e in s.pending.values() {
+                if e.kind == kind::SNAPSHOT {
+                    out.push(e.body.clone());
+                }
+            }
+        }
+        out
+    }
+
+    /// Applies, in order, whatever was waiting on a stream and can go now.
+    fn drain(&mut self, key: &(String, u32), now: i64) {
+        loop {
+            let stream = self.streams.entry(key.clone()).or_default();
+            let next = stream.have + 1;
+            let Some(e) = stream.pending.remove(&next) else {
+                break;
+            };
+            self.pending_total -= 1;
+            let h = e.hash();
+            if let Outcome::Refused(_) = self.take(e, h, now) {
+                break;
+            }
+        }
+    }
+
+    /// A lost marker: a stretch of one device's log is closed (the device is gone with it), and what comes after it
+    /// is taken.
+    fn apply_lost(&mut self, b: &Value, now: i64) {
+        let (Some(device), Some(series), Some(from), Some(to)) = (
+            b.get("device").and_then(Value::as_str),
+            b.get("series")
+                .and_then(Value::as_u64)
+                .and_then(|s| u32::try_from(s).ok()),
+            b.get("from").and_then(Value::as_u64),
+            b.get("to").and_then(Value::as_u64),
+        ) else {
+            return;
+        };
+        let key = (device.to_owned(), series);
+        let s = self.streams.entry(key.clone()).or_default();
+        if from == 0 || to < from || s.have + 1 < from || s.have >= to {
+            return;
+        }
+        self.lost += to - s.have;
+        s.have = to;
+        s.last_hash = LOST_LINK.into();
+        let dropped = s.pending.len();
+        s.pending.retain(|seq, _| *seq > to);
+        self.pending_total -= dropped - s.pending.len();
+        self.drain(&key, now);
+    }
+
+    /// The state again from the base and every entry held, with the corrections in force (a correction arrived).
+    fn rebuild(&mut self) {
+        let mut state = self
+            .base
+            .as_ref()
+            .map(|b| b.state.clone())
+            .unwrap_or_default();
+        for (k, e) in &self.log {
+            let Some(hash) = self.hashes.get(k) else {
+                continue;
+            };
+            match self.corrections.get(hash) {
+                Some(Value::Null) => {}
+                Some(body) => {
+                    let mut fixed = e.clone();
+                    fixed.body = body.clone();
+                    let _ = state.apply(&fixed, hash);
+                }
+                None => {
+                    let _ = state.apply(e, hash);
+                }
+            }
+        }
+        self.state = state;
     }
 
     /// A newer device list (already checked with [`DeviceList::accepts`]).
@@ -640,20 +1092,9 @@ impl Replica {
             return Outcome::Pending;
         }
         let first = self.take(e, hash, now);
-        // Entries that were waiting for this one.
-        loop {
-            let stream = self.streams.entry(key.clone()).or_default();
-            let next = stream.have + 1;
-            let Some(e) = stream.pending.remove(&next) else {
-                break;
-            };
-            self.pending_total -= 1;
-            let h = e.hash();
-            if let Outcome::Refused(_) = self.take(e, h, now) {
-                // A held-back entry that does not chain on is a fork: the device is frozen by `take`.
-                break;
-            }
-        }
+        // Entries that were waiting for this one (a held-back entry that does not chain on is a fork: `take` freezes
+        // the device).
+        self.drain(&key, now);
         first
     }
 
@@ -688,17 +1129,46 @@ impl Replica {
     fn take(&mut self, e: Entry, hash: String, now: i64) -> Outcome {
         let key = (e.device.clone(), e.series);
         let stream = self.streams.entry(key.clone()).or_default();
-        if e.prev != stream.last_hash {
+        if e.prev != stream.last_hash && stream.last_hash != LOST_LINK {
             // Signed by the device, numbered right, but not the entry we hold before it: two histories.
             return self.freeze(&e.device);
         }
         stream.have = e.seq;
         stream.last_hash = hash.clone();
         self.clock = self.clock.observe(e.hlc, now);
-        let result = self.state.apply(&e, &hash);
+        if !kind::ALL.contains(&e.kind.as_str()) {
+            self.unknown += 1;
+        }
+        let ruling = matches!(e.kind.as_str(), kind::LOST | kind::CORRECTION)
+            && self
+                .account_sign
+                .as_ref()
+                .is_some_and(|a| ruling_valid(&e.body, a));
+        let result = match self.corrections.get(&hash) {
+            Some(Value::Null) => Ok(()),
+            Some(body) => {
+                let mut fixed = e.clone();
+                fixed.body = body.clone();
+                self.state.apply(&fixed, &hash)
+            }
+            None => self.state.apply(&e, &hash),
+        };
+        let ruling_body = ruling.then(|| (e.kind.clone(), e.body.clone()));
         self.hashes
             .insert((key.0.clone(), key.1, e.seq), hash.clone());
         self.log.insert((key.0, key.1, e.seq), e);
+        match ruling_body {
+            Some((k, b)) if k == kind::LOST => self.apply_lost(&b, now),
+            Some((_, b)) => {
+                if let (Some(target), Some(replace)) =
+                    (b.get("target").and_then(Value::as_str), b.get("replace"))
+                {
+                    self.corrections.insert(target.to_owned(), replace.clone());
+                    self.rebuild();
+                }
+            }
+            None => {}
+        }
         match result {
             Ok(()) => Outcome::Applied,
             Err(reason) => {
@@ -1116,6 +1586,249 @@ mod tests {
         assert_eq!(a.state().fingerprint(), state_b.fingerprint());
         b.receive(ds[0].replica.entries().next().unwrap().clone(), 2);
         assert_eq!(a.state().fingerprint(), b.state().fingerprint());
+    }
+
+    #[test]
+    fn a_snapshot_lets_every_device_prune_and_a_new_device_start_from_it() {
+        let (_, mut ds, list) = account(3);
+        // Devices 0 and 1 write; device 2 has not joined yet.
+        for i in 0..20 {
+            write(
+                &mut ds[i % 2],
+                kind::MESSAGE,
+                json!({"id": format!("m{i}"), "conv": "c", "text": format!("t{i}")}),
+                10 + i as i64,
+            );
+        }
+        write(
+            &mut ds[0],
+            kind::REACT,
+            json!({"target": "m1", "by": "x", "emoji": "👍"}),
+            40,
+        );
+        let entries: Vec<Entry> = ds
+            .iter()
+            .take(2)
+            .flat_map(|d| d.replica.entries().cloned().collect::<Vec<_>>())
+            .collect();
+        for d in ds.iter_mut().take(2) {
+            for e in &entries {
+                d.replica.receive(e.clone(), 50);
+            }
+        }
+        assert_eq!(
+            ds[0].replica.state().fingerprint(),
+            ds[1].replica.state().fingerprint()
+        );
+
+        // Device 0 makes a snapshot and announces it.
+        let snap = ds[0]
+            .replica
+            .make_snapshot(&ds[0].writer.device.clone())
+            .unwrap();
+        let id = snap.id();
+        let upto = snap.upto.clone();
+        let note = write(
+            &mut ds[0],
+            kind::SNAPSHOT,
+            json!({"id": id, "upto": upto}),
+            60,
+        );
+        ds[1].replica.receive(note.clone(), 61);
+        // Nobody prunes before everyone holds it.
+        assert!(ds[0].replica.hold(snap.clone()));
+        assert!(ds[1]
+            .replica
+            .hold(Snapshot::from_json(&snap.to_json()).unwrap()));
+        assert_eq!(ds[0].replica.prune(&id), 0);
+        // A snapshot the log does not announce is not taken.
+        let mut forged = snap.clone();
+        forged.by = "someone".into();
+        assert!(!ds[1].replica.hold(forged));
+
+        // Device 2 joins the log now, from nothing: it holds the snapshot too, then says so with the others.
+        ds[2].replica.receive(note.clone(), 62);
+        assert!(ds[2].replica.install(snap.clone(), 63));
+        let haves: Vec<Entry> = (0..3)
+            .map(|i| write(&mut ds[i], kind::HAVE, json!({"snapshot": id}), 70))
+            .collect();
+        for d in ds.iter_mut() {
+            for h in &haves {
+                d.replica.receive(h.clone(), 71);
+            }
+        }
+        let before = ds[0].replica.entries().count();
+        let pruned = ds[0].replica.prune(&id);
+        assert!(pruned >= 21, "{pruned} of {before}");
+        assert!(ds[1].replica.prune(&id) > 0);
+        // The state is untouched by pruning; the three agree.
+        assert_eq!(
+            ds[0].replica.state().fingerprint(),
+            ds[1].replica.state().fingerprint()
+        );
+        assert_eq!(
+            ds[0].replica.state().fingerprint(),
+            ds[2].replica.state().fingerprint()
+        );
+        assert_eq!(
+            ds[2]
+                .replica
+                .state()
+                .reactions("m1")
+                .get("x")
+                .map(String::as_str),
+            Some("👍")
+        );
+
+        // The log goes on from the cut: a new entry chains onto the pruned ones everywhere.
+        let after = write(
+            &mut ds[1],
+            kind::MESSAGE,
+            json!({"id": "late", "conv": "c", "text": "after"}),
+            80,
+        );
+        assert_eq!(ds[0].replica.receive(after.clone(), 81), Outcome::Applied);
+        assert_eq!(ds[2].replica.receive(after, 81), Outcome::Applied);
+        // A replica still at the start needs the snapshot first.
+        assert!(ds[0].replica.needs_base(&Summary::new()).is_some());
+        let _ = list;
+    }
+
+    #[test]
+    fn no_snapshot_while_the_log_holds_a_kind_this_version_does_not_know() {
+        let (_, mut ds, _) = account(1);
+        write(
+            &mut ds[0],
+            kind::MESSAGE,
+            json!({"id": "m", "conv": "c", "text": "t"}),
+            1,
+        );
+        assert!(ds[0].replica.make_snapshot("d").is_some());
+        write(&mut ds[0], "from-the-future", json!({"x": 1}), 2);
+        assert!(
+            ds[0].replica.make_snapshot("d").is_none(),
+            "it would be lost from the snapshot"
+        );
+    }
+
+    #[test]
+    fn a_lost_marker_signed_by_the_account_closes_a_gap_and_nothing_else_does() {
+        let (account, mut ds, list) = account(2);
+        let e1 = write(
+            &mut ds[0],
+            kind::MESSAGE,
+            json!({"id": "a", "conv": "c", "text": "1"}),
+            1,
+        );
+        let _lost = write(
+            &mut ds[0],
+            kind::MESSAGE,
+            json!({"id": "b", "conv": "c", "text": "2"}),
+            2,
+        );
+        let e3 = write(
+            &mut ds[0],
+            kind::MESSAGE,
+            json!({"id": "c", "conv": "c", "text": "3"}),
+            3,
+        );
+        let mut r = Replica::new(list);
+        r.set_account(account.sign_public());
+        r.receive(e1, 4);
+        assert_eq!(r.receive(e3, 4), Outcome::Pending);
+        let body = json!({"device": ds[0].writer.device, "series": 1, "from": 2, "to": 2});
+        // Not signed by the account: nothing happens.
+        let fake = write(&mut ds[1], kind::LOST, body.clone(), 5);
+        r.receive(fake, 6);
+        assert!(r.state().conversation("c").len() == 1);
+        let marker = write(
+            &mut ds[1],
+            kind::LOST,
+            account_ruling(&account, &body).unwrap(),
+            7,
+        );
+        r.receive(marker, 8);
+        let ids: Vec<String> = r
+            .state()
+            .conversation("c")
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect();
+        assert_eq!(
+            ids,
+            ["a", "c"],
+            "the gap is closed and what came after it is applied"
+        );
+    }
+
+    #[test]
+    fn a_correction_signed_by_the_account_replaces_or_voids_an_entry() {
+        let (account, mut ds, list) = account(1);
+        let bad = write(
+            &mut ds[0],
+            kind::MESSAGE,
+            json!({"id": "m", "conv": "c", "text": "garbled"}),
+            1,
+        );
+        let mut r = Replica::new(list);
+        r.set_account(account.sign_public());
+        r.receive(bad.clone(), 2);
+        let fix = account_ruling(
+            &account,
+            &json!({"target": bad.hash(), "replace": {"id": "m", "conv": "c", "text": "fixed"}}),
+        )
+        .unwrap();
+        r.receive(write(&mut ds[0], kind::CORRECTION, fix, 3), 4);
+        assert_eq!(
+            r.state().conversation("c"),
+            vec![("m".to_owned(), "fixed".to_owned())]
+        );
+        let void =
+            account_ruling(&account, &json!({"target": bad.hash(), "replace": null})).unwrap();
+        r.receive(write(&mut ds[0], kind::CORRECTION, void, 5), 6);
+        assert!(r.state().conversation("c").is_empty());
+        // The entry itself never changed.
+        assert!(r.entries().any(|e| e.hash() == bad.hash()));
+    }
+
+    #[test]
+    fn the_fingerprint_sees_reactions() {
+        let (_, mut ds, list) = account(1);
+        write(
+            &mut ds[0],
+            kind::MESSAGE,
+            json!({"id": "m", "conv": "c", "text": "hi"}),
+            1,
+        );
+        let mut a = Replica::new(list.clone());
+        let mut b = Replica::new(list);
+        for e in ds[0].replica.entries().cloned().collect::<Vec<_>>() {
+            a.receive(e.clone(), 2);
+            b.receive(e, 2);
+        }
+        let thumbs = write(
+            &mut ds[0],
+            kind::REACT,
+            json!({"target": "m", "by": "x", "emoji": "👍"}),
+            3,
+        );
+        a.receive(thumbs, 4);
+        let mut other = a.state().clone();
+        let empty = b.state().fingerprint();
+        assert_ne!(
+            a.state().fingerprint(),
+            empty,
+            "a reaction changes the fingerprint"
+        );
+        // A different reaction gives a different fingerprint too.
+        other
+            .reactions
+            .get_mut("m")
+            .unwrap()
+            .get_mut("x")
+            .unwrap()
+            .value = Some("😂".into());
+        assert_ne!(a.state().fingerprint(), other.fingerprint());
     }
 
     #[test]

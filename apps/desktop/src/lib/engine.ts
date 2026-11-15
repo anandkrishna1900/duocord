@@ -235,6 +235,8 @@ export interface ChatState {
   /** The account's devices, and whether this one holds the account key (hosted engine only). */
   devices?: DeviceInfo[];
   holdsAccountKey?: boolean;
+  /** Items from other devices that could not be recovered (the device was gone before they left it). */
+  syncLost?: number;
   deviceLink?: DeviceLinkState | null;
   channels: ChannelView[];
   answer: InviteAnswer | null;

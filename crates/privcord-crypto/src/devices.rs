@@ -342,6 +342,9 @@ impl<'a> Author<'a> {
     }
 }
 
+/// An account's public signing key (for checking what the account signed).
+pub type PublicJwkAlias = PublicJwk;
+
 /// Where a device-signed payload carries the account's device list.
 pub const LIST_FIELD: &str = "deviceList";
 

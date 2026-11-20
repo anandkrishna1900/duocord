@@ -66,6 +66,18 @@ const FEATURE_GROUPS = [
   ] },
 ];
 
+const NUMBERS = [
+  ['Group size', '10 people (a full mesh, so 9 links per device)'],
+  ['File size', '8 MB, device to device'],
+  ['Bluetooth mesh', 'Up to 7 hops, Android only, experimental'],
+  ['Six-word invite', 'Valid for 15 minutes while the app stays open'],
+  ['Device removal', 'Takes effect after 24 hours (cancel any time), or at once with the recovery phrase'],
+  ['Linking a device', 'Six digits, three tries'],
+  ['Backup passphrase', '12 characters minimum (Argon2id)'],
+  ['Quick-send window (Windows)', 'Ctrl+Alt+D, locked while the app lock is on'],
+  ['Platforms', 'Windows 10/11 and Android'],
+];
+
 export function FeaturesPage({ Go }) {
   return (
     <>
@@ -82,6 +94,15 @@ export function FeaturesPage({ Go }) {
           </div>
         </section>
       ))}
+      <section className="page-sec">
+        <div className="wrap">
+          <h2 className="group-h">The numbers</h2>
+          <div className="tablewrap"><table>
+            <thead><tr><th>Thing</th><th>Limit</th></tr></thead>
+            <tbody>{NUMBERS.map(([a, b]) => <tr key={a}><td>{a}</td><td>{b}</td></tr>)}</tbody>
+          </table></div>
+        </div>
+      </section>
       <section className="page-sec">
         <div className="wrap">
           <h2 className="group-h">Not there yet</h2>
@@ -149,6 +170,33 @@ export function HowPage({ Go }) {
           </ol>
         </div>
       </section>
+      <section className="page-sec">
+        <div className="wrap">
+          <h2 className="group-h">Groups, in plain words</h2>
+          <p className="sub">A group is a set of people who each link directly to each other. Add Ben, Ben adds Cat, and you and Cat connect automatically without sharing a code. Up to 10 people. Someone added by a member you trust shows as "Introduced by" that member, so use safety numbers for anyone who matters. Removing a member stops new messages reaching them but cannot take back what they already have. New members see only messages sent after they joined.</p>
+        </div>
+      </section>
+      <section className="page-sec">
+        <div className="wrap">
+          <h2 className="group-h">Backups and recovery</h2>
+          <ol className="longsteps">
+            <li><b>1</b><div><h3>Your recovery phrase is the account</h3><p>It restores your identity on any device. It does not contain your chats.</p></div></li>
+            <li><b>2</b><div><h3>Backups hold the chats</h3><p>Make a backup protected by a passphrase (12 characters minimum). Files and old groups are included. Automatic backups are available on Windows.</p></div></li>
+            <li><b>3</b><div><h3>Restore on a new device</h3><p>Enter the 12 words, then open the backup with its passphrase. Friends see the same keys as before, so nothing needs re-verifying.</p></div></li>
+          </ol>
+        </div>
+      </section>
+      <section className="page-sec">
+        <div className="wrap">
+          <h2 className="group-h">When something goes wrong</h2>
+          <div className="fgrid">
+            <article className="fcard plain"><h3>A message is stuck</h3><p>Open Delivery details on it to see each device's state and the route. "Waiting" means that device has not answered yet.</p></article>
+            <article className="fcard plain"><h3>You are not receiving</h3><p>Settings shows a plain-language reason (no connection, battery limits, notifications off, quiet hours, muted chats).</p></article>
+            <article className="fcard plain"><h3>Two phones on mobile data cannot connect</h3><p>Many carriers share addresses between customers. A TURN relay fixes it; the repository has a ready kit, and the app can deliver via relays meanwhile.</p></article>
+            <article className="fcard plain"><h3>You lost a device</h3><p>Remove it from another device. It takes effect in 24 hours, or at once with the recovery phrase.</p></article>
+          </div>
+        </div>
+      </section>
       <Next Go={Go} items={[['features', 'Every feature'], ['faq', 'Questions'], ['download', 'Download']]} />
     </>
   );
@@ -171,6 +219,12 @@ export function ScreensPage({ Go, asset }) {
   );
 }
 
+const COMPARE_MORE = [
+  ['Platforms', 'Windows, Android', 'Android, iPhone, desktop', 'Android, iPhone, desktop', 'Android'],
+  ['Source code', 'Source-available (PC-NC licence)', 'Open source', 'Open source', 'Open source'],
+  ['Cost', 'Free', 'Free', 'Free', 'Free'],
+  ['Post-quantum key exchange', 'Yes (ML-KEM-768 with P-256)', 'Yes (recent versions)', 'No', 'No'],
+];
 const WEAKER = [
   'It has not been independently audited yet, and Signal, Session and Briar have.',
   'It is young and maintained by one person.',
@@ -194,6 +248,16 @@ export function ComparePage({ Go }) {
       </section>
       <section className="page-sec">
         <div className="wrap">
+          <h2 className="group-h">More differences</h2>
+          <div className="tablewrap"><table>
+            <thead><tr><th></th><th>PrivCord</th><th>Signal</th><th>Session</th><th>Briar</th></tr></thead>
+            <tbody>{COMPARE_MORE.map((r) => <tr key={r[0]}>{r.map((c, i) => <td key={i}>{c}</td>)}</tr>)}</tbody>
+          </table></div>
+          <p className="fine">Reading the table: "no server" for PrivCord means no company server stores or reads your messages. Optional relays, STUN and TURN still exist and can see connection details. Check each project for its current state.</p>
+        </div>
+      </section>
+      <section className="page-sec">
+        <div className="wrap">
           <h2 className="group-h">Where PrivCord is weaker</h2>
           <ul className="plainlist">{WEAKER.map((w) => <li key={w}>{w}</li>)}</ul>
           <p className="sub">If you need a battle-tested, audited messenger today, use one of the audited ones. PrivCord is for people who want to try a different design: no phone number, device-to-device links, and an offline mesh.</p>
@@ -205,11 +269,26 @@ export function ComparePage({ Go }) {
 }
 
 const MORE_FAQ = [
-  ['How do I add a friend?', 'Open Add friend. Show your QR code or read out the six words, and they scan or type them. You both tap Add.'],
-  ['What happens to messages when my friend is offline?', 'They wait on your device and send when you reconnect. Nothing is stored for you on a server.'],
-  ['Can I use it on my phone and my PC?', 'Yes. Link a new device: it shows a QR code, your phone scans it, and you type six digits on the new device.'],
-  ['What do backups contain, and who can open them?', 'Your chats, files and old groups, encrypted with a key made from your passphrase. Without the passphrase they cannot be opened.'],
+  ['How do I add a friend?', 'Open Add friend. Show your QR code or read out the six words, and they scan or type them. You both tap Add. Both of you then have each other\'s keys pinned.'],
+  ['What are the six words?', 'A short-lived meeting point, not your identity. Both phones turn them into a mailbox and a key so one can pass the other an encrypted contact card. They stop working after 15 minutes or when the app closes, and you confirm who answered with the safety numbers.'],
+  ['What are safety numbers?', 'A short code both of you can compare (in person or by voice) to be sure you are talking to the right person and not an impostor. Use them for anyone who matters.'],
+  ['What happens to messages when my friend is offline?', 'They wait on your device and send when you reconnect. Nothing is stored for you on a server. With "Deliver via relays" on, sealed copies can wait at a relay instead.'],
+  ['Can I use it on my phone and my PC?', 'Yes. Link a new device: it shows a QR code, your phone scans it, and you type six digits on the new device. The account key never leaves your first device.'],
+  ['What is the 12-word recovery phrase?', 'It is your account. The same words restore you on a new device. They are never stored anywhere else, so write them down and keep them safe. Anyone with them can be you.'],
+  ['What if I forget my recovery phrase and lose my device?', 'Then the account cannot be recovered. There is no server and no reset, which is also why nobody else can take it over.'],
+  ['What do backups contain, and who can open them?', 'Your chats, files and old groups, encrypted with a key made from your passphrase (Argon2id, 12 characters minimum). Without the passphrase they cannot be opened.'],
+  ['How big can files be?', 'Up to 8 MB. They go straight from device to device, so both need a live link; a file for someone offline waits and sends when they reconnect.'],
+  ['How many people can be in a group?', 'Up to 10. Every member links directly to every other, so 10 people means 9 links per device.'],
   ['Does it cost anything?', 'No. It is free. The source is public under the PC-NC licence, which does not allow commercial use without permission.'],
+  ['Can I stop people messaging me?', 'Yes. "Stay group-only with people I meet in groups" blocks new direct chats with people you only know through a group. It is a courtesy between honest apps, not a guarantee against a modified one.'],
+  ['Can I hide my IP address from friends?', 'Yes. "Hide my IP from friends" sends links through a relay only, and Tor mode routes through Tor. Both are slower. Relays you use can still see your address.'],
+  ['Can I block screenshots?', 'On a device, yes: it blocks ordinary screenshots and screen recording. It cannot stop a camera pointed at the screen.'],
+  ['What does the app ask permission for?', 'The camera (to scan QR codes), Bluetooth (for nearby mode, Android) and notifications. It does not ask for your contacts or phone number.'],
+  ['Why is Windows warning me about the installer?', 'The installer is not code-signed yet, so Windows SmartScreen warns about unknown publishers. Choose More info, then Run anyway, if you downloaded it from the releases page.'],
+  ['Where is my data stored?', 'On your device, encrypted. There is no PrivCord account or cloud copy. Your OS backups, if you have them on, may still keep copies.'],
+  ['How do I delete everything?', 'Use the wipe option in Settings. It clears this device only; it cannot erase what friends already received.'],
+  ['Are there ads or trackers?', 'No. The app collects nothing, and this website has no analytics or cookies.'],
+  ['How do I report a bug or a security problem?', 'Bugs go in GitHub issues. For security problems, follow the security policy in the repository and report privately.'],
 ];
 
 export function FaqPage({ Go }) {
@@ -256,6 +335,8 @@ export function DownloadPage({ Go, repo, reduce, dlRef, dlOn }) {
             <article className="fcard plain"><h3>Windows</h3><p>The installer is not code-signed yet, so Windows SmartScreen will warn you. Choose <em>More info</em>, then <em>Run anyway</em>.</p></article>
             <article className="fcard plain"><h3>Android</h3><p>You need to allow installing from the app or browser you downloaded it with. Pick the arm64 file unless your phone is very old.</p></article>
             <article className="fcard plain"><h3>First run</h3><p>The app makes your 12 recovery words. Write them down before you continue: they are the only way back to your account.</p></article>
+            <article className="fcard plain"><h3>Requirements</h3><p>Windows 10 or 11. Android phones: arm64 for almost every phone, armeabi-v7a only for old 32-bit ones. The app asks for the camera (QR codes), Bluetooth (nearby mode, Android) and notifications, and never for your contacts.</p></article>
+            <article className="fcard plain"><h3>Where files come from</h3><p>Only from the GitHub releases page of the project. We do not distribute it anywhere else, so treat other download sites with suspicion.</p></article>
             <article className="fcard plain"><h3>Before you rely on it</h3><p>PrivCord has not been independently audited. Read the <a href={`${repo}/blob/main/docs/KNOWN_LIMITATIONS.md`}>known limitations</a> first.</p></article>
           </div>
         </div>
@@ -267,44 +348,45 @@ export function DownloadPage({ Go, repo, reduce, dlRef, dlOn }) {
 
 // Edit these lines to change what the About page says.
 const ABOUT = {
-  name: 'Anand',
-  github: 'https://github.com/anandks2006',
-  githubName: 'anandks2006',
-  x: 'https://x.com/AnandKrishnaK1',
-  xName: '@AnandKrishnaK1',
+  people: [
+    ['X: @AnandKrishnaK1', 'https://x.com/AnandKrishnaK1'],
+    ['GitHub: anandks2006', 'https://github.com/anandks2006'],
+  ],
 };
 
 export function AboutPage({ Go, repo }) {
   return (
     <>
-      <Head eyebrow="About" title={`Made by ${ABOUT.name}`} lead="PrivCord is built and maintained by one independent developer, in the open." />
+      <Head eyebrow="About" title="The people behind PrivCord" lead="PrivCord is maintained by two people, in the open. There is no company behind it, no investors, and no data collected about you." />
       <section className="page-sec">
         <div className="wrap">
           <div className="fgrid">
             <article className="fcard plain">
-              <h3>Maintainer</h3>
+              <h3>Maintainers</h3>
               <ul className="plainlist links">
-                <li><a href={ABOUT.x}>X: {ABOUT.xName}</a> (licensing and contact)</li>
-                <li><a href={repo}>The PrivCord source</a></li>
+                {ABOUT.people.map(([t, h]) => <li key={h}><a href={h}>{t}</a></li>)}
+                <li><a href={repo}>The PrivCord source on GitHub</a></li>
               </ul>
             </article>
             <article className="fcard plain">
-              <h3>Contributors</h3>
-              <ul className="plainlist links">
-                <li><a href={ABOUT.github}>{ABOUT.githubName}</a>: contributor to PrivCord, who reviewed and merged pull requests #42, #64, #65, #66 and #68 in November 2026.</li>
-              </ul>
+              <h3>Reaching us</h3>
+              <p>Bugs and ideas go in <a href={`${repo}/issues`}>GitHub issues</a>. Security problems: read the <a href={`${repo}/blob/main/SECURITY.md`}>security policy</a> first and report privately. Licensing questions: message the X account above.</p>
             </article>
             <article className="fcard plain">
-              <h3>How the project is run</h3>
-              <p>The source is public and free for personal, educational and research use under the PC-NC licence; commercial use needs written permission. There is no company behind it and no data collected.</p>
+              <h3>Licence</h3>
+              <p>The source is public and free for personal, educational and research use under the PC-NC licence. Commercial use needs written permission. That makes it source-available rather than open source in the OSI sense, and the licence text is in the repository.</p>
             </article>
             <article className="fcard plain">
-              <h3>Found a problem?</h3>
-              <p>Please <a href={`${repo}/issues`}>open an issue</a>. For security problems, read the <a href={`${repo}/blob/main/SECURITY.md`}>security policy</a> first.</p>
+              <h3>What we promise, and what we don't</h3>
+              <p>We promise to say plainly what PrivCord does not do: it has not been independently audited, the Bluetooth mesh is experimental, and relays can see connection details. The <a href={`${repo}/blob/main/docs/KNOWN_LIMITATIONS.md`}>known limitations</a> are kept up to date. We don't promise it is safe for someone whose life depends on their messages.</p>
             </article>
             <article className="fcard plain">
-              <h3>Credits</h3>
-              <p>Fonts: Bricolage Grotesque and Figtree (OFL). Motion components from <a href="https://reactbits.dev">React Bits</a>.</p>
+              <h3>Privacy of this website</h3>
+              <p>This site is plain static pages. It has no analytics, no cookies and no sign-up. Downloads come from the GitHub releases page.</p>
+            </article>
+            <article className="fcard plain">
+              <h3>Want to help?</h3>
+              <p>Test it on real phones and PCs, read the code, or review the protocol notes in the repository. Independent eyes are the thing the project needs most.</p>
             </article>
           </div>
         </div>

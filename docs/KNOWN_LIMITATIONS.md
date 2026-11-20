@@ -1,7 +1,8 @@
-# DuoChat — Known Limitations & Threat Model
+# PrivCord — Known Limitations & Threat Model
 
-**Version**: 1.0  
-**Date**: October 2026
+**Version**: 1.1  
+**Date**: November 2026  
+(The app was called DuoChat earlier; some screens and sections below still use that name.)
 
 ---
 
@@ -77,8 +78,39 @@ Local kill switch activation operates strictly within the local device boundary:
   (up to 9 copies), so it uses your upload each time. Received files are saved encrypted on the
   device; "Save" writes an ordinary file. Only PNG, JPEG, GIF and WebP images and MP4, WebM, QuickTime and Ogg videos get a preview, never SVG, and no other file type is opened.
   File saving from the packaged desktop app has only been exercised in the browser suite.
-- No push notifications (there is no server to send them).
+- No push notifications (there is no server to send them). Background delivery depends on the operating system letting the app run; some phone makers stop apps aggressively.
+- No resuming a file transfer after a restart (it starts again), no iPhone, macOS or Linux app, and no dragging a file onto the tray icon (the framework does not support it; dropping files into the open window works).
 - The Bluetooth mesh exists on Android only and has never run on real radios; Windows cannot join it ([details](CHANNELS_AND_MESH.md)).
+
+## 8. Several devices
+- **Linking** has the new device show a QR code, the phone that holds the account key scan it, and the six digits be typed on the new device. The new device holds the phone's grant until the digits match (three tries) and never shows them itself, and the phone answers only the first request, so a photo of the QR code alone gets nowhere. The decision rules are tested; scanning with a real camera and a real second device has not been tried.
+- **Removing a device** takes effect after 24 hours (any device of yours can cancel), or at once with the recovery phrase. A removed device keeps what it already received. If every device is lost and the phrase is lost, the account cannot be recovered; there is no reset, because there is no server.
+- **Settings that follow you** (pins, archived chats, mutes, quiet hours, silent chats, screen privacy) are synced between your devices with last writer wins. If two devices change the same setting at nearly the same moment, the later change wins and the other is overwritten.
+
+## 9. Notifications and quiet times
+- **Silent chats** are honoured on Android. On Windows the setting is saved and respected everywhere, but the toast from a silent chat still plays the default sound (the notification plugin ignores "silent" on desktop). The toast shown while the window is closed to the tray does not read the silent flag.
+- **Quiet hours and mute-for-a-while** use the time zone each app tells the engine. A wrong device time zone means wrong quiet hours.
+- Notifications can show message text unless previews are turned off; the app lock does not stop notifications.
+
+## 10. Windows conveniences
+- **Quick-send window (Ctrl+Alt+D)** is locked while the app lock is on, so it cannot be used to get around the lock. Another program may already use that shortcut. If the main window is closed, messages from the quick-send window use the relay or queue path only, because the main window owns the direct links.
+- **Tray tooltip and taskbar unread badge** and the global shortcut have only been built, not run on real Windows from the development environment.
+
+## 11. Delivery details and nearby mode
+- **Per-device delivery and read marks** are kept on the device that sent the message (the newest 2000 messages) and are not synced. For a direct message, your friend's known devices that have not answered show as waiting. For a group message, only devices that answered are listed.
+- **Hop counts** are shown only for channel messages that arrived over the Bluetooth mesh (up to 7 radio hops). They count radio hops, not distance, and the mesh has never run on real radios.
+
+## 12. Screen privacy, voice notes, diagnostics
+- **Block screenshots** stops ordinary screenshots and screen recording on the device. It does not stop a camera pointed at the screen, another device that mirrors the display, or some capture hardware.
+- **Voice-note waveforms** are drawn from the file on each device (the engine cannot decode audio). Very long voice notes are cut off at about three minutes for the waveform on Android; playback is not affected.
+- **Diagnostics export** holds counts and yes/no answers only, never text, names, keys or ids, and is checked by a test. Read it before sending it to anyone.
+
+## 13. Project status
+- PrivCord has **not been independently audited**. The protocol is covered by tests, shared test vectors and fuzzing in CI, and the code has been reviewed by its maintainers and by AI-assisted review, which is not a substitute for an outside audit.
+- It is maintained by two people. Windows and Android only.
+- It is source-available under the PC-NC licence, not open source in the OSI sense.
+- Relays, STUN and TURN servers you use can see connection metadata (addresses and timing) but not message content. "Hide my IP from friends" and Tor mode reduce what friends and relays learn, at the cost of speed.
+
 
 ## Connecting across cities or mobile networks (e.g. Kerala to Kolkata)
 

@@ -312,7 +312,7 @@ export default function App() {
 
         <footer>
           <div className="wrap foot">
-            <div>© 2026 PrivCord · <a href={`${REPO}/blob/main/LICENSE`}>PC-NC licence (source-available)</a> · Fonts: Bricolage Grotesque, Figtree (OFL) · Motion components: <a href="https://reactbits.dev">React Bits</a></div>
+            <div>© 2026 PrivCord · <a href={`${REPO}/blob/main/LICENSE`}>PC-NC licence (source-available)</a> · Fonts: Bricolage Grotesque, Figtree (OFL)</div>
             <nav aria-label="Footer">
               <a href={REPO}>GitHub</a>
               <a href={`${REPO}/blob/main/SECURITY.md`}>Security</a>

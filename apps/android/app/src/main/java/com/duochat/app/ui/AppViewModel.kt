@@ -233,6 +233,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { engine?.setQuietHours(enabled, from, to) }
     }
 
+    suspend fun insight(name: String, inputJson: String): String = engine?.insight(name, inputJson) ?: "[]"
+
+    suspend fun storageByChatJson(): String = engine?.storageByChatJson() ?: "[]"
+
     fun quickSendTimes(onResult: (List<Pair<String, Long>>) -> Unit) {
         viewModelScope.launch { onResult(engine?.quickSendTimes().orEmpty()) }
     }

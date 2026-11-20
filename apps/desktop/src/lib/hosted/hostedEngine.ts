@@ -366,6 +366,26 @@ export class HostedChatEngine implements ChatEngineApi {
     }
   }
 
+  async insight(name: string, input: unknown): Promise<unknown> {
+    return this.engine.call<unknown>('insight', { name, input: JSON.stringify(input) });
+  }
+
+  async storageByChat(): Promise<Array<{ id: string; messages: number; files: number; bytes: number; fileBytes: number; fileIds: string[] }>> {
+    const raw = await this.engine.call<unknown>('storage_by_chat').catch(() => []);
+    if (!Array.isArray(raw)) return [];
+    return raw.map((r) => {
+      const o = r as Record<string, unknown>;
+      return {
+        id: String(o.id),
+        messages: Number(o.messages ?? 0),
+        files: Number(o.files ?? 0),
+        bytes: Number(o.bytes ?? 0),
+        fileBytes: Number(o.file_bytes ?? 0),
+        fileIds: Array.isArray(o.file_ids) ? o.file_ids.map(String) : [],
+      };
+    });
+  }
+
   async quickTimes(): Promise<{ label: string; at: number }[]> {
     const raw = await this.engine.call<unknown>('quick_times').catch(() => null);
     return Array.isArray(raw)

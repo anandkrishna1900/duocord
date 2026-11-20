@@ -83,6 +83,8 @@ fun SettingsDialog(
     onClearLocalData: ((Result<Unit>) -> Unit) -> Unit,
     onDeleteMessages: (List<String>) -> Unit = {},
     onSetQuietHours: (Boolean, Int, Int) -> Unit = { _, _, _ -> },
+    insight: suspend (String, String) -> String = { _, _ -> "[]" },
+    storageByChatJson: suspend () -> String = { "[]" },
     onOpenManual: () -> Unit,
     onOpenNuke: () -> Unit,
     onBluetoothPermissionResult: () -> Unit = {},
@@ -377,7 +379,10 @@ SectionTitle("Appearance")
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(8.dp))
-                NetworkHostsCard(com.duochat.app.data.networkHosts(settings.network))
+                val hostsJson by androidx.compose.runtime.produceState("[]", settings.network) {
+                    value = insight("hosts", com.duochat.app.data.hostsInput(settings.network))
+                }
+                NetworkHostsCard(com.duochat.app.data.parseHosts(hostsJson))
                 Spacer(Modifier.height(8.dp))
                 DetailRow("Friends connected now", "${state.linkCount} of ${state.contacts.size}")
                 DetailRow("Messages waiting to send", state.queuedCount.toString())
@@ -630,16 +635,21 @@ SectionTitle("Appearance")
                 Spacer(Modifier.height(20.dp))
 
 SectionTitle("Security")
+                val staleCount = state.devices.count { it.stale }
+                val checkupJson by androidx.compose.runtime.produceState(
+                    "[]", settings.appLock, settings.lastBackupAt, settings.network.forceRelay, settings.notificationPreviews,
+                    settings.groupOnly, settings.panicWipe, staleCount,
+                ) {
+                    value = insight(
+                        "checkup",
+                        com.duochat.app.data.checkupInput(
+                            settings.appLock, settings.lastBackupAt, settings.network.forceRelay, !settings.notificationPreviews,
+                            settings.groupOnly, settings.panicWipe, staleCount,
+                        ),
+                    )
+                }
                 PrivacyCheckupCard(
-                    items = com.duochat.app.data.privacyCheckup(
-                        appLock = settings.appLock,
-                        lastBackupAt = settings.lastBackupAt,
-                        hideIp = settings.network.forceRelay,
-                        previewsOff = !settings.notificationPreviews,
-                        groupOnly = settings.groupOnly,
-                        panicWipe = settings.panicWipe,
-                        staleDevices = state.devices.count { it.stale },
-                    ),
+                    items = com.duochat.app.data.parseCheckup(checkupJson),
                     canTurnOn = setOf("lock", "previews", "grouponly", "panic"),
                     onTurnOn = { id ->
                         onUpdateSettings {
@@ -778,8 +788,9 @@ ToggleRow(
                 BackupSection({ pass, done -> onExportBackup(pass) { r -> if (r.isSuccess) onUpdateSettings { copy(lastBackupAt = System.currentTimeMillis()) }; done(r) } }, onImportBackup)
                 Spacer(Modifier.height(20.dp))
 
-StorageByChatCard(
-                    rows = com.duochat.app.data.storageByChat(state.messages) { id ->
+val storageJson by androidx.compose.runtime.produceState("[]", state.messages) { value = storageByChatJson() }
+                StorageByChatCard(
+                    rows = com.duochat.app.data.parseStorage(storageJson) { id ->
                         state.contacts.firstOrNull { it.uid == id }?.name ?: state.groups.firstOrNull { it.groupId == id }?.name
                             ?: state.channels.firstOrNull { it.id == id }?.let { "# ${it.name}" } ?: "Chat"
                     },

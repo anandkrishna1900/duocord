@@ -1,19 +1,27 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ChatState } from '../lib/engine';
 import type { ChatEngineApi } from '../lib/engineApi';
 import { formatBytes } from '../lib/format';
-import { storageByChat } from '../lib/storage';
+import { storageByChat, type ChatStorage } from '../lib/storage';
 
 /** What each chat takes on this device, with a way to drop a chat's photos and files to free space. */
 export function StorageByChat({ state, engine }: { state: ChatState; engine: ChatEngineApi | null }) {
   const [confirm, setConfirm] = useState<string | null>(null);
-  const rows = useMemo(
-    () =>
-      storageByChat(state.messages, (id) =>
-        state.contacts.find((c) => c.uid === id)?.name ?? state.groups.find((g) => g.groupId === id)?.name ?? (id.startsWith('chan:') ? `# ${id.slice(5)}` : 'Chat'),
-      ).slice(0, 12),
-    [state],
-  );
+  const nameOf = (id: string) =>
+    state.contacts.find((c) => c.uid === id)?.name ?? state.groups.find((g) => g.groupId === id)?.name ?? (id.startsWith('chan:') ? `# ${id.slice(5)}` : 'Chat');
+  // The packaged app asks the shared engine what each chat holds; the browser-only development engine counts in place.
+  const local = useMemo(() => storageByChat(state.messages, nameOf), [state]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [counted, setCounted] = useState<ChatStorage[] | null>(null);
+  useEffect(() => {
+    let live = true;
+    if (!engine?.storageByChat) return;
+    void engine.storageByChat().then((r) => live && setCounted(r.map((x) => ({ ...x, name: nameOf(x.id) }))));
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [engine, state]);
+  const rows = (engine?.storageByChat ? (counted ?? []) : local).slice(0, 12);
   if (rows.length === 0) return null;
   const biggest = rows[0]!.bytes || 1;
   return (

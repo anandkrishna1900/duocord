@@ -1427,7 +1427,7 @@ impl PrivcordEngine {
         }
     }
 
-    /// A small pure answer the screens show (`checkup`, `hosts`, `delivery_words`): JSON in, JSON out. The same
+    /// A small pure answer the screens show (`checkup`, `hosts`): JSON in, JSON out. The same
     /// answer on every platform.
     pub fn insight(&self, name: String, input_json: String) -> Result<String, FfiError> {
         privcord_engine::insights::insight(&name, &input_json)

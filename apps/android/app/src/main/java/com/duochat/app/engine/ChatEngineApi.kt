@@ -70,6 +70,11 @@ interface ChatEngineApi {
     /** Ready-made times for "send later" in the person's own time zone: label and time in ms. */
     suspend fun quickSendTimes(): List<Pair<String, Long>>
 
+    /** Small pure answers worked out in the shared engine (`checkup`, `hosts`): JSON in, JSON out. */
+    suspend fun insight(name: String, inputJson: String): String
+    /** What each chat takes on this phone, as JSON from the shared engine. */
+    suspend fun storageByChatJson(): String
+
     /** Scheduled send: a message to go out at [at] (milliseconds); kept on this phone, sent by it. */
     suspend fun scheduleMessage(conversationId: String, text: String, at: Long): Result<Unit>
     suspend fun cancelScheduled(id: String): Result<Unit>

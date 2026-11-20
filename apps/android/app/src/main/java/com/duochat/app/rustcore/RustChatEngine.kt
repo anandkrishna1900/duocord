@@ -1274,6 +1274,11 @@ class RustChatEngine(
     override suspend fun setMuteUntil(conversationId: String, untilMs: Long): Result<Unit> = call { setMuteUntil(conversationId, untilMs) }.also { requestRefresh() }
     override suspend fun setQuietHours(enabled: Boolean, from: Int, to: Int): Result<Unit> = call { setQuietHours(enabled, from.toUShort(), to.toUShort()) }.also { requestRefresh() }
 
+    override suspend fun insight(name: String, inputJson: String): String =
+        call { insight(name, inputJson) }.getOrDefault("[]")
+
+    override suspend fun storageByChatJson(): String = call { storageByChatJson() }.getOrDefault("[]")
+
     override suspend fun quickSendTimes(): List<Pair<String, Long>> = withContext(Dispatchers.IO) {
         val e = engine ?: return@withContext emptyList()
         runCatching {

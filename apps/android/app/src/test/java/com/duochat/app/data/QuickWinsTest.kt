@@ -1,42 +1,47 @@
 package com.duochat.app.data
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+/** The rules live in the shared engine (and are tested there); here only the reading and writing of its JSON. */
 class QuickWinsTest {
-    private val rows = listOf("a", "b", "c", "d")
-
     @Test
     fun `pinned chats come first in pin order`() {
+        val rows = listOf("a", "b", "c", "d")
         assertEquals(listOf("c", "a", "b", "d"), withPinsFirst(rows, listOf("c", "a")) { it })
         assertEquals(rows, withPinsFirst(rows, listOf("gone")) { it })
     }
 
     @Test
-    fun `network hosts list relays and STUN, nothing in Bluetooth-only mode`() {
-        val hosts = networkHosts(NetworkConfig()).map { it.host }
-        assertTrue(hosts.any { it.contains("relay.damus.io") })
-        assertTrue(networkHosts(NetworkConfig(transportMode = TransportMode.BLUETOOTH_ONLY)).isEmpty())
-        val relayOnly = networkHosts(NetworkConfig(forceRelay = true, turn = listOf(TurnServer(listOf("turn:turn.example.org:3478"), "u", "c"))))
-        assertFalse(relayOnly.any { it.why.contains("STUN") })
-        assertEquals("turn.example.org:3478", relayOnly.first { it.why.contains("TURN") }.host)
+    fun `the checkup question has the names the engine expects`() {
+        val o = org.json.JSONObject(checkupInput(true, 5L, false, true, false, true, 2, 99L))
+        assertEquals(true, o.getBoolean("app_lock"))
+        assertEquals(5L, o.getLong("last_backup_at"))
+        assertEquals(2, o.getInt("stale_devices"))
+        assertEquals(99L, o.getLong("now_ms"))
     }
 
     @Test
-    fun `checkup says what to fix`() {
-        val now = 1_000_000_000_000L
-        val none = privacyCheckup(false, 0, false, false, false, false, 0, now)
-        assertEquals(1, none.count { it.ok })
-        val all = privacyCheckup(true, now - 1000, true, true, true, true, 0, now)
-        assertTrue(all.all { it.ok })
-        assertFalse(privacyCheckup(true, now - 60L * 24 * 3600 * 1000, true, true, true, true, 0, now).first { it.id == "backup" }.ok)
-        assertTrue(privacyCheckup(true, now, true, true, true, true, 2, now).first { it.id == "devices" }.hint.contains("2 linked devices"))
+    fun `the hosts question flattens the network settings`() {
+        val o = org.json.JSONObject(hostsInput(NetworkConfig(forceRelay = true, turn = listOf(TurnServer(listOf("turn:turn.example.org:3478"), "u", "c")))))
+        assertEquals("AUTOMATIC", o.getString("mode"))
+        assertEquals(true, o.getBoolean("force_relay"))
+        assertEquals("turn:turn.example.org:3478", o.getJSONArray("turn").getString(0))
+        assertTrue(o.getJSONArray("nostr").length() > 0)
     }
-}
 
-class QuickWins2Test {
+    @Test
+    fun `the engine's answers are read back`() {
+        val items = parseCheckup("""[{"id":"lock","label":"App lock","ok":false,"hint":"Turn on"}]""")
+        assertEquals(CheckupItem("lock", "App lock", false, "Turn on"), items.single())
+        assertEquals(HostRow("relay.damus.io", "why"), parseHosts("""[{"host":"relay.damus.io","why":"why"}]""").single())
+        val s = parseStorage("""[{"id":"x","messages":2,"files":1,"bytes":1005,"file_bytes":1000,"file_ids":["m1"]}]""") { it.uppercase() }.single()
+        assertEquals("X", s.name)
+        assertEquals(listOf("m1"), s.fileIds)
+        assertTrue(parseCheckup("not json").isEmpty())
+    }
+
     @Test
     fun `time of day is shown as HH_MM`() {
         assertEquals("07:05", minutesLabel(7 * 60 + 5))
@@ -46,23 +51,5 @@ class QuickWins2Test {
     fun `delivery states are put in words`() {
         assertEquals("Read", deliveryWords(DeliveryState.READ))
         assertEquals("Waiting for them to come online", deliveryWords(DeliveryState.QUEUED))
-    }
-
-    @Test
-    fun `storage adds text and files per chat, biggest first, skipping deleted`() {
-        fun m(id: String, text: String, size: Int? = null, deleted: Boolean = false) = ChatMessage(
-            messageId = id, clientMessageId = id, senderId = "s", text = text, clientCreatedAt = 0L, deleted = deleted,
-            file = size?.let { FileMeta("f", "image/png", it, "h") },
-        )
-        val rows = storageByChat(
-            mapOf(
-                "a" to listOf(m("1", "hello"), m("2", "", 1000), m("3", "gone", deleted = true)),
-                "b" to listOf(m("4", "x".repeat(5000))),
-                "c" to listOf(m("5", "bye", deleted = true)),
-            ),
-        ) { it.uppercase() }
-        assertEquals(listOf("B", "A"), rows.map { it.name })
-        assertEquals(1005L, rows[1].bytes)
-        assertEquals(listOf("2"), rows[1].fileIds)
     }
 }

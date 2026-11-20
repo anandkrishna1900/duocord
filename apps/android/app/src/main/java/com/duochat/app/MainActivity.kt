@@ -344,6 +344,8 @@ private fun RootScreen(viewModel: AppViewModel) {
                     onRequestNotifications = requestNotifications,
                     onUpdateSettings = viewModel::updateSettings,
                     onSetQuietHours = viewModel::setQuietHours,
+                    insight = viewModel::insight,
+                    storageByChatJson = viewModel::storageByChatJson,
                     onClearLocalData = viewModel::clearLocalData,
                     onDeleteMessages = { ids -> ids.forEach { viewModel.deleteMessage(it, false) } },
                     onOpenManual = {

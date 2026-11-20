@@ -523,7 +523,7 @@ export function SettingsDialog({
               Messages go straight from device to device. A device keeps at most {30} live connections, which
               is plenty for groups of a few dozen.
             </p>
-            <NetworkTransparency />
+            <NetworkTransparency engine={engine} />
             <details className="advanced">
               <summary>Advanced</summary>
               <NetworkSettings engine={engine} state={state} />
@@ -533,7 +533,7 @@ export function SettingsDialog({
 
         {section === 'security' ? (
           <section className="settings-section">
-            <PrivacyCheckup settings={settings} state={state} go={setSection} />
+            <PrivacyCheckup engine={engine} settings={settings} state={state} go={setSection} />
             <AppLockControl />
             <Toggle
               label="Stay group-only with people I meet in groups"

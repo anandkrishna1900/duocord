@@ -55,6 +55,10 @@ export interface ChatEngineApi {
   /** Preferences held by the engine and synced to every device of the account. */
   /** Ready-made times for "send later" in the person's own time: in an hour, this evening, tomorrow morning. */
   quickTimes?(): Promise<{ label: string; at: number }[]>;
+  /** Small pure answers computed once in the shared engine (`checkup`, `hosts`): JSON in, JSON out. */
+  insight?(name: string, input: unknown): Promise<unknown>;
+  /** What each chat takes on this device (the shared engine counts it). */
+  storageByChat?(): Promise<Array<{ id: string; messages: number; files: number; bytes: number; fileBytes: number; fileIds: string[] }>>;
   togglePin?(conversation: string): void;
   setArchived?(conversation: string, archived: boolean): void;
   /** Turn a chat's notifications off until a time in ms (0 turns them on again). */

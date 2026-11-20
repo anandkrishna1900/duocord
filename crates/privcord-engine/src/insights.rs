@@ -130,20 +130,6 @@ fn network_hosts(i: &HostsInput) -> Vec<Value> {
         .collect()
 }
 
-/// A delivery state in words.
-fn delivery_words(state: &str) -> String {
-    match state.to_ascii_lowercase().as_str() {
-        "queued" => "Waiting for them to come online",
-        "sending" => "On its way",
-        "sent" => "Sent",
-        "delivered" => "Delivered",
-        "read" => "Read",
-        "failed" => "Could not be sent",
-        other => return other.to_owned(),
-    }
-    .to_owned()
-}
-
 /// One pure answer by name. Unknown names and bad input give an error, never a guess.
 pub fn insight(name: &str, input: &str) -> Result<String, String> {
     let bad = |e: serde_json::Error| format!("bad input: {e}");
@@ -155,10 +141,6 @@ pub fn insight(name: &str, input: &str) -> Result<String, String> {
         "hosts" => {
             let i: HostsInput = serde_json::from_str(input).map_err(bad)?;
             serde_json::to_string(&network_hosts(&i)).map_err(bad)
-        }
-        "delivery_words" => {
-            let s: String = serde_json::from_str(input).map_err(bad)?;
-            serde_json::to_string(&delivery_words(&s)).map_err(bad)
         }
         _ => Err(format!("unknown insight `{name}`")),
     }
@@ -235,12 +217,7 @@ mod tests {
     }
 
     #[test]
-    fn delivery_states_are_put_in_words_and_bad_calls_are_errors() {
-        assert_eq!(run("delivery_words", json!("READ")), json!("Read"));
-        assert_eq!(
-            run("delivery_words", json!("QUEUED")),
-            json!("Waiting for them to come online")
-        );
+    fn bad_calls_are_errors_not_guesses() {
         assert!(insight("nope", "{}").is_err());
         assert!(insight("checkup", "{").is_err());
     }

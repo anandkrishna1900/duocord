@@ -4,19 +4,19 @@ import { withPinsFirst } from './pins';
 import { networkHosts } from './networkHosts';
 import { DEFAULT_NETWORK_CONFIG } from '@duochat/protocol';
 
-const base = { appLock: false, lastBackupAt: 0, hideIp: false, previewsOff: false, groupOnly: false, panicWipe: false, staleDevices: 0, now: 1_000_000_000_000 };
+const base = { app_lock: false, last_backup_at: 0, hide_ip: false, previews_off: false, group_only: false, panic_wipe: false, stale_devices: 0, now_ms: 1_000_000_000_000 };
 
 describe('privacy checkup', () => {
   it('scores what is on and says what to fix', () => {
     const none = privacyCheckup(base);
     expect(none.score).toBe(1); // only "no forgotten devices" holds
     expect(none.items.find((i) => i.id === 'lock')?.section).toBe('security');
-    const all = privacyCheckup({ ...base, appLock: true, lastBackupAt: base.now - 1000, hideIp: true, previewsOff: true, groupOnly: true, panicWipe: true });
+    const all = privacyCheckup({ ...base, app_lock: true, last_backup_at: base.now_ms - 1000, hide_ip: true, previews_off: true, group_only: true, panic_wipe: true });
     expect(all.score).toBe(all.total);
   });
   it('treats an old backup as no backup, and names stale devices', () => {
-    expect(privacyCheckup({ ...base, lastBackupAt: base.now - 60 * 24 * 3600 * 1000 }).items.find((i) => i.id === 'backup')?.ok).toBe(false);
-    expect(privacyCheckup({ ...base, staleDevices: 2 }).items.find((i) => i.id === 'devices')?.hint).toContain('2 linked devices');
+    expect(privacyCheckup({ ...base, last_backup_at: base.now_ms - 60 * 24 * 3600 * 1000 }).items.find((i) => i.id === 'backup')?.ok).toBe(false);
+    expect(privacyCheckup({ ...base, stale_devices: 2 }).items.find((i) => i.id === 'devices')?.hint).toContain('2 linked devices');
   });
 });
 

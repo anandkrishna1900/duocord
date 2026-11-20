@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { loadNetworkConfig } from '../lib/network';
-import { privacyCheckup } from '../lib/privacyCheckup';
+import { privacyCheckup, SECTION_OF, type CheckupItem } from '../lib/privacyCheckup';
+import type { ChatEngineApi } from '../lib/engineApi';
 import type { AppSettings } from '../lib/settings';
 import type { ChatState } from '../lib/engine';
 import { isLockEnabled } from '../lib/appLock';
@@ -28,10 +29,12 @@ async function lastBackupAt(): Promise<number> {
 
 /** A short list of privacy basics, how many hold, and a button to fix each one. Everything is read on this device. */
 export function PrivacyCheckup({
+  engine,
   settings,
   state,
   go,
 }: {
+  engine: ChatEngineApi | null;
   settings: AppSettings;
   state: ChatState;
   go: (section: SettingsSection) => void;
@@ -40,15 +43,40 @@ export function PrivacyCheckup({
   useEffect(() => {
     void lastBackupAt().then(setBackupAt);
   }, []);
-  const { items, score, total } = privacyCheckup({
-    appLock: isLockEnabled(),
-    lastBackupAt: backupAt,
-    hideIp: loadNetworkConfig().forceRelay === true,
-    previewsOff: !settings.notificationPreviews,
-    groupOnly: settings.groupOnly,
-    panicWipe: settings.panicWipe,
-    staleDevices: (state.devices ?? []).filter((d) => d.stale).length,
-  });
+  const input = {
+    app_lock: isLockEnabled(),
+    last_backup_at: backupAt,
+    hide_ip: loadNetworkConfig().forceRelay === true,
+    previews_off: !settings.notificationPreviews,
+    group_only: settings.groupOnly,
+    panic_wipe: settings.panicWipe,
+    stale_devices: (state.devices ?? []).filter((d) => d.stale).length,
+    now_ms: Date.now(),
+  };
+  // The packaged app asks the shared engine, so Windows and Android give the same answer. The browser-only development
+  // engine has no Rust behind it and uses the TypeScript copy of the same rules.
+  const [items, setItems] = useState<CheckupItem[]>(() => privacyCheckup(input).items);
+  const key = JSON.stringify({ ...input, now_ms: 0 });
+  useEffect(() => {
+    let live = true;
+    if (!engine?.insight) {
+      setItems(privacyCheckup(input).items);
+      return;
+    }
+    void engine.insight('checkup', input).then(
+      (raw) => {
+        if (!live || !Array.isArray(raw)) return;
+        setItems(raw.map((r) => ({ ...(r as Omit<CheckupItem, 'section'>), section: SECTION_OF[(r as { id: string }).id] ?? 'security' })));
+      },
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [engine, key]);
+  const score = items.filter((x) => x.ok).length;
+  const total = items.length;
   return (
     <div className="card-box checkup">
       <div className="card-title">

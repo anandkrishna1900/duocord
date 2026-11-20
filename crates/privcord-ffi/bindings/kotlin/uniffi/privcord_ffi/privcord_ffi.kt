@@ -1764,7 +1764,7 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_import_backup() != 57407.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_insight() != 16493.toShort()) {
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_insight() != 61281.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_join_channel() != 1805.toShort()) {
@@ -3378,7 +3378,7 @@ public interface PrivcordEngineInterface {
     fun `importBackup`(`text`: kotlin.String, `passphrase`: kotlin.String): RestoreDto
     
     /**
-     * A small pure answer the screens show (`checkup`, `hosts`, `delivery_words`): JSON in, JSON out. The same
+     * A small pure answer the screens show (`checkup`, `hosts`): JSON in, JSON out. The same
      * answer on every platform.
      */
     fun `insight`(`name`: kotlin.String, `inputJson`: kotlin.String): kotlin.String
@@ -4024,7 +4024,7 @@ open class PrivcordEngine: Disposable, AutoCloseable, PrivcordEngineInterface {
 
     
     /**
-     * A small pure answer the screens show (`checkup`, `hosts`, `delivery_words`): JSON in, JSON out. The same
+     * A small pure answer the screens show (`checkup`, `hosts`): JSON in, JSON out. The same
      * answer on every platform.
      */
     @Throws(FfiException::class)override fun `insight`(`name`: kotlin.String, `inputJson`: kotlin.String): kotlin.String {

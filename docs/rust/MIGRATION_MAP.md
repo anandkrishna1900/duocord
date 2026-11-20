@@ -11,10 +11,10 @@ Status meanings: **Ported, tested** = the Rust implementation exists and is chec
 | Ported, tested | 66 | 9828 |
 | Partly ported | 1 | 2215 |
 | Not yet ported | 0 | 0 |
-| Stays (UI) | 63 | 13976 |
+| Stays (UI) | 63 | 13988 |
 | Stays (platform adapter) | 57 | 11597 |
 | Replaced by a library | 4 | 333 |
-| **All mapped files** | **191** | **37949** |
+| **All mapped files** | **191** | **37961** |
 
 Ported does not mean retired: the TypeScript and Kotlin versions stay in production until the apps call the Rust engine (M7 desktop, M8 Android) and the compatibility gates pass (PRD section 16).
 
@@ -84,7 +84,7 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 | `apps/desktop/src/components/QrCode.tsx` | 18 | `QrCode` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/RecoveryDialogs.tsx` | 402 | `RecoveryDialogProps`, `RecoveryDialog` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/RequestDialog.tsx` | 57 | `RequestDialog` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
-| `apps/desktop/src/components/SettingsDialog.tsx` | 636 | `SettingsSection`, `SettingsDialog` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
+| `apps/desktop/src/components/SettingsDialog.tsx` | 648 | `SettingsSection`, `SettingsDialog` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/config.ts` | 14 | `config`, `isTauri` | App shell | UI | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/hooks/useChatEngine.ts` | 103 | `UseChatEngine`, `useChatEngine` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/hooks/useSettings.ts` | 33 | `useSettings` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |

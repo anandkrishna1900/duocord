@@ -122,7 +122,7 @@ try {
     ['newgroup', async () => p.click('button[aria-label="New group"]')],
     ['channels', async () => p.click('button[aria-label="Channels"]')],
     ['settings', async () => p.click('button[aria-label="Settings"]')],
-    ['settings-look', async () => { await p.click('button[aria-label="Settings"]'); await p.click('.tab:has-text("Look")'); }],
+    ['settings-look', async () => { await p.click('button[aria-label="Settings"]'); await p.click('.tab:has-text("Appearance")'); }],
     ['settings-connection', async () => { await p.click('button[aria-label="Settings"]'); await p.click('.tab:has-text("Connection")'); }],
     ['settings-security', async () => { await p.click('button[aria-label="Settings"]'); await p.click('.tab:has-text("Security")'); }],
     ['settings-about', async () => { await p.click('button[aria-label="Settings"]'); await p.click('.tab:has-text("About")'); }],

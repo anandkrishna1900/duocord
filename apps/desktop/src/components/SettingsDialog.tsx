@@ -15,14 +15,16 @@ import { AutoBackupControl } from './AutoBackupControl';
 import { formatBytes } from '../lib/format';
 import { AlertIcon, CheckIcon, KeyIcon, TrashIcon } from './Icons';
 
-export type SettingsSection = 'profile' | 'devices' | 'appearance' | 'connection' | 'security' | 'about';
+export type SettingsSection = 'profile' | 'devices' | 'appearance' | 'notifications' | 'connection' | 'security' | 'backup' | 'about';
 
 const SECTIONS: Array<{ id: SettingsSection; label: string }> = [
   { id: 'profile', label: 'Profile' },
   { id: 'devices', label: 'Devices' },
-  { id: 'appearance', label: 'Look' },
+  { id: 'appearance', label: 'Appearance' },
+  { id: 'notifications', label: 'Notifications' },
   { id: 'connection', label: 'Connection' },
   { id: 'security', label: 'Security' },
+  { id: 'backup', label: 'Backup' },
   { id: 'about', label: 'About' },
 ];
 
@@ -451,6 +453,11 @@ export function SettingsDialog({
             ) : (
               <p className="muted small">The color theme sets the light or dark look and the accent color.</p>
             )}
+          </section>
+        ) : null}
+
+        {section === 'notifications' ? (
+          <section className="settings-section">
             <Toggle
               label="Notifications"
               description="Show a system notification for new messages while DuoCord is running, also from the tray."
@@ -497,7 +504,6 @@ export function SettingsDialog({
         {section === 'security' ? (
           <section className="settings-section">
             <AppLockControl />
-            <BackupControl engine={engine} />
             <Toggle
               label="Stay group-only with people I meet in groups"
               description="You still read and reply in the groups you share, but nobody you only know through a group can message you directly, and you cannot message them, unless you swap invites yourselves. It applies to people you meet from now on and to the ones you already have."
@@ -570,6 +576,12 @@ export function SettingsDialog({
                 Erase everything…
               </button>
             </div>
+          </section>
+        ) : null}
+
+        {section === 'backup' ? (
+          <section className="settings-section">
+            <BackupControl engine={engine} />
           </section>
         ) : null}
 

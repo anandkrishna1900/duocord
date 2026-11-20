@@ -100,7 +100,7 @@ export function QuickSend() {
       setStatus('Sent');
       window.setTimeout(() => void closeWindow(), 600);
     } catch {
-      setStatus('Could not send. Open DuoCord to see why.');
+      setStatus('Could not send. Open PrivCord to see why.');
       setBusy(false);
     }
   }
@@ -109,7 +109,7 @@ export function QuickSend() {
     <main className="quick-send" aria-label="Quick send">
       {phase === 'loading' ? <p className="muted small">Opening…</p> : null}
       {phase === 'closed' || phase === 'locked' ? (
-        <p className="quick-note">{phase === 'locked' ? 'DuoCord is locked. Open it and unlock it first.' : 'Open DuoCord first.'}</p>
+        <p className="quick-note">{phase === 'locked' ? 'PrivCord is locked. Open it and unlock it first.' : 'Open PrivCord first.'}</p>
       ) : null}
       {phase === 'ready' && !chosen ? (
         <>
@@ -165,7 +165,7 @@ export function QuickSend() {
         </>
       ) : null}
       <button type="button" className="button ghost small quick-open" onClick={() => void openMain()}>
-        Open DuoCord
+        Open PrivCord
       </button>
     </main>
   );

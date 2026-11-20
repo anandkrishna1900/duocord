@@ -60,13 +60,13 @@ function BackgroundToggles() {
     <>
       <Toggle
         label="Keep running in the tray"
-        description="Closing the window keeps DuoCord running in the tray, so messages still arrive and notify you. Quit from the tray icon."
+        description="Closing the window keeps PrivCord running in the tray, so messages still arrive and notify you. Quit from the tray icon."
         checked={value.closeToTray}
         onChange={(on) => change('set_close_to_tray', 'closeToTray', on)}
       />
       <Toggle
         label="Start when you sign in"
-        description="Starts DuoCord in the tray when you sign in to your computer."
+        description="Starts PrivCord in the tray when you sign in to your computer."
         checked={value.startAtLogin}
         onChange={(on) => change('set_start_at_login', 'startAtLogin', on)}
       />
@@ -230,11 +230,11 @@ function AppLockControl() {
   return (
     <>
       <Toggle
-        label="Lock DuoCord with Windows Hello"
+        label="Lock PrivCord with Windows Hello"
         description={
           supported === false
             ? 'Not available: this device has no passkey sign-in (Windows Hello, fingerprint, face or PIN) set up.'
-            : 'Ask for your face, fingerprint or PIN to open DuoCord, and again after it has been out of sight for 5 minutes. It keeps other people at your computer out; it does not replace the encryption of the files on disk.'
+            : 'Ask for your face, fingerprint or PIN to open PrivCord, and again after it has been out of sight for 5 minutes. It keeps other people at your computer out; it does not replace the encryption of the files on disk.'
         }
         checked={on}
         onChange={(value) => void change(value)}
@@ -472,7 +472,7 @@ export function SettingsDialog({
           <section className="settings-section">
             <Toggle
               label="Message notifications"
-              description="Show a system notification for new messages while DuoCord is running, also from the tray."
+              description="Show a system notification for new messages while PrivCord is running, also from the tray."
               checked={settings.notificationsEnabled}
               onChange={(value) => {
                 updateSettings({ notificationsEnabled: value });
@@ -567,7 +567,7 @@ export function SettingsDialog({
                 <strong>Recovery phrase</strong>
               </div>
               <p className="muted small">
-                Your 12 words recreate this identity on a new device or after a wipe. DuoCord never stores
+                Your 12 words recreate this identity on a new device or after a wipe. PrivCord never stores
                 them, so they cannot be shown again.
               </p>
               <button
@@ -661,7 +661,7 @@ export function SettingsDialog({
               </div>
             ) : null}
             <p>
-              <strong>DuoCord</strong> · version {config.appVersion}
+              <strong>PrivCord</strong> · version {config.appVersion}
             </p>
             <p className="muted small">
               Private chats and groups with no accounts and no cloud. Messages are end-to-end encrypted and go

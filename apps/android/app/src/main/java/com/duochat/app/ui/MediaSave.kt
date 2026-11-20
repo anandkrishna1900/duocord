@@ -9,8 +9,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Saves a received file into the phone's shared storage, with no file picker: photos into Pictures/DuoCord, videos into
- * Movies/DuoCord (both show in the gallery), everything else (voice notes too) into Download/DuoCord.
+ * Saves a received file into the phone's shared storage, with no file picker: photos into Pictures/PrivCord, videos into
+ * Movies/PrivCord (both show in the gallery), everything else (voice notes too) into Download/PrivCord.
  * Returns where it went ("Photos", "Downloads"), or null on Android 9 and older, where writing there needs a storage
  * permission: the caller then opens the system "save as" screen instead.
  */
@@ -34,7 +34,7 @@ suspend fun saveToDevice(context: Context, name: String, mime: String, bytes: By
             val values = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, name.ifBlank { "duocord-file" })
                 put(MediaStore.MediaColumns.MIME_TYPE, mime.ifBlank { "application/octet-stream" })
-                put(MediaStore.MediaColumns.RELATIVE_PATH, "$folder/DuoCord")
+                put(MediaStore.MediaColumns.RELATIVE_PATH, "$folder/PrivCord")
                 // Hidden from other apps until it is completely written.
                 put(MediaStore.MediaColumns.IS_PENDING, 1)
             }

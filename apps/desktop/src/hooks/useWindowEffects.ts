@@ -31,7 +31,7 @@ function badgeRgba(text: string): Uint8Array | null {
 }
 
 /**
- * "(N) DuoCord" in the page title and the window title (which the taskbar shows) while messages are unread, the same
+ * "(N) PrivCord" in the page title and the window title (which the taskbar shows) while messages are unread, the same
  * count in the tray tooltip, and a number badge on the taskbar button. Each Tauri call is best-effort: the browser build
  * has none of them.
  */

@@ -77,7 +77,7 @@ fn view(app: &AppHandle, status: &autobackup::Status) -> Value {
         .path()
         .document_dir()
         .ok()
-        .map(|d| d.join("DuoCord backups").to_string_lossy().into_owned());
+        .map(|d| d.join("PrivCord backups").to_string_lossy().into_owned());
     json!({
         "folder": status.folder,
         "lastAt": status.last_at,

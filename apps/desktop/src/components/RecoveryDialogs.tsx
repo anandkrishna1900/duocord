@@ -143,7 +143,7 @@ export function RecoveryDialog({
                   <div>
                     <strong>This phrase IS your identity</strong>
                     <p>
-                      DuoCord uses a 12-word cryptographic recovery phrase. If you lose access to this device or use the Emergency Kill Switch, this phrase is the <strong>only way</strong> to restore your cryptographic identity and paired contacts.
+                      PrivCord uses a 12-word cryptographic recovery phrase. If you lose access to this device or use the Emergency Kill Switch, this phrase is the <strong>only way</strong> to restore your cryptographic identity and paired contacts.
                     </p>
                   </div>
                 </div>
@@ -303,7 +303,7 @@ export function RecoveryDialog({
                 </div>
                 <h3>Identity created</h3>
                 <p className="muted" style={{ maxWidth: '420px', margin: '0 auto 20px auto' }}>
-                  Your cryptographic identity has been securely created and backed up. Remember: DuoCord never stores your recovery phrase in plaintext or on any server.
+                  Your cryptographic identity has been securely created and backed up. Remember: PrivCord never stores your recovery phrase in plaintext or on any server.
                 </p>
                 <button
                   type="button"
@@ -313,7 +313,7 @@ export function RecoveryDialog({
                     onClose();
                   }}
                 >
-                  {required ? 'Start DuoCord' : 'Done'}
+                  {required ? 'Start PrivCord' : 'Done'}
                 </button>
               </div>
             )}

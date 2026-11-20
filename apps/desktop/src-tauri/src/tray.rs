@@ -36,7 +36,7 @@ fn has_flag<R: Runtime>(app: &AppHandle<R>, name: &str) -> bool {
     flag(app, name).is_some_and(|p| p.exists())
 }
 
-/// Closing the window keeps DuoCord running in the tray unless the person turned that off.
+/// Closing the window keeps PrivCord running in the tray unless the person turned that off.
 pub fn close_to_tray<R: Runtime>(app: &AppHandle<R>) -> bool {
     !has_flag(app, "close-quits")
 }
@@ -64,7 +64,7 @@ pub fn toggle_quick(app: &AppHandle) {
         "quick",
         tauri::WebviewUrl::App("index.html?quick=1".into()),
     )
-    .title("DuoCord quick send")
+    .title("PrivCord quick send")
     .inner_size(420.0, 260.0)
     .resizable(false)
     .decorations(false)
@@ -86,7 +86,7 @@ pub fn toggle_quick(app: &AppHandle) {
     }
 }
 
-/// The popup's "Open DuoCord" link.
+/// The popup's "Open PrivCord" link.
 #[tauri::command]
 pub fn open_main(app: AppHandle) {
     if let Some(w) = app.get_webview_window("quick") {
@@ -97,11 +97,11 @@ pub fn open_main(app: AppHandle) {
 
 /// Builds the tray icon. (Closing the window keeps the app running: see the exit handler in `lib.rs`.)
 pub fn install(app: &AppHandle) -> tauri::Result<()> {
-    let open = MenuItem::with_id(app, "open", "Open DuoCord", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit DuoCord", true, None::<&str>)?;
+    let open = MenuItem::with_id(app, "open", "Open PrivCord", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit PrivCord", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&open, &quit])?;
     let mut tray = TrayIconBuilder::with_id("main")
-        .tooltip("DuoCord")
+        .tooltip("PrivCord")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {

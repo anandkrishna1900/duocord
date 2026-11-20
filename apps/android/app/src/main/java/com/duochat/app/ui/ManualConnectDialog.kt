@@ -75,7 +75,7 @@ fun ManualConnectDialog(
     val clipboard = LocalClipboardManager.current
     val context = androidx.compose.ui.platform.LocalContext.current
 
-    val scan = rememberQrScanner("Scan a DuoCord code") { contents ->
+    val scan = rememberQrScanner("Scan a PrivCord code") { contents ->
         if (mode == ManualMode.HOST) {
             answerInput = contents
             status = "Scanned an answer. Apply it to finish the handshake."
@@ -204,7 +204,7 @@ fun ManualConnectDialog(
                     }
                     if (offerCode.isNotBlank()) {
                         Spacer(Modifier.height(10.dp))
-                        CodeBlock(offerCode) { copySensitive(context, "DuoCord code", offerCode, clearAfterMs = 120_000) }
+                        CodeBlock(offerCode) { copySensitive(context, "PrivCord code", offerCode, clearAfterMs = 120_000) }
                         Spacer(Modifier.height(16.dp))
                         Text(
                             "2. Paste or scan the answer code your friend sends back.",
@@ -324,7 +324,7 @@ fun ManualConnectDialog(
                             style = MaterialTheme.typography.bodyMedium,
                         )
                         Spacer(Modifier.height(8.dp))
-                        CodeBlock(answerCode) { copySensitive(context, "DuoCord code", answerCode, clearAfterMs = 120_000) }
+                        CodeBlock(answerCode) { copySensitive(context, "PrivCord code", answerCode, clearAfterMs = 120_000) }
                     }
                 }
 

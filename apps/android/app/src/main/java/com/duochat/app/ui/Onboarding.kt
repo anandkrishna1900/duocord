@@ -87,7 +87,7 @@ fun OnboardingScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 BrandMark(40)
                 Spacer(Modifier.width(12.dp))
-                Text("DuoCord", style = MaterialTheme.typography.titleLarge)
+                Text("PrivCord", style = MaterialTheme.typography.titleLarge)
             }
             val gap by androidx.compose.animation.core.animateDpAsState(if (step == Step.INTRO) 56.dp else 28.dp, Motion.settle(), label = "gap")
             Spacer(Modifier.height(gap))

@@ -1091,7 +1091,9 @@ textarea:focus {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 2px;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 4px;
   border: none;
   border-radius: 5px;
   background: transparent;
@@ -1107,7 +1109,7 @@ textarea:focus {
 }
 
 .bubble-time {
-  font-size: 0.66rem;
+  font-size: 0.72rem;
   letter-spacing: 0.01em;
 }
 
@@ -2094,7 +2096,7 @@ textarea:focus {
 }
 
 .emergency-block strong {
-  color: #e5484d;
+  color: var(--danger);
 }
 
 /* =====================================================================
@@ -3127,9 +3129,8 @@ input[type='checkbox'] {
   width: 100%;
   margin-bottom: 6px;
   padding: 5px 9px;
-  border: none;
-  border-left: 3px solid var(--accent);
-  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 8px;
   background: color-mix(in srgb, currentColor 9%, transparent);
   color: inherit;
   font: inherit;
@@ -3151,7 +3152,7 @@ input[type='checkbox'] {
 }
 
 .bubble.own .quote {
-  border-left-color: rgba(255, 255, 255, 0.8);
+  border-color: rgba(255, 255, 255, 0.55);
 }
 
 [data-mid].flash .bubble {
@@ -3169,7 +3170,7 @@ input[type='checkbox'] {
   gap: 8px;
   margin-bottom: 6px;
   padding: 6px 10px;
-  border-left: 3px solid var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
   border-radius: 8px;
   background: var(--surface);
 }

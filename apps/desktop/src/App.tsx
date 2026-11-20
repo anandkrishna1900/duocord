@@ -38,7 +38,7 @@ export default function App() {
       <main className="loading-page">
         <div className="splash">
           <BrandMark size={72} />
-          <h1>DuoCord</h1>
+          <h1>PrivCord</h1>
           <p className="muted">Create your private identity to begin.</p>
         </div>
         <RecoveryDialog

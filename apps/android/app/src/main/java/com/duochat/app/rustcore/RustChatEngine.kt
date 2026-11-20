@@ -533,7 +533,7 @@ class RustChatEngine(
                 val e = engine
                 val name = e?.let { runCatching { withContext(Dispatchers.IO) { it.snapshot() } }.getOrNull() }
                     ?.requests?.firstOrNull { it.uid == event.uid }?.name ?: "Someone"
-                onNotify(IncomingNotice("request-${event.uid}", "", "$name wants to add you", "Open DuoCord to accept.", isMessage = false))
+                onNotify(IncomingNotice("request-${event.uid}", "", "$name wants to add you", "Open PrivCord to accept.", isMessage = false))
                 requestRefresh()
             }
             is EventDto.FileProgress -> {
@@ -780,7 +780,7 @@ class RustChatEngine(
                 if (t != null && !t.isOpen) {
                     bleLinks.remove(uid)
                     t.close()
-                    if (manual) say("No friend found nearby over Bluetooth. Check that they have DuoCord open with Bluetooth on.")
+                    if (manual) say("No friend found nearby over Bluetooth. Check that they have PrivCord open with Bluetooth on.")
                     requestRefresh()
                 }
             }
@@ -1099,7 +1099,7 @@ class RustChatEngine(
         is uniffi.privcord_ffi.FfiException.InvalidInvite -> "That is not a valid invite. Check the words, or ask your friend to share it again."
         is uniffi.privcord_ffi.FfiException.NoSignaling -> "No connection service is set up, so six words cannot be looked up. Turn one on in Settings > Connection, or use the long invite."
         is uniffi.privcord_ffi.FfiException.WeakPassphrase -> "Use a longer backup passphrase: at least 12 characters."
-        is uniffi.privcord_ffi.FfiException.BackupUnreadable -> "That backup could not be opened. Check the passphrase, or that it is a DuoCord backup."
+        is uniffi.privcord_ffi.FfiException.BackupUnreadable -> "That backup could not be opened. Check the passphrase, or that it is a PrivCord backup."
         is uniffi.privcord_ffi.FfiException.BackupNotYours -> "That backup belongs to a different account (another recovery phrase)."
         is uniffi.privcord_ffi.FfiException.InvalidPhrase -> "That is not your account's recovery phrase."
         is uniffi.privcord_ffi.FfiException.UnknownDevice -> "That device is not on your account's list any more."

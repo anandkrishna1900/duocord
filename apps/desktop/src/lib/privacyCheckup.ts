@@ -44,7 +44,7 @@ const WEEK = 7 * 24 * 3600 * 1000;
 export function privacyCheckup(i: CheckupInput): { items: CheckupItem[]; score: number; total: number } {
   const now = i.now_ms;
   const items: CheckupItem[] = [
-    { id: 'lock', label: 'App lock', ok: i.app_lock, hint: i.app_lock ? 'Opening DuoCord asks for your passkey.' : 'Anyone at this computer can open your chats. Turn on the lock.', section: 'security' },
+    { id: 'lock', label: 'App lock', ok: i.app_lock, hint: i.app_lock ? 'Opening PrivCord asks for your passkey.' : 'Anyone at this computer can open your chats. Turn on the lock.', section: 'security' },
     {
       id: 'backup',
       label: 'Backup',

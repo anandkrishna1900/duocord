@@ -26,12 +26,12 @@ export function totalUnread(s: Pick<ChatState, 'contacts' | 'groups' | 'channels
 }
 
 export function titleFor(unread: number): string {
-  return unread > 0 ? `(${unread > 99 ? '99+' : unread}) DuoCord` : 'DuoCord';
+  return unread > 0 ? `(${unread > 99 ? '99+' : unread}) PrivCord` : 'PrivCord';
 }
 
-/** The tray tooltip: "DuoCord" or "DuoCord, 3 unread". */
+/** The tray tooltip: "PrivCord" or "PrivCord, 3 unread". */
 export function tooltipFor(unread: number): string {
-  return unread > 0 ? `DuoCord, ${unread > 99 ? '99+' : unread} unread` : 'DuoCord';
+  return unread > 0 ? `PrivCord, ${unread > 99 ? '99+' : unread} unread` : 'PrivCord';
 }
 
 /** The number on the taskbar badge, capped at "9+" (empty for none). */

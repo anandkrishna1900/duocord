@@ -380,7 +380,7 @@ SectionTitle("Appearance")
                 val bgContext = LocalContext.current
                 ToggleRow(
                     "Keep running in the background",
-                    "Shows a small permanent notification and keeps DuoCord connected so messages arrive with the app closed, also after a restart. Uses some battery.",
+                    "Shows a small permanent notification and keeps PrivCord connected so messages arrive with the app closed, also after a restart. Uses some battery.",
                     settings.keepRunning,
                 ) { on ->
                     onUpdateSettings { copy(keepRunning = on) }
@@ -399,8 +399,8 @@ SectionTitle("Appearance")
                     }
                     Text(
                         "Vivo, Xiaomi, Oppo, Realme, OnePlus and Huawei phones also stop apps that are not allowed to " +
-                            "autostart. If messages only arrive when you open DuoCord, turn on autostart / background " +
-                            "running for DuoCord on the page this button opens.",
+                            "autostart. If messages only arrive when you open PrivCord, turn on autostart / background " +
+                            "running for PrivCord on the page this button opens.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -467,7 +467,7 @@ SectionTitle("Appearance")
                     ) { granted -> if (granted.values.all { it }) onUpdateSettings { copy(mesh = true) } }
                     ToggleRow(
                         title = "Bluetooth mesh (relay for nearby phones)",
-                        description = "Pass messages along through nearby phones that also run DuoCord, so they can reach people several phones away with no internet, and join public channels over Bluetooth. Other phones can see that a DuoCord phone is nearby. Uses more battery. Experimental: simulated and compiled, never run on real radios." +
+                        description = "Pass messages along through nearby phones that also run PrivCord, so they can reach people several phones away with no internet, and join public channels over Bluetooth. Other phones can see that a PrivCord phone is nearby. Uses more battery. Experimental: simulated and compiled, never run on real radios." +
                             if (settings.mesh) " Linked phones now: ${state.meshLinks}. Heard ${state.meshHeard} new messages, passed on ${state.meshPassedOn} copies." else "",
                         checked = settings.mesh,
                         onChange = { on ->
@@ -478,7 +478,7 @@ SectionTitle("Appearance")
                     )
                     Spacer(Modifier.height(14.dp))
                     SectionTitle("Communication Mode")
-                Text("Select how DuoCord connects to peers:", style = MaterialTheme.typography.bodySmall)
+                Text("Select how PrivCord connects to peers:", style = MaterialTheme.typography.bodySmall)
                 Spacer(Modifier.height(4.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     ChoiceChip("1. Auto", settings.network.transportMode == com.duochat.app.data.TransportMode.AUTOMATIC) {
@@ -513,7 +513,7 @@ SectionTitle("Appearance")
                 DuoTextField(
                     value = relayText,
                     onValueChange = { relayText = it },
-                    label = { Text("Signaling: your own DuoCord relay (one per line)") },
+                    label = { Text("Signaling: your own PrivCord relay (one per line)") },
                     minLines = 1,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -569,7 +569,7 @@ SectionTitle("Appearance")
                     modifier = Modifier.fillMaxWidth(),
                 )
                 if (com.duochat.app.p2p.hasBuiltinTurn) ToggleRow(
-                    "DuoCord relay when a direct link fails",
+                    "PrivCord relay when a direct link fails",
                     "Some networks block direct connections. The relay then passes the encrypted traffic on; it cannot read it.",
                     settings.network.builtinTurn,
                 ) { onUpdateSettings { copy(network = network.copy(builtinTurn = it)) } }
@@ -712,7 +712,7 @@ SectionTitle("Security")
                 ToggleRow(
                     title = "Lock with fingerprint, face or screen lock",
                     description = if (lockAvailable) {
-                        "Ask for it every time DuoCord opens, and again after it has been out of sight for 30 seconds. It keeps other people who pick up your phone out; it does not replace the encryption of your chats."
+                        "Ask for it every time PrivCord opens, and again after it has been out of sight for 30 seconds. It keeps other people who pick up your phone out; it does not replace the encryption of your chats."
                     } else {
                         "Not available: set a screen lock (PIN, pattern or password) or a fingerprint in your phone's settings first."
                     },
@@ -846,7 +846,7 @@ val storageJson by androidx.compose.runtime.produceState("[]", state.messages) {
                 )
                 Spacer(Modifier.height(20.dp))
 
-SectionTitle("About DuoCord")
+SectionTitle("About PrivCord")
                 Text(
                     "Private messaging for friends and groups, with no accounts and no server.",
                     style = MaterialTheme.typography.bodyMedium,
@@ -1007,7 +1007,7 @@ private fun BluetoothBlock(
     Text(
         when (status) {
             BluetoothStatus.NEEDS_PERMISSION ->
-                "DuoCord can find your friends over Bluetooth when you are close by, with no internet. " +
+                "PrivCord can find your friends over Bluetooth when you are close by, with no internet. " +
                     "It needs the nearby-devices permission for that."
             BluetoothStatus.ADAPTER_OFF -> "Turn Bluetooth on in the quick settings panel, then come back."
             BluetoothStatus.CONNECTED -> "Traffic is encrypted on top of Bluetooth and never touches a server."
@@ -1035,7 +1035,7 @@ private fun BluetoothBlock(
     if (denied && status == BluetoothStatus.NEEDS_PERMISSION) {
         Spacer(Modifier.height(4.dp))
         Text(
-            "Permission was denied. You can allow it under Android Settings > Apps > DuoCord > Permissions.",
+            "Permission was denied. You can allow it under Android Settings > Apps > PrivCord > Permissions.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.error,
         )
@@ -1050,7 +1050,7 @@ private fun BluetoothBlock(
             title = { Text("Allow nearby devices?") },
             text = {
                 Text(
-                    "Bluetooth lets DuoCord find and talk to your friends with no internet. DuoCord only " +
+                    "Bluetooth lets PrivCord find and talk to your friends with no internet. PrivCord only " +
                         "connects to people you added. It never uses Bluetooth to learn your location.",
                 )
             },

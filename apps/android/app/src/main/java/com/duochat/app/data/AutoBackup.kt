@@ -23,7 +23,7 @@ object AutoBackup {
     private const val ALIAS = "duochat_autobackup"
     private const val EVERY_MS = 7L * 24 * 3600 * 1000
     private const val KEEP = 3
-    private const val PREFIX = "DuoCord-backup-"
+    private const val PREFIX = "PrivCord-backup-"
 
     private fun prefs(c: Context) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 

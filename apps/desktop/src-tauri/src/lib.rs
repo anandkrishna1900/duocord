@@ -292,9 +292,9 @@ pub fn run() {
     ]);
     builder
         .build(tauri::generate_context!())
-        .expect("error while running DuoChat")
+        .expect("error while running PrivCord")
         .run(|app, event| {
-            // Closing the window keeps DuoCord running in the tray (the engine and its relay sockets are Rust), unless
+            // Closing the window keeps PrivCord running in the tray (the engine and its relay sockets are Rust), unless
             // the person turned that off. Quit from the tray exits with a code and is let through.
             #[cfg(desktop)]
             if let tauri::RunEvent::ExitRequested {

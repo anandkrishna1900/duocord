@@ -35,9 +35,15 @@ fun com.android.build.api.dsl.ApplicationDefaultConfig.buildConfigString(name: S
     buildConfigField("String", name, "\"$escaped\"")
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
+}
+
 android {
     namespace = "com.duochat.app"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.duochat.app"
@@ -102,10 +108,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
     sourceSets {
         // The UniFFI-generated Kotlin for the Rust core is checked in next to the crate; compile it into the app.
         getByName("main") { java.srcDir("../../../crates/privcord-ffi/bindings/kotlin") }
@@ -152,7 +154,7 @@ dependencies {
 
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.activity:activity-compose:1.10.0")
-    implementation("androidx.fragment:fragment-ktx:1.8.5")
+    implementation("androidx.fragment:fragment-ktx:1.9.1")
     implementation("androidx.biometric:biometric:1.1.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
@@ -170,9 +172,9 @@ dependencies {
     // The generated bindings call the Rust library through JNA.
     implementation("net.java.dev.jna:jna:5.14.0@aar")
 
-    implementation("androidx.room:room-runtime:2.6.1")
-    implementation("androidx.room:room-ktx:2.6.1")
-    ksp("androidx.room:room-compiler:2.6.1")
+    implementation("androidx.room:room-runtime:2.8.4")
+    implementation("androidx.room:room-ktx:2.8.4")
+    ksp("androidx.room:room-compiler:2.8.4")
 
     implementation("io.github.webrtc-sdk:android:150.7871.04")
     // Voice notes and audio files: plays the WebM/Opus that desktop browsers record (MediaPlayer often refuses it).

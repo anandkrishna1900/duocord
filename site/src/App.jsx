@@ -208,7 +208,7 @@ export default function App() {
               <div className="bento">
                 {FEATURES.map((f, n) => (
                   <Anim key={f.t} className={`bcell ${f.cls}`} distance={70} direction="vertical" duration={0.9} delay={(n % 3) * 0.08} scale={0.96} blur={6}>
-                    <SpotlightCard className="fcard" spotlightColor="rgba(255, 229, 0, 0.22)" spotlightSize={260} intensity={0.25} theme="dark">
+                    <SpotlightCard className="fcard" spotlightColor="rgba(255, 229, 0, 0.2)" spotlightSize={260} intensity={0.25} theme="dark">
                       <h3><Icon d={P[f.i]} />{f.t}{f.tag ? <span className="tag">{f.tag}</span> : null}</h3>
                       <p>{f.p}</p>
                     </SpotlightCard>
@@ -285,18 +285,18 @@ export default function App() {
 
           {/* ---------- download: yellow ---------- */}
           <section id="download" className="download" ref={dlRef}>
-            {!reduce && <div className="dl-bg" aria-hidden="true"><DotGrid dotSize={4} gap={22} baseColor="#d6c000" activeColor={INK} proximity={150} shockRadius={340} shockStrength={5} glow={0} paused={!dlOn} /></div>}
+            {!reduce && <div className="dl-bg" aria-hidden="true"><DotGrid dotSize={4} gap={22} baseColor="#2b2b2b" activeColor={YELLOW} proximity={150} shockRadius={340} shockStrength={5} glow={0} paused={!dlOn} /></div>}
             <div className="wrap">
               <h2>Get PrivCord</h2>
               <p className="sub">Free. Pick your platform.</p>
               <div className="dl">
                 <div className="dl-row">
                   <div><h3><Icon d={P.mon} />Windows</h3><p>Installer for Windows 10 and 11. The latest build is attached to the newest release.</p></div>
-                  <Magnet padding={60} magnetStrength={3} disabled={reduce}><StarBorder as="a" href={`${REPO}/releases/latest`} color={INK} trailColor="#ffffff" backgroundColor={INK} textColor={YELLOW} borderColor="rgba(0,0,0,0)" duration={5} radius={10} className="cta-star">Download the installer</StarBorder></Magnet>
+                  <Magnet padding={60} magnetStrength={3} disabled={reduce}><StarBorder as="a" href={`${REPO}/releases/latest`} color={YELLOW} trailColor="#ffffff" backgroundColor={YELLOW} textColor={INK} borderColor="rgba(0,0,0,0)" duration={5} radius={10} className="cta-star">Download the installer</StarBorder></Magnet>
                 </div>
                 <div className="dl-row">
                   <div><h3><Icon d={P.ph} />Android</h3><p>Install the arm64 APK (almost every phone); the armeabi-v7a one is for old 32-bit phones.</p></div>
-                  <Magnet padding={60} magnetStrength={3} disabled={reduce}><StarBorder as="a" href={`${REPO}/releases/latest`} color={INK} trailColor="#ffffff" backgroundColor={INK} textColor={YELLOW} borderColor="rgba(0,0,0,0)" duration={5} radius={10} className="cta-star">Download the APK</StarBorder></Magnet>
+                  <Magnet padding={60} magnetStrength={3} disabled={reduce}><StarBorder as="a" href={`${REPO}/releases/latest`} color={YELLOW} trailColor="#ffffff" backgroundColor={YELLOW} textColor={INK} borderColor="rgba(0,0,0,0)" duration={5} radius={10} className="cta-star">Download the APK</StarBorder></Magnet>
                 </div>
               </div>
               <p className="warn"><strong>Heads up:</strong> the Windows installer is not code-signed yet, so Windows SmartScreen will warn you: choose <em>More info</em>, then <em>Run anyway</em>. On Android you need to allow installing apps from this source. Windows will also ask to allow the firewall the first time, which lets PrivCord find friends on your local network.</p>

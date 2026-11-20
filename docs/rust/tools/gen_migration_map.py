@@ -94,6 +94,7 @@ rule(r"desktop/src/lib/selectedTab\.test\.ts", "Guards the look: later style lay
 rule(r"desktop/src/lib/hosted/prefsExtras\.test\.ts", "Guards how the screens read silent chats, device receipts and mesh hops from the engine", "Desktop adapter + engine host", "Adapter", ADAPTER, "Stays")
 rule(r"desktop/src/lib/(waveform|receipts|quickSend)(\.test)?\.ts", "Voice-note waveform bars, receipt and nearby wording, quick-send and drop-to-send target lists", "Desktop UI", "UI", UI, "Stays")
 rule(r"desktop/src/lib/(privacyCheckup|pins|networkHosts|quietHours|deliveryDetails|storage)(\.test)?\.ts", "Small pure helpers for the screens: privacy checkup, pinned chats, the hosts the app contacts", "Desktop UI", "UI", UI, "Stays")
+rule(r"desktop/src/lib/hosted/linkByScan\.test\.ts", "Linking a new device by scanning: the commands sent and the stages shown", "Desktop adapter + engine host", "Adapter", ADAPTER, "Stays")
 # ---- android
 rule(r"android/.*/ui/.*", "Compose screens", "UI", "UI", UI, "Stays")
 rule(r"android/.*/rustcore/.*\.kt", "Android adapters for the Rust engine (Keystore secret store, on-device probe)", "Platform adapter for engine ports", "Adapter", ADAPTER, "Stays")

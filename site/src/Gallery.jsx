@@ -1,11 +1,32 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/** A desktop window around a screenshot: three dots, a title, and (optionally) a small enlarge glyph in the bar. */
+export function WindowFrame({ src, alt, w, h, enlarge, eager }) {
+  return (
+    <span className="win">
+      <span className="win-bar" aria-hidden="true"><i /><i /><i /><b>PrivCord</b></span>
+      <img key={src} src={src} alt={alt} width={w} height={h} loading={eager ? 'eager' : 'lazy'} draggable="false" />
+    </span>
+  );
+}
+
+/** A phone around a screenshot. */
+export function PhoneFrame({ src, alt, w, h }) {
+  return (
+    <span className="ph">
+      <img key={src} src={src} alt={alt} width={w} height={h} loading="lazy" draggable="false" />
+    </span>
+  );
+}
+
 /*
- * Screens gallery: a swipeable rail of real screenshots (the App Store pattern: big cards, a peek of the next one,
- * keyboard and button controls) and a lightbox that opens any of them full size. The lightbox is a native <dialog>
- * (focus trap, Esc, inert page behind it), with arrows, swipe, a zoom to natural size for reading small text on a phone,
- * and focus returned to the card you opened. Plain CSS, no library; honours prefers-reduced-motion.
- * Pattern references: React Bits (Carousel, Stack), Magic UI (device frames), Untitled UI (lightbox).
+ * Screens showcase: a stage that shows one real screenshot inside a window or phone frame, with a numbered chapter
+ * list that auto-plays (each chapter has a progress line; hover, focus, a tap or leaving the screen pauses it). Tap the
+ * stage to open the lightbox: a native <dialog> (focus trap, Esc, inert page behind it) with arrows, swipe, zoom to natural
+ * size and focus returned to where you came from. Plain CSS, no library; honours prefers-reduced-motion.
+ * Pattern references: Magic UI (device frames), React Bits (Stack, stepper), Untitled UI (lightbox), Jitter (progress lines).
  */
 export const SHOTS = [
   { src: 'group-chat-dark.webp', w: 1280, h: 800, phone: false, title: 'A group chat', note: 'Everyone in the group is connected directly. Messages, photos, files and voice notes, end-to-end encrypted.' },
@@ -23,21 +44,30 @@ export function openShot(src, from) {
 }
 
 export default function Gallery({ asset }) {
-  const railRef = useRef(null);
   const dialogRef = useRef(null);
+  const showRef = useRef(null);
   const opener = useRef(null);
-  const [open, setOpen] = useState(null); // index of the open screen, or null
-  const [zoom, setZoom] = useState(false);
   const touch = useRef(null);
+  const [open, setOpen] = useState(null); // index of the open screen in the lightbox, or null
+  const [zoom, setZoom] = useState(false);
+  const [cur, setCur] = useState(0); // chapter on the stage
+  const [auto, setAuto] = useState(() => !reduced());
+  const [hold, setHold] = useState(false); // pointer or focus is on the showcase
+  const [seen, setSeen] = useState(false); // showcase is on screen
 
-  const scrollRail = (dir) => {
-    const rail = railRef.current;
-    if (!rail) return;
-    const card = rail.querySelector('li');
-    const step = (card ? card.getBoundingClientRect().width : 320) + 20;
-    const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-    rail.scrollBy({ left: dir * step, behavior: reduce ? 'auto' : 'smooth' });
+  const pick = (i, stop = true) => {
+    setCur((i + SHOTS.length) % SHOTS.length);
+    if (stop) setAuto(false);
   };
+
+  // Only play while the section is on screen.
+  useEffect(() => {
+    const el = showRef.current;
+    if (!el || typeof IntersectionObserver !== 'function') return undefined;
+    const io = new IntersectionObserver(([e]) => setSeen(e.isIntersecting), { threshold: 0.35 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
 
   const show = (i, from) => {
     opener.current = from || opener.current;
@@ -59,7 +89,7 @@ export default function Gallery({ asset }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // The dialog is opened and closed with the state, so the page behind it stays still and focus comes back to the card.
+  // The dialog is opened and closed with the state, so the page behind it stays still and focus comes back.
   useEffect(() => {
     const d = dialogRef.current;
     if (!d) return undefined;
@@ -90,41 +120,86 @@ export default function Gallery({ asset }) {
 
   // Warm the neighbours so the arrows feel instant.
   useEffect(() => {
-    if (open === null) return;
-    for (const d of [-1, 1]) new Image().src = asset(SHOTS[(open + d + SHOTS.length) % SHOTS.length].src);
-  }, [open, asset]);
+    const at = open === null ? cur : open;
+    for (const d of [-1, 1]) new Image().src = asset(SHOTS[(at + d + SHOTS.length) % SHOTS.length].src);
+  }, [open, cur, asset]);
 
   const shot = open === null ? null : SHOTS[open];
+  const now = SHOTS[cur];
+  const playing = auto && seen && !hold && open === null;
+
+  // Arrow keys on the chapter list (a tab list).
+  const onTabKey = (e) => {
+    const k = e.key;
+    if (k !== 'ArrowDown' && k !== 'ArrowUp' && k !== 'ArrowRight' && k !== 'ArrowLeft') return;
+    e.preventDefault();
+    const next = (cur + (k === 'ArrowDown' || k === 'ArrowRight' ? 1 : -1) + SHOTS.length) % SHOTS.length;
+    pick(next);
+    document.getElementById(`chap-${next}`)?.focus();
+  };
 
   return (
     <section className="screens" id="screens" aria-labelledby="screens-h">
       <div className="wrap">
-        <div className="screens-head">
-          <div>
-            <p className="eyebrow">Screens</p>
-            <h2 id="screens-h">Take a look around</h2>
-            <p className="sub">Real screenshots. Tap any screen to see it full size.</p>
-          </div>
-          <div className="rail-btns" aria-label="Scroll the screens">
-            <button type="button" className="round" onClick={() => scrollRail(-1)} aria-label="Previous screens">←</button>
-            <button type="button" className="round" onClick={() => scrollRail(1)} aria-label="Next screens">→</button>
+        <p className="eyebrow">Screens</p>
+        <h1 id="screens-h">Take a look around</h1>
+        <p className="sub">Real screenshots, no mock-ups. Pick a screen. Click or tap the picture to open it bigger.</p>
+
+        <div
+          className={`show${playing ? ' playing' : ''}`}
+          ref={showRef}
+          onPointerEnter={(e) => { if (e.pointerType === 'mouse') setHold(true); }}
+          onPointerLeave={() => setHold(false)}
+          onFocus={() => setHold(true)}
+          onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setHold(false); }}
+        >
+          <ol className="chapters" role="tablist" aria-label="Screens" aria-orientation="vertical" onKeyDown={onTabKey}>
+            {SHOTS.map((s, i) => (
+              <li key={s.src} role="presentation">
+                <button
+                  type="button"
+                  role="tab"
+                  id={`chap-${i}`}
+                  className="chap"
+                  aria-selected={i === cur}
+                  aria-controls="stage"
+                  tabIndex={i === cur ? 0 : -1}
+                  onClick={() => pick(i)}
+                >
+                  <span className="n" aria-hidden="true">{String(i + 1).padStart(2, '0')}</span>
+                  <span className="t">{s.title}</span>
+                  <span className="d">{s.note}</span>
+                  <i className="bar" aria-hidden="true" onAnimationEnd={() => { if (i === cur) pick(cur + 1, false); }} />
+                </button>
+              </li>
+            ))}
+          </ol>
+
+          <div
+            className="stage"
+            id="stage"
+            role="tabpanel"
+            aria-labelledby={`chap-${cur}`}
+            onTouchStart={(e) => { touch.current = e.touches[0].clientX; }}
+            onTouchEnd={(e) => {
+              const start = touch.current;
+              touch.current = null;
+              if (start == null) return;
+              const dx = e.changedTouches[0].clientX - start;
+              if (Math.abs(dx) > 50) pick(cur + (dx < 0 ? 1 : -1));
+            }}
+          >
+            <button type="button" className="stage-open" onClick={(e) => { setAuto(false); show(cur, e.currentTarget); }} aria-label={`Open full size: ${now.title}`}>
+              <span className={`stage-frame ${now.phone ? 'is-phone' : 'is-desk'}`} key={now.src}>
+                {now.phone
+                  ? <PhoneFrame src={asset(now.src)} alt={`${now.title}. ${now.note}`} w={now.w} h={now.h} />
+                  : <WindowFrame src={asset(now.src)} alt={`${now.title}. ${now.note}`} w={now.w} h={now.h} />}
+              </span>
+            </button>
+            <p className="stage-cap"><strong>{now.title}</strong> {now.note}</p>
           </div>
         </div>
       </div>
-
-      <ul className="rail" ref={railRef} aria-label="PrivCord screens" tabIndex={-1}>
-        {SHOTS.map((s, i) => (
-          <li key={s.src} className={s.phone ? 'phone' : 'desk'}>
-            <button type="button" className="card" onClick={(e) => show(i, e.currentTarget)} aria-label={`Open full size: ${s.title}`}>
-              <img src={asset(s.src)} alt="" width={s.w} height={s.h} loading="lazy" draggable="false" />
-              <span className="expand" aria-hidden="true">⤢</span>
-            </button>
-            <p className="cap"><strong>{s.title}</strong></p>
-          </li>
-        ))}
-      </ul>
-
-      <p className="swipe-hint" aria-hidden="true">Swipe for more →</p>
 
       <dialog
         ref={dialogRef}

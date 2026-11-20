@@ -1,4 +1,4 @@
-import Gallery, { openShot } from './Gallery.jsx';
+import Gallery, { openShot, WindowFrame, PhoneFrame } from './Gallery.jsx';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 // Components below are from React Bits (https://reactbits.dev, MIT + Commons Clause), copied into src/rb. See THIRD_PARTY.md.
 import DotGrid from './rb/DotGrid.jsx';
@@ -9,7 +9,6 @@ import ScrollReveal from './rb/ScrollReveal.jsx';
 import ScrollFloat from './rb/ScrollFloat.jsx';
 import SpotlightCard from './rb/SpotlightCard.jsx';
 import GlareHover from './rb/GlareHover.jsx';
-import TiltedCard from './rb/TiltedCard.jsx';
 import ClickSpark from './rb/ClickSpark.jsx';
 import Magnet from './rb/Magnet.jsx';
 import StarBorder from './rb/StarBorder.jsx';
@@ -17,7 +16,7 @@ import AnimatedContent from './rb/AnimatedContent.jsx';
 import FadeContent from './rb/FadeContent.jsx';
 
 const REPO = 'https://github.com/__REPO__';
-const asset = (n) => `${import.meta.env.BASE_URL}assets/${n}`;
+
 
 function useReducedMotion() {
   const [r, setR] = useState(() => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -31,14 +30,14 @@ function useReducedMotion() {
 }
 
 /** Pauses a canvas background while it is off screen. */
-function useOnScreen(ref) {
+function useOnScreen(ref, page) {
   const [on, setOn] = useState(true);
   useEffect(() => {
     if (!ref.current) return;
     const io = new IntersectionObserver(([e]) => setOn(e.isIntersecting), { rootMargin: '120px' });
     io.observe(ref.current);
     return () => io.disconnect();
-  }, [ref]);
+  }, [ref, page]);
   return on;
 }
 
@@ -101,6 +100,62 @@ const COMPARE = [
   ['Independently audited', 'No, not yet', 'Yes', 'Yes', 'Yes'],
 ];
 
+const NAV = [['features', 'Features'], ['how', 'How it works'], ['screens', 'Screens'], ['compare', 'Compare'], ['faq', 'FAQ']];
+const TITLES = { home: 'PrivCord: private encrypted messenger with no phone number or account', features: 'Features: PrivCord', how: 'How it works: PrivCord', screens: 'Screens: PrivCord', compare: 'How PrivCord compares', faq: 'Questions people ask: PrivCord', download: 'Get PrivCord for Windows and Android' };
+const DOORS = [
+  ['features', 'Features', 'Encryption, groups, many devices, files, Bluetooth with no internet.'],
+  ['how', 'How it works', 'Three steps from install to your first message.'],
+  ['screens', 'Screens', 'Real screenshots of both apps.'],
+  ['compare', 'How it compares', 'Next to Signal, Session and Briar, honestly.'],
+  ['faq', 'Questions', 'Accounts, servers, audits, losing your phone.'],
+  ['download', 'Download', 'Windows and Android.'],
+];
+// Real addresses: /features/, /how/, ... Each is also a pre-built HTML file (scripts/pages.mjs), so a link, a refresh or a search
+// engine lands on the right page; inside the site, clicks switch pages without reloading. ROOT is wherever the site lives
+// (the domain root, or /PrivCord/ on a project page), worked out from the address we were opened at.
+const PAGES = Object.keys(TITLES);
+const locate = () => {
+  const parts = location.pathname.split('/').filter(Boolean);
+  const last = parts[parts.length - 1];
+  const route = PAGES.includes(last) && last !== 'home' ? last : 'home';
+  const rootParts = route === 'home' ? parts : parts.slice(0, -1);
+  return { route, root: `/${rootParts.join('/')}${rootParts.length ? '/' : ''}` };
+};
+const { route: FIRST, root: ROOT } = locate();
+const asset = (n) => `${ROOT}assets/${n}`;
+const hrefOf = (to) => (to === 'home' ? ROOT : `${ROOT}${to}/`);
+// Old hash links (#faq, #/faq) from before pages had addresses still land on the right page.
+const hashPage = () => {
+  const h = location.hash.replace(/^#\/?/, '');
+  return h === 'top' ? 'home' : TITLES[h] ? h : null;
+};
+function usePage() {
+  const [route, setRoute] = useState(() => hashPage() || FIRST);
+  useEffect(() => {
+    const fromHash = () => {
+      const legacy = hashPage();
+      if (legacy) history.replaceState(null, '', hrefOf(legacy));
+    };
+    fromHash();
+    const on = () => setRoute(locate().route);
+    const onHash = () => { fromHash(); on(); };
+    addEventListener('popstate', on);
+    addEventListener('hashchange', onHash);
+    return () => { removeEventListener('popstate', on); removeEventListener('hashchange', onHash); };
+  }, []);
+  return route;
+}
+/** An ordinary link to a real address; a plain left click switches page in place. */
+function Go({ to, children, ...p }) {
+  const click = (e) => {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    if (hrefOf(to) !== location.pathname) history.pushState(null, '', hrefOf(to));
+    dispatchEvent(new PopStateEvent('popstate'));
+  };
+  return <a href={hrefOf(to)} onClick={click} {...p}>{children}</a>;
+}
+
 const ReduceCtx = createContext(false);
 // Wrappers that render plain content when the visitor asked for reduced motion. They live outside App so they keep their identity.
 function Anim({ children, ...p }) {
@@ -114,10 +169,19 @@ const YELLOW = '#ffe500';
 
 export default function App() {
   const reduce = useReducedMotion();
+  const route = usePage();
+  const mainRef = useRef(null);
+  const first = useRef(true);
+  useEffect(() => {
+    document.title = TITLES[route];
+    if (first.current) { first.current = false; return; }
+    window.scrollTo({ top: 0, behavior: 'instant' });
+    mainRef.current?.focus({ preventScroll: true });
+  }, [route]);
   const heroRef = useRef(null);
   const dlRef = useRef(null);
-  const heroOn = useOnScreen(heroRef);
-  const dlOn = useOnScreen(dlRef);
+  const heroOn = useOnScreen(heroRef, route);
+  const dlOn = useOnScreen(dlRef, route);
   const split = (text, extra = {}) =>
     reduce ? text : <SplitText tag="span" className="line" text={text} splitType="chars" delay={22} duration={0.9} textAlign="left" from={{ opacity: 0, y: 60 }} to={{ opacity: 1, y: 0 }} {...extra} />;
 
@@ -129,19 +193,24 @@ export default function App() {
 
         <header className="top">
           <div className="wrap">
-            <a className="brand" href="#top"><img src={asset('icon.png')} alt="" width="30" height="30" />PrivCord</a>
+            <Go className="brand" to="home"><img src={asset('icon.png')} alt="" width="30" height="30" />PrivCord</Go>
             <nav className="links" aria-label="Main">
-              <a href="#features">Features</a>
-              <a href="#how">How it works</a>
-              <a href="#compare">Compare</a>
-              <a href="#faq">FAQ</a>
-              <a className="btn primary small" href="#download">Download</a>
+              {NAV.map(([to, t]) => <Go key={to} to={to} aria-current={route === to ? 'page' : undefined}>{t}</Go>)}
+              <Go className="btn primary small" to="download">Download</Go>
             </nav>
+            <details className="mnav" key={route}>
+              <summary aria-label="Menu"><span aria-hidden="true">Menu</span></summary>
+              <div className="mnav-panel">
+                {[['home', 'Home'], ...NAV, ['download', 'Download']].map(([to, t]) => <Go key={to} to={to} aria-current={route === to ? 'page' : undefined}>{t}</Go>)}
+              </div>
+            </details>
           </div>
         </header>
 
-        <main id="main">
-          {/* ---------- hero: ink, with a springy dot grid the cursor flicks around ---------- */}
+        <main id="main" tabIndex={-1} ref={mainRef}>
+          {route === 'home' && (
+            <>
+{/* ---------- hero: ink, with a springy dot grid the cursor flicks around ---------- */}
           <section className="hero" id="top" ref={heroRef}>
             {!reduce && (
               <div className="hero-bg" aria-hidden="true">
@@ -158,7 +227,7 @@ export default function App() {
                 <p className="lead">PrivCord is a peer-to-peer messenger for Windows and Android. Chats go straight from your device to your friend's over an encrypted link, you add people with a QR code or six words, and it can keep going over Bluetooth with no internet.</p>
                 <div className="cta">
                   <Magnet padding={80} magnetStrength={3} disabled={reduce}>
-                    <StarBorder as="a" href="#download" color={YELLOW} trailColor="#ffffff" backgroundColor={YELLOW} textColor={INK} borderColor="rgba(0,0,0,0)" duration={5} radius={10} className="cta-star">Download for Windows or Android</StarBorder>
+                    <StarBorder as={Go} to="download" color={YELLOW} trailColor="#ffffff" backgroundColor={YELLOW} textColor={INK} borderColor="rgba(0,0,0,0)" duration={5} radius={10} className="cta-star">Download for Windows or Android</StarBorder>
                   </Magnet>
                   <a className="btn ghost" href={REPO}>View the source</a>
                 </div>
@@ -166,20 +235,18 @@ export default function App() {
                   {reduce ? 'End-to-end encrypted · source-available · not yet independently audited' : <ShinyText text="End-to-end encrypted · source-available · not yet independently audited" color="#8f8b82" shineColor="#ffffff" speed={3.5} />}
                 </p>
               </div>
-              <div className="hero-visual" onClick={(e) => { if (!e.target.closest('.phone-shot, .hero-enlarge')) openShot('group-chat-dark.webp', e.currentTarget); }}>
-                <img className="shot plain" src={asset('group-chat-dark.webp')} alt="PrivCord on Windows: an encrypted group chat in the dark theme" width="1280" height="800" />
-                {!reduce && (
-                  <div className="tilt-frame"><TiltedCard imageSrc={asset('group-chat-dark.webp')} altText="" containerWidth="100%" containerHeight="100%" imageWidth="100%" imageHeight="100%" rotateAmplitude={9} scaleOnHover={1.03} showTooltip={false} glare={0.25} glareColor="#ffffff" shadow={0.5} flipOnClick={false} radius={12} floating /></div>
-                )}
-                <button type="button" className="phone-shot-btn" onClick={(e) => openShot('mobile-group.webp', e.currentTarget)} aria-label="Open the Android screenshot full size">
-                  <img className="phone-shot" src={asset('mobile-group.webp')} alt="PrivCord on Android: a group chat" width="390" height="800" loading="lazy" />
+              <div className="hero-visual">
+                <button type="button" className="win-btn" onClick={(e) => openShot('group-chat-dark.webp', e.currentTarget)} aria-label="Open the Windows screenshot full size">
+                  <WindowFrame src={asset('group-chat-dark.webp')} alt="PrivCord on Windows: an encrypted group chat in the dark theme" w={1280} h={800} enlarge eager />
                 </button>
-                <button type="button" className="hero-enlarge" onClick={(e) => openShot('group-chat-dark.webp', e.currentTarget)}>⤢ Full size</button>
+                <button type="button" className="phone-btn" onClick={(e) => openShot('mobile-group.webp', e.currentTarget)} aria-label="Open the Android screenshot full size">
+                  <PhoneFrame src={asset('mobile-group.webp')} alt="PrivCord on Android: a group chat" w={390} h={800} />
+                </button>
               </div>
             </div>
           </section>
 
-          {/* ---------- yellow marquee that speeds up and skews with scroll ---------- */}
+{/* ---------- yellow marquee that speeds up and skews with scroll ---------- */}
           <section className="band" aria-label="What PrivCord does not ask of you">
             {reduce ? (
               <ul className="band-static"><li>No phone number</li><li>No account</li><li>No server reading along</li></ul>
@@ -188,7 +255,7 @@ export default function App() {
             )}
           </section>
 
-          {/* ---------- statement on paper ---------- */}
+{/* ---------- statement on paper ---------- */}
           <section className="statement">
             <div className="wrap narrow">
               {reduce ? (
@@ -201,11 +268,26 @@ export default function App() {
             </div>
           </section>
 
-          {/* ---------- features ---------- */}
+          {/* ---------- home: a short taste, then doors to the other pages ---------- */}
+          <section className="doors" aria-labelledby="doors-h">
+            <div className="wrap">
+              <h2 id="doors-h">Find what you came for</h2>
+              <ul className="door-grid">
+                {DOORS.map(([to, t, p]) => (
+                  <li key={to}><Go className="door" to={to}><strong>{t}</strong><span>{p}</span><b aria-hidden="true">→</b></Go></li>
+                ))}
+              </ul>
+            </div>
+          </section>
+            </>
+          )}
+          {route === 'features' && (
+            <>
+{/* ---------- features ---------- */}
           <section id="features" className="features">
             <div className="wrap">
               <div className="sec-head">
-                {reduce ? <h2>Everything a chat app needs, nothing that watches you</h2> : <ScrollFloat containerClassName="sf" textClassName="sf-text" splitBy="words" stagger={0.06}>Everything a chat app needs, nothing that watches you</ScrollFloat>}
+                {reduce ? <h1>Everything a chat app needs, nothing that watches you</h1> : <ScrollFloat containerClassName="sf" textClassName="sf-text" splitBy="words" stagger={0.06}>Everything a chat app needs, nothing that watches you</ScrollFloat>}
                 <p className="sub">Built for people who want private conversations without handing over an identity.</p>
               </div>
               <div className="bento">
@@ -221,18 +303,21 @@ export default function App() {
             </div>
           </section>
 
-          {/* ---------- how it works: sticky stacking cards on paper ---------- */}
+            </>
+          )}
+          {route === 'how' && (
+            <>
+{/* ---------- how it works: sticky stacking cards on paper ---------- */}
           <section id="how" className="how">
             <div className="wrap how-grid">
               <div className="how-lhs">
-                <h2>Up and running in three steps</h2>
+                <h1>Up and running in three steps</h1>
                 <p className="sub">No sign-up form. Your identity is made on your device.</p>
               </div>
               <ol className="stack">
                 {STEPS.map(([t, p], n) => (
                   <li className={`stack-card c${n}`} key={t} style={{ '--n': n }}>
-                    <span className="stack-n" aria-hidden="true">{n + 1}</span>
-                    <h3>{t}</h3>
+                    <div className="stack-head"><span className="stack-n" aria-hidden="true">{n + 1}</span><h3>{t}</h3></div>
                     <p>{p}</p>
                   </li>
                 ))}
@@ -240,13 +325,21 @@ export default function App() {
             </div>
           </section>
 
-          {/* ---------- screens: a rail of real screenshots and a lightbox ---------- */}
+            </>
+          )}
+          {route === 'screens' && (
+            <>
+{/* ---------- screens: a rail of real screenshots and a lightbox ---------- */}
           <Gallery asset={asset} />
 
-          {/* ---------- compare (paper) ---------- */}
+            </>
+          )}
+          {route === 'compare' && (
+            <>
+{/* ---------- compare (paper) ---------- */}
           <section id="compare" className="compare">
             <div className="wrap">
-              <h2>How PrivCord compares</h2>
+              <h1>How PrivCord compares</h1>
               <p className="sub">A short, good-faith summary. It can go out of date, so check each project for its current state.</p>
               <Fade blur duration={1} className="tablewrap-wrap">
                 <div className="tablewrap">
@@ -260,10 +353,14 @@ export default function App() {
             </div>
           </section>
 
-          {/* ---------- faq ---------- */}
+            </>
+          )}
+          {route === 'faq' && (
+            <>
+{/* ---------- faq ---------- */}
           <section id="faq" className="faq-sec">
             <div className="wrap">
-              <h2>Questions people ask</h2>
+              <h1>Questions people ask</h1>
               <div className="faq">
                 {FAQ.map(([q, a], n) => (
                   <Anim key={q} distance={30} duration={0.6} delay={Math.min(n, 3) * 0.05}>
@@ -274,11 +371,15 @@ export default function App() {
             </div>
           </section>
 
-          {/* ---------- download: yellow ---------- */}
+            </>
+          )}
+          {route === 'download' && (
+            <>
+{/* ---------- download: yellow ---------- */}
           <section id="download" className="download" ref={dlRef}>
             {!reduce && <div className="dl-bg" aria-hidden="true"><DotGrid dotSize={4} gap={22} baseColor="#2b2b2b" activeColor={YELLOW} proximity={150} shockRadius={340} shockStrength={5} glow={0} paused={!dlOn} /></div>}
             <div className="wrap">
-              <h2>Get PrivCord</h2>
+              <h1>Get PrivCord</h1>
               <p className="sub">Free. Pick your platform.</p>
               <div className="dl">
                 <div className="dl-row">
@@ -293,6 +394,8 @@ export default function App() {
               <p className="warn"><strong>Heads up:</strong> the Windows installer is not code-signed yet, so Windows SmartScreen will warn you: choose <em>More info</em>, then <em>Run anyway</em>. On Android you need to allow installing apps from this source. Windows will also ask to allow the firewall the first time, which lets PrivCord find friends on your local network.</p>
             </div>
           </section>
+            </>
+          )}
         </main>
 
         <footer>

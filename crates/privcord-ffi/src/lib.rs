@@ -1553,6 +1553,28 @@ impl PrivcordEngine {
         Ok(())
     }
 
+    /// On a new device with no account: make the code and return it, to show as a QR code for the first device to scan.
+    pub fn start_scan_link_offer(&self, name: String) -> Result<String, FfiError> {
+        match pollster::block_on(self.handle.op(Op::StartScanLinkOffer { name }))? {
+            Answer::Text(t) => Ok(t),
+            _ => Err(FfiError::InvalidArgument),
+        }
+    }
+
+    /// On the device holding the account key: the person scanned the code a new device shows.
+    pub fn host_scanned_link(&self, code: String) -> Result<(), FfiError> {
+        pollster::block_on(self.handle.op(Op::HostScannedLink { code }))?;
+        Ok(())
+    }
+
+    /// On the new device: the six digits read off the first device. True when they match.
+    pub fn submit_link_code(&self, digits: String) -> Result<bool, FfiError> {
+        match pollster::block_on(self.handle.op(Op::SubmitLinkCode(digits)))? {
+            Answer::Flag(f) => Ok(f),
+            _ => Err(FfiError::InvalidArgument),
+        }
+    }
+
     /// After comparing the 6-digit codes, on the device holding the account key: let the new device in, or not.
     pub fn confirm_device_link(&self, accept: bool) -> Result<(), FfiError> {
         pollster::block_on(self.handle.op(Op::ConfirmDeviceLink(accept)))?;

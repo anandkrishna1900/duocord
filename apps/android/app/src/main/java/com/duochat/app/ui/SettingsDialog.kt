@@ -94,6 +94,7 @@ fun SettingsDialog(
     onExportBackup: (String, (Result<String>) -> Unit) -> Unit = { _, _ -> },
     onImportBackup: (String, String, (Result<String>) -> Unit) -> Unit = { _, _, _ -> },
     onStartDeviceLink: ((Result<String>) -> Unit) -> Unit = { it(Result.failure(IllegalStateException("Not available."))) },
+    onHostScannedLink: (String, (Result<Unit>) -> Unit) -> Unit = { _, done -> done(Result.failure(IllegalStateException("Not available."))) },
     onConfirmDeviceLink: (Boolean) -> Unit = {},
     onCancelDeviceLink: () -> Unit = {},
     onDeviceRemoval: (com.duochat.app.data.DeviceRemoval, (Result<Unit>) -> Unit) -> Unit = { _, done -> done(Result.failure(IllegalStateException("Not available."))) },
@@ -217,6 +218,7 @@ fun SettingsDialog(
                     LinkHostDialog(
                         state = state,
                         onStart = onStartDeviceLink,
+                        onScanned = onHostScannedLink,
                         onConfirm = onConfirmDeviceLink,
                         onCancel = onCancelDeviceLink,
                         onClose = { linking = false },

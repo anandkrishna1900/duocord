@@ -237,7 +237,7 @@ const ScrollFloat = ({
   ]);
 
   return (
-    <h2
+    <h1
       ref={containerRef}
       className={`scroll-float ${effect === 'float' ? '' : 'scroll-float--open'} ${containerClassName}`}
     >
@@ -250,7 +250,7 @@ const ScrollFloat = ({
       >
         {splitText ?? children}
       </span>
-    </h2>
+    </h1>
   );
 };
 

@@ -483,6 +483,13 @@ impl DesktopHost {
             "join_device_link" => {
                 unit(e.join_device_link(text(args, "code")?, text(args, "name")?))
             }
+            "start_scan_link_offer" => Ok(json!(e
+                .start_scan_link_offer(text(args, "name")?)
+                .map_err(failed)?)),
+            "host_scanned_link" => unit(e.host_scanned_link(text(args, "code")?)),
+            "submit_link_code" => Ok(json!(e
+                .submit_link_code(text(args, "digits")?)
+                .map_err(failed)?)),
             "confirm_device_link" => unit(
                 e.confirm_device_link(args.get("accept").and_then(Value::as_bool).unwrap_or(false)),
             ),

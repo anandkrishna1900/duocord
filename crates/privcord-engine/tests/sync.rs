@@ -630,6 +630,341 @@ fn friends_hear_of_a_linked_device_once_and_keep_the_newest_list() {
     assert!(fran.core.contact_device_list(&phone_uid).is_none());
 }
 
+/// The scan direction's first half: the laptop shows a code, the phone scans it, both ends run the exchange.
+/// Returns the laptop, the code the laptop showed and the six digits the phone shows.
+fn scan_link_until_digits(
+    phone: &mut Device,
+    laptop: &mut Device,
+    relay: &mut Relay,
+    phone_events: &mut privcord_engine::EventStream,
+    laptop_events: &mut privcord_engine::EventStream,
+) -> (String, String) {
+    let code = laptop.core.start_scan_link_offer("Laptop").unwrap();
+    // The laptop's request waits on the relay: the phone scans a moment later.
+    laptop.online(relay);
+    phone.core.host_scanned_link(&code).unwrap();
+    for _ in 0..3 {
+        phone.online(relay);
+        laptop.online(relay);
+    }
+    let (phone_codes, _) = link_codes(phone_events);
+    let (laptop_codes, laptop_stages) = link_codes(laptop_events);
+    assert_eq!(phone_codes.len(), 1, "the phone shows six digits");
+    assert!(
+        laptop_codes.is_empty(),
+        "the laptop never shows its digits: {laptop_codes:?}"
+    );
+    assert!(
+        laptop_stages.contains(&"enter-code".to_owned()),
+        "{laptop_stages:?}"
+    );
+    (code, phone_codes[0].clone())
+}
+
+#[test]
+fn a_laptop_that_shows_the_code_is_linked_by_the_phone_after_the_digits_are_typed() {
+    let clock = FakeClock::at(1_700_000_000_000);
+    let mut relay = Relay::default();
+    let mut phone = Device::new("phone", &clock);
+    phone.core.create_identity().unwrap();
+    let (card, fran) = friend(&clock);
+    phone
+        .core
+        .add_contact(&card, ContactTrust::Verified)
+        .unwrap();
+    phone
+        .core
+        .send_message(&fran, "before the laptop", None)
+        .unwrap();
+    phone.online(&mut relay);
+
+    let mut laptop = Device::new("laptop", &clock);
+    let mut phone_events = phone.core.subscribe();
+    let mut laptop_events = laptop.core.subscribe();
+    let (_code, digits) = scan_link_until_digits(
+        &mut phone,
+        &mut laptop,
+        &mut relay,
+        &mut phone_events,
+        &mut laptop_events,
+    );
+
+    // The person types the phone's digits on the laptop (spaces and dashes do not matter), then taps Link on the phone.
+    let spaced = format!("{} {}", &digits[..3], &digits[3..]);
+    assert_eq!(laptop.core.submit_link_code(&spaced), Ok(true));
+    phone.core.confirm_device_link(true).unwrap();
+    for _ in 0..4 {
+        laptop.online(&mut relay);
+        phone.online(&mut relay);
+    }
+    let (_, stages) = link_codes(&mut laptop_events);
+    assert!(stages.contains(&"matched".to_owned()), "{stages:?}");
+    assert!(stages.contains(&"done".to_owned()), "{stages:?}");
+
+    assert_eq!(laptop.core.own_uid(), phone.core.own_uid());
+    assert!(phone.core.holds_account_key());
+    assert!(
+        !laptop.core.holds_account_key(),
+        "the account key stays on the phone"
+    );
+    assert_eq!(phone.core.device_list().unwrap().active().count(), 2);
+    assert_eq!(laptop.texts(), ["before the laptop"], "the history follows");
+}
+
+#[test]
+fn the_grant_waits_for_the_digits_and_goes_through_once_they_match() {
+    let clock = FakeClock::at(1_700_000_000_000);
+    let mut relay = Relay::default();
+    let mut phone = Device::new("phone", &clock);
+    phone.core.create_identity().unwrap();
+    phone.online(&mut relay);
+    let mut laptop = Device::new("laptop", &clock);
+    let mut phone_events = phone.core.subscribe();
+    let mut laptop_events = laptop.core.subscribe();
+    let (_code, digits) = scan_link_until_digits(
+        &mut phone,
+        &mut laptop,
+        &mut relay,
+        &mut phone_events,
+        &mut laptop_events,
+    );
+    // The person taps Link on the phone first: the laptop holds the grant, it does not become a device yet.
+    phone.core.confirm_device_link(true).unwrap();
+    for _ in 0..3 {
+        laptop.online(&mut relay);
+        phone.online(&mut relay);
+    }
+    assert!(
+        laptop.core.own_uid().is_none(),
+        "not linked before the digits match"
+    );
+    // Then the digits: now it is.
+    assert_eq!(laptop.core.submit_link_code(&digits), Ok(true));
+    for _ in 0..3 {
+        laptop.online(&mut relay);
+    }
+    assert_eq!(laptop.core.own_uid(), phone.core.own_uid());
+}
+
+#[test]
+fn wrong_digits_never_link_and_three_wrong_tries_end_the_link() {
+    let clock = FakeClock::at(1_700_000_000_000);
+    let mut relay = Relay::default();
+    let mut phone = Device::new("phone", &clock);
+    phone.core.create_identity().unwrap();
+    phone.online(&mut relay);
+    let mut laptop = Device::new("laptop", &clock);
+    let mut phone_events = phone.core.subscribe();
+    let mut laptop_events = laptop.core.subscribe();
+    let (_code, digits) = scan_link_until_digits(
+        &mut phone,
+        &mut laptop,
+        &mut relay,
+        &mut phone_events,
+        &mut laptop_events,
+    );
+    let wrong = if digits == "000000" {
+        "111111"
+    } else {
+        "000000"
+    };
+    phone.core.confirm_device_link(true).unwrap();
+    assert_eq!(laptop.core.submit_link_code(wrong), Ok(false));
+    assert_eq!(
+        laptop.core.submit_link_code("12"),
+        Ok(false),
+        "too short is wrong too"
+    );
+    for _ in 0..3 {
+        laptop.online(&mut relay);
+        phone.online(&mut relay);
+    }
+    assert!(laptop.core.own_uid().is_none(), "wrong digits link nothing");
+    // The third wrong try ends it: even the right digits do nothing afterwards.
+    assert_eq!(laptop.core.submit_link_code(wrong), Ok(false));
+    let (_, stages) = link_codes(&mut laptop_events);
+    assert!(
+        stages.contains(&"wrong-code".to_owned()) && stages.contains(&"failed".to_owned()),
+        "{stages:?}"
+    );
+    assert_eq!(
+        laptop.core.submit_link_code(&digits),
+        Err(privcord_engine::ErrorCode::InviteNotFound)
+    );
+    for _ in 0..3 {
+        laptop.online(&mut relay);
+        phone.online(&mut relay);
+    }
+    assert!(laptop.core.own_uid().is_none());
+}
+
+#[test]
+fn someone_who_photographed_the_laptops_code_cannot_pose_as_the_phone() {
+    let clock = FakeClock::at(1_700_000_000_000);
+    let mut relay = Relay::default();
+    // The attacker has an account of their own and the laptop's code (a photo of the QR).
+    let mut attacker = Device::new("attacker", &clock);
+    attacker.core.create_identity().unwrap();
+    attacker.online(&mut relay);
+    let mut laptop = Device::new("laptop", &clock);
+    let mut laptop_events = laptop.core.subscribe();
+    let code = laptop.core.start_scan_link_offer("Laptop").unwrap();
+    laptop.online(&mut relay);
+    attacker.core.host_scanned_link(&code).unwrap();
+    for _ in 0..3 {
+        attacker.online(&mut relay);
+        laptop.online(&mut relay);
+    }
+    // The attacker answers, sees the same digits as the laptop and grants at once: the laptop still holds it, because
+    // the person has no digits to type (the real phone was never involved).
+    attacker.core.confirm_device_link(true).unwrap();
+    for _ in 0..4 {
+        attacker.online(&mut relay);
+        laptop.online(&mut relay);
+    }
+    assert!(
+        laptop.core.own_uid().is_none(),
+        "the attacker's account is not adopted"
+    );
+    // Guessing: three tries at six digits do not get there either, and then it is over.
+    for guess in ["123456", "654321", "246802"] {
+        let r = laptop.core.submit_link_code(guess);
+        assert!(
+            r == Ok(false) || r == Err(privcord_engine::ErrorCode::InviteNotFound),
+            "{r:?}"
+        );
+    }
+    assert!(laptop.core.own_uid().is_none());
+    let (laptop_codes, _) = link_codes(&mut laptop_events);
+    assert!(
+        laptop_codes.is_empty(),
+        "the laptop never shows digits to copy"
+    );
+}
+
+#[test]
+fn the_phone_answers_only_the_first_request_and_repeats_its_answer_for_the_same_one() {
+    let clock = FakeClock::at(1_700_000_000_000);
+    let mut relay = Relay::default();
+    let mut phone = Device::new("phone", &clock);
+    phone.core.create_identity().unwrap();
+    phone.online(&mut relay);
+    let mut laptop = Device::new("laptop", &clock);
+    let mut phone_events = phone.core.subscribe();
+    let mut laptop_events = laptop.core.subscribe();
+    let code = laptop.core.start_scan_link_offer("Laptop").unwrap();
+    laptop.online(&mut relay);
+    phone.core.host_scanned_link(&code).unwrap();
+    for _ in 0..3 {
+        phone.online(&mut relay);
+        laptop.online(&mut relay);
+    }
+    let answers = |relay: &Relay| -> usize {
+        relay
+            .boxes
+            .values()
+            .flatten()
+            .filter(|b| !b.is_empty())
+            .count()
+    };
+    let after_first = answers(&relay);
+    assert!(after_first >= 3, "request, answer, reveal");
+
+    // The laptop's request posted again (as it is every few seconds until an answer comes): the phone answers the same
+    // request again with the same answer, and the exchange goes on to the same digits.
+    clock.advance(6_000);
+    laptop.online(&mut relay);
+    phone.online(&mut relay);
+    let (phone_codes, _) = link_codes(&mut phone_events);
+    assert_eq!(
+        phone_codes.len(),
+        1,
+        "one set of digits, not two: {phone_codes:?}"
+    );
+    let _ = link_codes(&mut laptop_events);
+
+    // Someone with a photo of the code joins the same mailbox with a request of their own: the phone does not answer it
+    // (it holds the one request it answered), so the real exchange goes on undisturbed to the same digits.
+    let mut intruder = Device::new("intruder", &clock);
+    let _ = intruder.core.join_device_link(&code, "Intruder");
+    for _ in 0..3 {
+        intruder.online(&mut relay);
+        phone.online(&mut relay);
+        laptop.online(&mut relay);
+    }
+    let (more_phone_codes, _) = link_codes(&mut phone_events);
+    assert!(
+        more_phone_codes.is_empty(),
+        "no second set of digits: {more_phone_codes:?}"
+    );
+    assert_eq!(laptop.core.submit_link_code(&phone_codes[0]), Ok(true));
+    phone.core.confirm_device_link(true).unwrap();
+    for _ in 0..4 {
+        phone.online(&mut relay);
+        laptop.online(&mut relay);
+        intruder.online(&mut relay);
+    }
+    assert_eq!(
+        laptop.core.own_uid(),
+        phone.core.own_uid(),
+        "the real laptop is linked"
+    );
+    assert!(intruder.core.own_uid().is_none(), "the intruder is not");
+    assert_eq!(phone.core.device_list().unwrap().active().count(), 2);
+}
+
+#[test]
+fn an_offer_that_nobody_scans_expires_and_the_request_is_posted_again_meanwhile() {
+    let clock = FakeClock::at(1_700_000_000_000);
+    let mut relay = Relay::default();
+    let mut laptop = Device::new("laptop", &clock);
+    let mut laptop_events = laptop.core.subscribe();
+    let _code = laptop.core.start_scan_link_offer("Laptop").unwrap();
+    laptop.online(&mut relay);
+    let posted = |relay: &Relay| relay.boxes.values().map(Vec::len).sum::<usize>();
+    assert_eq!(posted(&relay), 1);
+    // Nothing scans it: a few seconds later the request is posted again (not on every tick).
+    laptop.online(&mut relay);
+    assert_eq!(posted(&relay), 1, "not before the repost interval");
+    clock.advance(6_000);
+    laptop.online(&mut relay);
+    assert_eq!(posted(&relay), 2, "posted again");
+    // After ten minutes it is gone.
+    clock.advance(11 * 60_000);
+    laptop.online(&mut relay);
+    let (_, stages) = link_codes(&mut laptop_events);
+    assert!(stages.contains(&"expired".to_owned()), "{stages:?}");
+    assert_eq!(
+        laptop.core.submit_link_code("123456"),
+        Err(privcord_engine::ErrorCode::InviteNotFound)
+    );
+}
+
+#[test]
+fn a_device_with_an_account_cannot_start_a_scan_offer_and_the_phone_needs_the_account_key() {
+    let clock = FakeClock::at(1_700_000_000_000);
+    let mut relay = Relay::default();
+    let mut phone = Device::new("phone", &clock);
+    phone.core.create_identity().unwrap();
+    phone.online(&mut relay);
+    assert_eq!(
+        phone.core.start_scan_link_offer("Phone").err(),
+        Some(privcord_engine::ErrorCode::IdentityExists)
+    );
+    // A linked laptop does not hold the account key, so it cannot host a scanned code either.
+    let mut laptop = link_laptop(&mut phone, &mut relay, &clock);
+    let mut third = Device::new("third", &clock);
+    let code = third.core.start_scan_link_offer("Third").unwrap();
+    assert_eq!(
+        laptop.core.host_scanned_link(&code).err(),
+        Some(privcord_engine::ErrorCode::NeedsAccountKey)
+    );
+    assert_eq!(
+        phone.core.host_scanned_link("not a code").err(),
+        Some(privcord_engine::ErrorCode::InvalidInvite)
+    );
+}
+
 /// Links a laptop to `phone` by code, through `relay`.
 fn link_laptop(phone: &mut Device, relay: &mut Relay, clock: &Arc<FakeClock>) -> Device {
     link_device(phone, relay, clock, "laptop")

@@ -1251,6 +1251,18 @@ class RustChatEngine(
         return call { startDeviceLink() }
     }
 
+    override suspend fun startScanLinkOffer(name: String): Result<String> {
+        _state.update { it.copy(deviceLink = null) }
+        return call { startScanLinkOffer(name.trim().ifEmpty { "Phone" }) }
+    }
+
+    override suspend fun submitLinkCode(digits: String): Result<Boolean> = call { submitLinkCode(digits) }
+
+    override suspend fun hostScannedLink(code: String): Result<Unit> {
+        _state.update { it.copy(deviceLink = null) }
+        return call { hostScannedLink(code.trim()) }
+    }
+
     override suspend fun joinDeviceLink(code: String, name: String): Result<Unit> {
         _state.update { it.copy(deviceLink = null) }
         return call { joinDeviceLink(code.trim(), name.trim().ifEmpty { "Phone" }) }

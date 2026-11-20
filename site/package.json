@@ -6,7 +6,7 @@
   "description": "PrivCord landing page",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node scripts/pages.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

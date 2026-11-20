@@ -1806,11 +1806,13 @@ impl Core {
         self.tick_sync();
         self.tick_removals();
         self.tick_scheduled();
+        // Before the check below: a new device that is being linked has no account yet, and its offer still runs out
+        // (and its request is posted again) on this tick.
+        self.tick_link();
         if self.uid.is_none() {
             // This install was removed from the account and erased itself.
             return;
         }
-        self.tick_link();
         self.tick_device_notices();
         self.tick_key_handover();
         self.tick_media();

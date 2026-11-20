@@ -20,7 +20,7 @@ export async function startHostedEngine(identity: DeviceIdentity | null): Promis
     network: loadNetworkConfig,
     rtcConfig: () => rtcConfigFor(loadNetworkConfig()),
     ownName: () => loadSettings().displayName,
-    onNotify: (message, title) => void notifyIncoming(message, title),
+    onNotify: (message, title, silent) => void notifyIncoming(message, title, silent),
     persistStoreForward: () => saveNetworkConfig({ ...loadNetworkConfig(), storeForward: true }),
     deleteSecret: secretDelete,
     ...(identity ? { expectedUid: identity.uid, identity } : {}),

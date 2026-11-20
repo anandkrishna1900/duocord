@@ -5,6 +5,13 @@
 import type { FileMeta, LocalStore } from './localDb';
 import type { ChatState, SearchHit } from './engine';
 
+export interface DeviceReceipt {
+  deviceId: string;
+  deviceName: string | null;
+  state: 'delivered' | 'read' | 'waiting';
+  at: number;
+}
+
 export type SendResult = { ok: true } | { ok: false; error: string };
 
 export interface ChatEngineApi {
@@ -69,6 +76,12 @@ export interface ChatEngineApi {
   setArchived?(conversation: string, archived: boolean): void;
   /** Turn a chat's notifications off until a time in ms (0 turns them on again). */
   setMuteUntil?(conversation: string, untilMs: number): void;
+  /** Notify without a sound for a chat (a preference that follows the account). */
+  setSilent?(conversation: string, silent: boolean): void;
+  /** Per-device receipts of one of our messages: one line per device of the person (the engine builds them). */
+  messageReceipts?(messageId: string): Promise<DeviceReceipt[]>;
+  /** How many nearby hops each chat's messages take over the Bluetooth/Wi-Fi mesh, by conversation id. */
+  meshHops?(): Promise<Record<string, number>>;
   setQuietHours?(enabled: boolean, from: number, to: number): void;
 
   startDeviceLink?(): Promise<string>;

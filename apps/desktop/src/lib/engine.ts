@@ -258,9 +258,11 @@ export interface PrefsView {
   quiet: { enabled: boolean; from: number; to: number };
   /** Hide the app from screenshots and screen recording (applied per device). */
   secureScreen: boolean;
+  /** Chats that notify without a sound. */
+  silentChats: string[];
 }
 
-export const NO_PREFS: PrefsView = { pins: [], archived: [], muteUntil: {}, quiet: { enabled: false, from: 22 * 60, to: 7 * 60 }, secureScreen: false };
+export const NO_PREFS: PrefsView = { pins: [], archived: [], muteUntil: {}, quiet: { enabled: false, from: 22 * 60, to: 7 * 60 }, secureScreen: false, silentChats: [] };
 
 /** A mute with no end (small enough for JavaScript to hold exactly). */
 export const MUTE_FOREVER = 9_000_000_000_000_000;
@@ -305,7 +307,7 @@ export interface EngineDeps {
   context: string;
   store: LocalStore;
   /** `title` is already worded for the user ("Sam" or "Sam in Trip"). */
-  onNotify: (message: StoredMessage, title: string) => void;
+  onNotify: (message: StoredMessage, title: string, silent?: boolean) => void;
 }
 
 /* ============================== internals ============================== */
@@ -438,6 +440,11 @@ export class ChatEngine implements ChatEngineApi {
     if (untilMs > Date.now()) muteUntil[conversation] = untilMs;
     else delete muteUntil[conversation];
     this.savePrefs({ ...this.prefs, muteUntil });
+  }
+
+  setSilent(conversation: string, silent: boolean): void {
+    const rest = this.prefs.silentChats.filter((c) => c !== conversation);
+    this.savePrefs({ ...this.prefs, silentChats: silent ? [...rest, conversation] : rest });
   }
 
   setQuietHours(enabled: boolean, from: number, to: number): void {
@@ -1521,7 +1528,7 @@ export class ChatEngine implements ChatEngineApi {
       if (this.active === convId && this.visible) message.readAt = Date.now();
       this.msgs.set(message.messageId, message);
       void this.deps.store.putMessage(message).catch(() => undefined);
-      if (!(this.active === convId && this.visible)) this.deps.onNotify(message, title);
+      if (!(this.active === convId && this.visible)) this.deps.onNotify(message, title, this.prefs.silentChats.includes(convId));
     }
     this.sendFrame(from, { v: 1, kind: 'ack', messageId: message.messageId, state: 'DELIVERED', at: Date.now() });
     if (!exists && this.contacts.has(convId) && this.active === convId && this.visible) this.markRead(convId);

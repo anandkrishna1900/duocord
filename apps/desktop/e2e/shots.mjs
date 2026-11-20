@@ -40,7 +40,7 @@ try {
   await say(a.page, 'Who is driving on Saturday?');
   await sleep(2500);
   await shot(a.page, '3-group');
-  await a.page.click('button[aria-label="Add friend"]');
+  await a.page.click('button[aria-label="Add a friend"]');
   await sleep(800);
   await shot(a.page, '4-add');
   await a.page.keyboard.press('Escape');
@@ -56,7 +56,7 @@ try {
       await shot(a.page, name);
     };
     await open(() => a.page.click('button[aria-label="New group"]'), '6-newgroup');
-    await open(() => a.page.click('button[aria-label="Channels"]'), '7-channels');
+    await open(() => a.page.click('button[aria-label="Public channels"]'), '7-channels');
     await open(async () => {
       await openChat(a.page, 'Weekend trip');
       await a.page.click('button[aria-label="More"]');

@@ -1,7 +1,7 @@
 //! Rotating Bluetooth advertisement tags (docs/BLE_TRANSPORT.md section 3).
 //! `HMAC-SHA-256(secret, "duochat-ble-tag-v1|" + epoch)` cut to 8 bytes; `secret` is the 32-byte contact ECDH secret.
 
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use privcord_domain::ble::{ble_epoch, BLE_TAG_BYTES};
 use sha2::Sha256;
 

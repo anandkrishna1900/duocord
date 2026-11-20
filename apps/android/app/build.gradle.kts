@@ -185,5 +185,5 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     // Real org.json for JVM unit tests (the android.jar one is a stub); reads docs/ble-vectors.json.
-    testImplementation("org.json:json:20240303")
+    testImplementation("org.json:json:20260814")
 }

@@ -40,7 +40,7 @@ jobs:
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: 17
+          java-version: 21
       - name: Accept Android SDK licenses
         run: yes | "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager --licenses > /dev/null || true
       # The Rust core, built for the two phone CPU types and packed into the APK (apps/android/app/src/main/jniLibs).

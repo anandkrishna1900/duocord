@@ -156,7 +156,7 @@ jobs:
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: 17
+          java-version: 21
       # The Android interop tests start the real relay and a Nostr relay with node.
       - uses: actions/setup-node@v7
         with:
@@ -218,7 +218,7 @@ jobs:
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: 17
+          java-version: 21
       - name: Accept Android SDK licenses
         run: yes | "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager --licenses > /dev/null || true
       - uses: dtolnay/rust-toolchain@stable

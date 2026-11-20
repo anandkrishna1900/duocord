@@ -74,7 +74,7 @@ rule(r"desktop/src/lib/appLock\.ts", "WebAuthn app lock", "UI/adapter (stays)", 
 rule(r"desktop/src/lib/killSwitch.*\.ts", "Emergency erase steps for the webview (local storage, IndexedDB, files, Tauri commands)", "engine::core::privacy runs the plan and the report; these files only call web and OS APIs", "Adapter", ADAPTER, "Stays")
 rule(r"desktop/src/lib/(outbox)(\.test)?\.ts", "Retry/outbox policy", "engine::core delivery", "Engine", PORTED, "M7", "engine tests")
 rule(r"desktop/src/lib/signaling/.*", "Nostr events (BIP-340), relay client, signaling hub", "engine::signaling::{relay,nostr,hub} (state machines) + crypto::nostr; a socket adapter of a few lines remains", "Engine/Adapter", PORTED, "M7: replace with the socket adapter that feeds SignalingHub", "relay client against the real relay (tests/real_relay.rs); fake relays for backoff, timeouts, dedupe, Nostr rules")
-rule(r"desktop/src/lib/(notifications|clipboard\.test|clipboard|format|settings|settings\.test|themes|themes\.test)\.ts", "Presentation helpers, UI settings, themes, notifications bridge", "UI / adapter (stays)", "UI", UI, "Stays")
+rule(r"desktop/src/lib/(notifications|spotlight|clipboard\.test|clipboard|format|settings|settings\.test|themes|themes\.test)\.ts", "Presentation helpers, UI settings, themes, notifications bridge", "UI / adapter (stays)", "UI", UI, "Stays")
 rule(r"desktop/src/(components|hooks)/.*", "React components and hooks", "UI", "UI", UI, "Stays; hooks become thin wrappers over Tauri commands in M7")
 rule(r"desktop/src/(App|main|config|vite-env)\.tsx?|desktop/src/vite-env\.d\.ts", "App shell", "UI", "UI", UI, "Stays")
 # ---- tauri

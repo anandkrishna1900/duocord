@@ -1,0 +1,140 @@
+/*
+ * Polish layer: small, cheap effects re-implemented in plain CSS after patterns from React Bits (Spotlight Card, Shiny
+ * Text, Border Glow, Animated List / Fade Content; MIT + Commons Clause), Magic UI (Shimmer Button, Shine Border, Blur
+ * Fade) and the usual messenger conventions. Everything is switched off by prefers-reduced-motion.
+ */
+
+/* Spotlight: a soft light follows the pointer over cards and chat rows (the position is set by lib/spotlight.ts). */
+.card-box,
+.chat-row,
+.sidebar-button {
+  position: relative;
+  isolation: isolate;
+}
+.card-box::before,
+.chat-row::before,
+.sidebar-button::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: -1;
+  opacity: 0;
+  background: radial-gradient(180px circle at var(--mx, 50%) var(--my, 50%), var(--accent-soft), transparent 70%);
+  transition: opacity 0.25s ease;
+}
+.card-box:hover::before,
+.chat-row:hover::before,
+.sidebar-button:hover::before {
+  opacity: 1;
+}
+
+/* Primary buttons: a light sheen sweeps across on hover (Shimmer Button, without the spinning spark). */
+.button.primary {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.button.primary::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.28) 50%, transparent 65%);
+  transform: translateX(-120%);
+}
+.button.primary:hover:not(:disabled)::after {
+  transform: translateX(120%);
+  transition: transform 0.7s ease;
+}
+
+/* The message box: a slow light travels around its border while you type (Shine Border / Border Glow). */
+.composer {
+  position: relative;
+}
+.composer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  opacity: 0;
+  background: conic-gradient(from var(--shine-angle, 0deg), transparent 0 70%, var(--accent) 85%, transparent 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  transition: opacity 0.3s ease;
+}
+.composer:focus-within::after {
+  opacity: 0.9;
+}
+@property --shine-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+/* New messages and dialogs ease in with a short blur-fade (Blur Fade / Animated List). */
+@keyframes polish-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+/* (no blur on messages: opening a long chat would blur every row at once) */
+@keyframes polish-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+.message-row {
+  animation: polish-rise 0.24s ease-out both;
+}
+.modal {
+  animation: polish-in 0.22s ease-out both;
+}
+
+/* Settings tabs: the active one is a soft pill. */
+.tab {
+  border-radius: 999px;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.tab.active {
+  background: var(--accent-soft);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes polish-shine {
+    to {
+      --shine-angle: 360deg;
+    }
+  }
+  .composer:focus-within::after {
+    animation: polish-shine 6s linear infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .message-row,
+  .modal {
+    animation: none;
+  }
+  .button.primary::after {
+    display: none;
+  }
+  .card-box::before,
+  .chat-row::before,
+  .sidebar-button::before {
+    transition: none;
+  }
+}

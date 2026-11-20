@@ -15,7 +15,7 @@
 //! | `privcord://signal-subscribe`  | `{ mailbox }`                             | listen on that mailbox                        |
 //! | `privcord://signal-unsubscribe`| `{ mailbox }`                             | stop listening                                |
 //! | `privcord://signal-put`        | `{ mailbox, blob, kind, ttlSec }`         | publish the blob to the relays                |
-//! | `privcord://notify`            | `{ conversation, sender, preview }`       | show a notification                           |
+//! | `privcord://notify`            | `{ conversation, sender, preview, silent }` | show a notification                           |
 
 use privcord_desktop_host::{native_signaling::NativeSignaling, DesktopHost};
 use privcord_domain::signaling::PutKind;
@@ -239,12 +239,12 @@ impl TransportCallbacks for PageTransport {
 struct PageNotifier(AppHandle);
 
 impl NotifierCallbacks for PageNotifier {
-    fn message_received(&self, conversation: String, sender: String, preview: String) {
+    fn message_received(&self, conversation: String, sender: String, preview: String, silent: bool) {
         if has_page(&self.0) {
             // The page knows names and whether that chat is on screen.
             let _ = self.0.emit(
                 "privcord://notify",
-                json!({ "conversation": conversation, "sender": sender, "preview": preview }),
+                json!({ "conversation": conversation, "sender": sender, "preview": preview, "silent": silent }),
             );
             return;
         }

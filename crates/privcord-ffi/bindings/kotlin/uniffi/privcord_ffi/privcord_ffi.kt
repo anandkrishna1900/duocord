@@ -661,7 +661,7 @@ internal interface UniffiCallbackInterfaceLegacyFilesMethod0 : com.sun.jna.Callb
     fun callback(`uniffiHandle`: Long,`messageId`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
 }
 internal interface UniffiCallbackInterfaceNotifierCallbacksMethod0 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`conversation`: RustBuffer.ByValue,`sender`: RustBuffer.ByValue,`preview`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+    fun callback(`uniffiHandle`: Long,`conversation`: RustBuffer.ByValue,`sender`: RustBuffer.ByValue,`preview`: RustBuffer.ByValue,`silent`: Byte,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
 }
 internal interface UniffiCallbackInterfaceSecureStoreCallbacksMethod0 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
@@ -1094,6 +1094,12 @@ internal open class UniffiVTableCallbackInterfaceTransportCallbacks(
 
 
 
+
+
+
+
+
+
 // A JNA Library to expose the extern-C FFI definitions.
 // This is an implementation detail which will be called internally by the public API.
 
@@ -1140,7 +1146,7 @@ internal interface UniffiLib : Library {
     ): Unit
     fun uniffi_privcord_ffi_fn_init_callback_vtable_notifiercallbacks(`vtable`: UniffiVTableCallbackInterfaceNotifierCallbacks,
     ): Unit
-    fun uniffi_privcord_ffi_fn_method_notifiercallbacks_message_received(`ptr`: Pointer,`conversation`: RustBuffer.ByValue,`sender`: RustBuffer.ByValue,`preview`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    fun uniffi_privcord_ffi_fn_method_notifiercallbacks_message_received(`ptr`: Pointer,`conversation`: RustBuffer.ByValue,`sender`: RustBuffer.ByValue,`preview`: RustBuffer.ByValue,`silent`: Byte,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_privcord_ffi_fn_clone_privcordengine(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): Pointer
@@ -1216,10 +1222,14 @@ internal interface UniffiLib : Library {
     ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_mesh_frame(`ptr`: Pointer,`link`: RustBuffer.ByValue,`frame`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    fun uniffi_privcord_ffi_fn_method_privcordengine_mesh_hops_json(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     fun uniffi_privcord_ffi_fn_method_privcordengine_mesh_link_down(`ptr`: Pointer,`link`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_mesh_link_up(`ptr`: Pointer,`link`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    fun uniffi_privcord_ffi_fn_method_privcordengine_message_receipts_json(`ptr`: Pointer,`messageId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     fun uniffi_privcord_ffi_fn_method_privcordengine_next_event(`ptr`: Pointer,`timeoutMs`: Int,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_privcord_ffi_fn_method_privcordengine_own_card(`ptr`: Pointer,`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1291,6 +1301,8 @@ internal interface UniffiLib : Library {
     fun uniffi_privcord_ffi_fn_method_privcordengine_set_quiet_hours(`ptr`: Pointer,`enabled`: Byte,`from`: Short,`to`: Short,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_set_secure_screen(`ptr`: Pointer,`on`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    fun uniffi_privcord_ffi_fn_method_privcordengine_set_silent(`ptr`: Pointer,`conversation`: RustBuffer.ByValue,`silent`: Byte,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_set_store_forward(`ptr`: Pointer,`value`: Byte,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
@@ -1558,9 +1570,13 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_mesh_frame(
     ): Short
+    fun uniffi_privcord_ffi_checksum_method_privcordengine_mesh_hops_json(
+    ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_mesh_link_down(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_mesh_link_up(
+    ): Short
+    fun uniffi_privcord_ffi_checksum_method_privcordengine_message_receipts_json(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_next_event(
     ): Short
@@ -1633,6 +1649,8 @@ internal interface UniffiLib : Library {
     fun uniffi_privcord_ffi_checksum_method_privcordengine_set_quiet_hours(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_set_secure_screen(
+    ): Short
+    fun uniffi_privcord_ffi_checksum_method_privcordengine_set_silent(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_set_store_forward(
     ): Short
@@ -1722,7 +1740,7 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_privcord_ffi_checksum_method_legacyfiles_file_bytes() != 24894.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_privcord_ffi_checksum_method_notifiercallbacks_message_received() != 3623.toShort()) {
+    if (lib.uniffi_privcord_ffi_checksum_method_notifiercallbacks_message_received() != 52898.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_accept_invite() != 42739.toShort()) {
@@ -1827,10 +1845,16 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_mesh_frame() != 42486.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_mesh_hops_json() != 64390.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_mesh_link_down() != 60840.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_mesh_link_up() != 17419.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_message_receipts_json() != 58819.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_next_event() != 14644.toShort()) {
@@ -1939,6 +1963,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_set_secure_screen() != 64382.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_set_silent() != 63094.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_set_store_forward() != 53043.toShort()) {
@@ -3049,7 +3076,7 @@ public object FfiConverterTypeLegacyFiles: FfiConverter<LegacyFiles, Pointer> {
 
 public interface NotifierCallbacks {
     
-    fun `messageReceived`(`conversation`: kotlin.String, `sender`: kotlin.String, `preview`: kotlin.String)
+    fun `messageReceived`(`conversation`: kotlin.String, `sender`: kotlin.String, `preview`: kotlin.String, `silent`: kotlin.Boolean)
     
     companion object
 }
@@ -3135,12 +3162,12 @@ open class NotifierCallbacksImpl: Disposable, AutoCloseable, NotifierCallbacks {
         }
     }
 
-    override fun `messageReceived`(`conversation`: kotlin.String, `sender`: kotlin.String, `preview`: kotlin.String)
+    override fun `messageReceived`(`conversation`: kotlin.String, `sender`: kotlin.String, `preview`: kotlin.String, `silent`: kotlin.Boolean)
         = 
     callWithPointer {
     uniffiRustCall() { _status ->
     UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_notifiercallbacks_message_received(
-        it, FfiConverterString.lower(`conversation`),FfiConverterString.lower(`sender`),FfiConverterString.lower(`preview`),_status)
+        it, FfiConverterString.lower(`conversation`),FfiConverterString.lower(`sender`),FfiConverterString.lower(`preview`),FfiConverterBoolean.lower(`silent`),_status)
 }
     }
     
@@ -3158,13 +3185,14 @@ open class NotifierCallbacksImpl: Disposable, AutoCloseable, NotifierCallbacks {
 // Put the implementation in an object so we don't pollute the top-level namespace
 internal object uniffiCallbackInterfaceNotifierCallbacks {
     internal object `messageReceived`: UniffiCallbackInterfaceNotifierCallbacksMethod0 {
-        override fun callback(`uniffiHandle`: Long,`conversation`: RustBuffer.ByValue,`sender`: RustBuffer.ByValue,`preview`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,) {
+        override fun callback(`uniffiHandle`: Long,`conversation`: RustBuffer.ByValue,`sender`: RustBuffer.ByValue,`preview`: RustBuffer.ByValue,`silent`: Byte,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,) {
             val uniffiObj = FfiConverterTypeNotifierCallbacks.handleMap.get(uniffiHandle)
             val makeCall = { ->
                 uniffiObj.`messageReceived`(
                     FfiConverterString.lift(`conversation`),
                     FfiConverterString.lift(`sender`),
                     FfiConverterString.lift(`preview`),
+                    FfiConverterBoolean.lift(`silent`),
                 )
             }
             val writeReturn = { _: Unit -> Unit }
@@ -3470,12 +3498,24 @@ public interface PrivcordEngineInterface {
      */
     fun `meshFrame`(`link`: kotlin.String, `frame`: kotlin.String)
     
+    /**
+     * Radio hops the latest Bluetooth-mesh message of each channel travelled: `{"chan:name": hops}` (1 = from a
+     * neighbour). Memory only; a channel's entry goes when a direct link to its writer comes up.
+     */
+    fun `meshHopsJson`(): kotlin.String
+    
     fun `meshLinkDown`(`link`: kotlin.String)
     
     /**
      * A Bluetooth mesh neighbour appeared.
      */
     fun `meshLinkUp`(`link`: kotlin.String)
+    
+    /**
+     * Which devices of the person you wrote to have the message: `[{device_id, device_name, state, at}]` with state
+     * `delivered`, `read` or `waiting` (a listed device that has not answered yet; `at` is 0 then).
+     */
+    fun `messageReceiptsJson`(`messageId`: kotlin.String): kotlin.String
     
     /**
      * Wait up to `timeout_ms` for the next event. `None` means nothing happened. Call it from a background thread
@@ -3637,6 +3677,11 @@ public interface PrivcordEngineInterface {
      * Hide the app from screenshots, screen recording and the app switcher, on all your devices.
      */
     fun `setSecureScreen`(`on`: kotlin.Boolean)
+    
+    /**
+     * Deliver a chat's notifications without sound or vibration, or back to normal. The same on all devices.
+     */
+    fun `setSilent`(`conversation`: kotlin.String, `silent`: kotlin.Boolean)
     
     /**
      * Keep invites on the relay for 15 minutes as well as publishing them live.
@@ -4289,6 +4334,23 @@ open class PrivcordEngine: Disposable, AutoCloseable, PrivcordEngineInterface {
     
 
     
+    /**
+     * Radio hops the latest Bluetooth-mesh message of each channel travelled: `{"chan:name": hops}` (1 = from a
+     * neighbour). Memory only; a channel's entry goes when a direct link to its writer comes up.
+     */
+    @Throws(FfiException::class)override fun `meshHopsJson`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_mesh_hops_json(
+        it, _status)
+}
+    }
+    )
+    }
+    
+
+    
     @Throws(FfiException::class)override fun `meshLinkDown`(`link`: kotlin.String)
         = 
     callWithPointer {
@@ -4313,6 +4375,23 @@ open class PrivcordEngine: Disposable, AutoCloseable, PrivcordEngineInterface {
 }
     }
     
+    
+
+    
+    /**
+     * Which devices of the person you wrote to have the message: `[{device_id, device_name, state, at}]` with state
+     * `delivered`, `read` or `waiting` (a listed device that has not answered yet; `at` is 0 then).
+     */
+    @Throws(FfiException::class)override fun `messageReceiptsJson`(`messageId`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_message_receipts_json(
+        it, FfiConverterString.lower(`messageId`),_status)
+}
+    }
+    )
+    }
     
 
     
@@ -4843,6 +4922,21 @@ open class PrivcordEngine: Disposable, AutoCloseable, PrivcordEngineInterface {
     uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_set_secure_screen(
         it, FfiConverterBoolean.lower(`on`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Deliver a chat's notifications without sound or vibration, or back to normal. The same on all devices.
+     */
+    @Throws(FfiException::class)override fun `setSilent`(`conversation`: kotlin.String, `silent`: kotlin.Boolean)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_set_silent(
+        it, FfiConverterString.lower(`conversation`),FfiConverterBoolean.lower(`silent`),_status)
 }
     }
     

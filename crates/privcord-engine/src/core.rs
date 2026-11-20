@@ -70,6 +70,7 @@ mod linking;
 mod media;
 mod prefs;
 mod privacy;
+mod receipts;
 mod removal;
 mod scheduled;
 mod signaling;
@@ -240,6 +241,9 @@ pub struct Core {
     channels: BTreeMap<String, ChannelKeys>,
     /// Our place in the Bluetooth mesh (neighbours are anonymous radio links, not contacts).
     mesh: MeshNode,
+    /// Channel (storage key) to the radio hops its latest mesh message took and who wrote it. Memory only; a direct
+    /// link to the writer clears it.
+    mesh_hops: BTreeMap<String, (u32, UserId)>,
     invites: invites::InviteState,
     /// Protocol v2 keys for sealed blobs (ours and our contacts').
     keys: keys::KeyState,
@@ -326,6 +330,7 @@ impl Core {
             groups: None,
             channels: BTreeMap::new(),
             mesh: MeshNode::default(),
+            mesh_hops: BTreeMap::new(),
             invites: invites::InviteState::default(),
             keys: keys::KeyState::default(),
             legacy_groups: Vec::new(),
@@ -749,6 +754,8 @@ impl Core {
         let (sign, dh) = self
             .keys_of_address(peer)
             .ok_or(ErrorCode::UnknownContact)?;
+        let person = Self::person_of(peer);
+        self.mesh_hops.retain(|_, (_, who)| *who != person);
         let own = self.as_me(peer).ok_or(ErrorCode::NoIdentity)?;
         let key = self
             .key_for_address(&own)
@@ -1351,6 +1358,7 @@ impl Core {
             conversation,
             sender: who.clone(),
             preview: message.text.chars().take(80).collect(),
+            silent: false,
         });
         let id = message.message_id;
         ack(self, &id);
@@ -1391,6 +1399,7 @@ impl Core {
         if !ours {
             return;
         }
+        self.record_receipt(&id, peer, state == DeliveryState::Read);
         let Some(current) = self.messages.get(&id).map(|m| m.message.delivery_state) else {
             return;
         };
@@ -2363,6 +2372,7 @@ impl Core {
             conversation,
             sender: who.clone(),
             preview: message.text.chars().take(80).collect(),
+            silent: false,
         });
         ack(self, &message.message_id);
     }
@@ -2672,6 +2682,7 @@ impl Core {
             conversation,
             sender: who.clone(),
             preview: privcord_domain::files::file_preview_text(&offer.name),
+            silent: false,
         });
         let at = self.now();
         self.send_ack(peer, &message.message_id, at);
@@ -2865,13 +2876,22 @@ impl Core {
         let result = self.mesh.handle(&value, link, now);
         self.mesh_send(result.forward);
         if let Some(blob) = result.accepted {
-            self.accept_channel_blob(&blob);
+            self.accept_channel_blob(&blob, Some(result.hops));
         }
+    }
+
+    /// Channel (storage key) to the radio hops its latest mesh message travelled (1 = from a neighbour). Gone once a
+    /// direct link to the writer comes up.
+    pub fn mesh_hops(&self) -> BTreeMap<String, u32> {
+        self.mesh_hops
+            .iter()
+            .map(|(k, (h, _))| (k.clone(), *h))
+            .collect()
     }
 
     /// A sealed blob for one of our channels, from the mesh or from the signaling service: open it, remember who wrote
     /// it, keep it, tell the app. Repeats, our own messages and people we muted are dropped.
-    fn accept_channel_blob(&mut self, blob: &SealedBlob) {
+    fn accept_channel_blob(&mut self, blob: &SealedBlob, mesh_hops: Option<u32>) {
         let Ok(blob_value) = serde_json::to_value(blob) else {
             return;
         };
@@ -2917,6 +2937,10 @@ impl Core {
             }
         }
         let conversation = ConversationId::Channel(m.channel.clone());
+        if let Some(h) = mesh_hops {
+            self.mesh_hops
+                .insert(conversation.storage_key(), (h, m.contact.uid.clone()));
+        }
         let row = StoredMessage {
             conversation: conversation.clone(),
             message: ChatMessage {
@@ -2950,6 +2974,7 @@ impl Core {
             conversation,
             sender: m.contact.uid,
             preview: m.text.chars().take(80).collect(),
+            silent: false,
         });
     }
 

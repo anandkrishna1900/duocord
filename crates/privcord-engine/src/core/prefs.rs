@@ -16,6 +16,7 @@ pub(super) const KV_ARCHIVED: &str = "pref.archived";
 pub(super) const KV_MUTE_UNTIL: &str = "pref.mute";
 pub(super) const KV_QUIET: &str = "pref.quiet";
 pub(super) const KV_SECURE: &str = "pref.secure";
+pub(super) const KV_SILENT: &str = "pref.silent";
 /// Every key above; anything starting with this is a synced preference.
 pub(super) const PREFIX: &str = "pref.";
 
@@ -69,6 +70,8 @@ pub struct Prefs {
     pub quiet: QuietHours,
     /// Hide this account from screenshots, screen recording and the app switcher (each device applies it).
     pub secure_screen: bool,
+    /// Chats whose notifications arrive without sound or vibration (the app still gets them, flagged silent).
+    pub silent_chats: Vec<String>,
 }
 
 impl Prefs {
@@ -142,6 +145,10 @@ impl Core {
         if let Some(v) = get(self, KV_SECURE) {
             next.secure_screen = v.as_bool().unwrap_or(false);
         }
+        if let Some(v) = get(self, KV_SILENT) {
+            next.silent_chats = serde_json::from_value(v).unwrap_or_default();
+            next.silent_chats.truncate(MAX_LISTED);
+        }
         self.prefs = next;
     }
 
@@ -176,6 +183,22 @@ impl Core {
         }
         self.save_pref(KV_ARCHIVED, serde_json::json!(next))?;
         self.prefs.archived = next;
+        Ok(())
+    }
+
+    /// Deliver a chat's notifications without sound or vibration (or back to normal).
+    pub fn set_silent(&mut self, conversation: &str, silent: bool) -> Result<(), ErrorCode> {
+        self.require_live()?;
+        let mut next = self.prefs.silent_chats.clone();
+        next.retain(|c| c != conversation);
+        if silent {
+            if next.len() >= MAX_LISTED {
+                next.remove(0);
+            }
+            next.push(conversation.to_owned());
+        }
+        self.save_pref(KV_SILENT, serde_json::json!(next))?;
+        self.prefs.silent_chats = next;
         Ok(())
     }
 
@@ -236,9 +259,15 @@ impl Core {
 
     /// Every notification goes through here: the engine itself keeps quiet for muted chats and in quiet hours, so no
     /// app has to.
-    pub(super) fn notify_message(&self, n: privcord_ports::Notification) {
-        let privcord_ports::Notification::MessageReceived { conversation, .. } = &n;
-        if self.should_notify(&conversation.storage_key()) {
+    pub(super) fn notify_message(&self, mut n: privcord_ports::Notification) {
+        let privcord_ports::Notification::MessageReceived {
+            conversation,
+            silent,
+            ..
+        } = &mut n;
+        let key = conversation.storage_key();
+        *silent = self.prefs.silent_chats.contains(&key);
+        if self.should_notify(&key) {
             self.ports.notifier.notify(n);
         }
     }

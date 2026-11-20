@@ -393,6 +393,7 @@ impl DesktopHost {
             "set_archived" => {
                 unit(e.set_archived(text(args, "conversation")?, flag(args, "archived")?))
             }
+            "set_silent" => unit(e.set_silent(text(args, "conversation")?, flag(args, "silent")?)),
             "set_mute_until" => {
                 unit(e.set_mute_until(text(args, "conversation")?, big(args, "until_ms")?))
             }
@@ -403,6 +404,15 @@ impl DesktopHost {
             )),
             "prefs" => {
                 Ok(serde_json::from_str(&e.prefs_json().map_err(failed)?).unwrap_or(Value::Null))
+            }
+            "message_receipts" => Ok(serde_json::from_str(
+                &e.message_receipts_json(text(args, "message_id")?)
+                    .map_err(failed)?,
+            )
+            .unwrap_or(Value::Null)),
+            "mesh_hops" => {
+                Ok(serde_json::from_str(&e.mesh_hops_json().map_err(failed)?)
+                    .unwrap_or(Value::Null))
             }
             "set_secure_screen" => unit(e.set_secure_screen(flag(args, "on")?)),
             "diagnostics" => Ok(json!(e

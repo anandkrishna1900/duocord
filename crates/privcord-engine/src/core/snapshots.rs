@@ -363,6 +363,7 @@ impl Core {
             super::prefs::KV_MUTE_UNTIL,
             super::prefs::KV_QUIET,
             super::prefs::KV_SECURE,
+            super::prefs::KV_SILENT,
         ] {
             entries.extend(entry(kind::SETTING, json!({ "key": key })));
         }

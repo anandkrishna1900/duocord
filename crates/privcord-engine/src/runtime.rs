@@ -151,6 +151,10 @@ pub enum Op {
         id: String,
         until_ms: i64,
     },
+    SetSilent {
+        id: String,
+        silent: bool,
+    },
     SetQuietHours {
         enabled: bool,
         from: u16,
@@ -158,6 +162,10 @@ pub enum Op {
     },
     /// The account's synced preferences, as JSON.
     Prefs,
+    /// Per-device receipts of one message, as JSON.
+    MessageReceipts(MessageId),
+    /// Radio hops of the latest mesh message per channel, as JSON.
+    MeshHops,
     ShouldNotify(String),
     /// The person's time zone, minutes east of UTC.
     SetUtcOffset(i32),
@@ -392,12 +400,19 @@ fn pump(core: &mut Core, cmd: Command) -> bool {
                 Op::SetArchived { id, archived } => {
                     core.set_archived(&id, archived).map(|()| Answer::Done)
                 }
+                Op::SetSilent { id, silent } => core.set_silent(&id, silent).map(|()| Answer::Done),
                 Op::SetMuteUntil { id, until_ms } => {
                     core.set_mute_until(&id, until_ms).map(|()| Answer::Done)
                 }
                 Op::SetQuietHours { enabled, from, to } => core
                     .set_quiet_hours(enabled, from, to)
                     .map(|()| Answer::Done),
+                Op::MessageReceipts(id) => Ok(Answer::Text(
+                    serde_json::to_string(&core.message_receipts(&id)).unwrap_or_default(),
+                )),
+                Op::MeshHops => Ok(Answer::Text(
+                    serde_json::to_string(&core.mesh_hops()).unwrap_or_default(),
+                )),
                 Op::Prefs => Ok(Answer::Text(
                     serde_json::to_string(&core.prefs()).unwrap_or_default(),
                 )),

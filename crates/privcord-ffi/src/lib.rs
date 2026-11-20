@@ -282,7 +282,7 @@ pub enum SignalKind {
 
 #[uniffi::export(with_foreign)]
 pub trait NotifierCallbacks: Send + Sync {
-    fn message_received(&self, conversation: String, sender: String, preview: String);
+    fn message_received(&self, conversation: String, sender: String, preview: String, silent: bool);
 }
 
 struct SecureAdapter(Arc<dyn SecureStoreCallbacks>);
@@ -376,9 +376,14 @@ impl Notifier for NotifierAdapter {
             conversation,
             sender,
             preview,
+            silent,
         } = n;
-        self.0
-            .message_received(conversation.storage_key(), sender.to_string(), preview);
+        self.0.message_received(
+            conversation.storage_key(),
+            sender.to_string(),
+            preview,
+            silent,
+        );
     }
 }
 
@@ -1398,6 +1403,14 @@ impl PrivcordEngine {
         })
     }
 
+    /// Deliver a chat's notifications without sound or vibration, or back to normal. The same on all devices.
+    pub fn set_silent(&self, conversation: String, silent: bool) -> Result<(), FfiError> {
+        self.misc(Op::SetSilent {
+            id: conversation,
+            silent,
+        })
+    }
+
     /// Turn a chat's notifications off until a time in milliseconds (`0` turns them back on). The same on all devices.
     pub fn set_mute_until(&self, conversation: String, until_ms: i64) -> Result<(), FfiError> {
         self.misc(Op::SetMuteUntil {
@@ -1414,6 +1427,25 @@ impl PrivcordEngine {
     /// The synced preferences as JSON: `{pins, archived, mute_until, quiet}`.
     pub fn prefs_json(&self) -> Result<String, FfiError> {
         match pollster::block_on(self.handle.op(Op::Prefs))? {
+            Answer::Text(t) => Ok(t),
+            _ => Err(FfiError::InvalidArgument),
+        }
+    }
+
+    /// Which devices of the person you wrote to have the message: `[{device_id, device_name, state, at}]` with state
+    /// `delivered`, `read` or `waiting` (a listed device that has not answered yet; `at` is 0 then).
+    pub fn message_receipts_json(&self, message_id: String) -> Result<String, FfiError> {
+        let id = MessageId::new(message_id).map_err(|_| FfiError::InvalidArgument)?;
+        match pollster::block_on(self.handle.op(Op::MessageReceipts(id)))? {
+            Answer::Text(t) => Ok(t),
+            _ => Err(FfiError::InvalidArgument),
+        }
+    }
+
+    /// Radio hops the latest Bluetooth-mesh message of each channel travelled: `{"chan:name": hops}` (1 = from a
+    /// neighbour). Memory only; a channel's entry goes when a direct link to its writer comes up.
+    pub fn mesh_hops_json(&self) -> Result<String, FfiError> {
+        match pollster::block_on(self.handle.op(Op::MeshHops))? {
             Answer::Text(t) => Ok(t),
             _ => Err(FfiError::InvalidArgument),
         }

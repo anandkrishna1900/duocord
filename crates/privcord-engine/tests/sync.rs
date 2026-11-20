@@ -748,6 +748,25 @@ fn a_linked_device_talks_to_a_friend_and_every_device_gets_the_answer() {
     assert!(laptop.texts().contains(&"hello Pat".to_owned()));
     fran.online(&mut relay);
     assert_eq!(delivery(&fran, "hello Pat"), DeliveryState::Delivered);
+
+    // Fran can see which of Pat's devices has it: each answered once.
+    let receipts = fran.core.message_receipts(&fran.message_id("hello Pat"));
+    let phone_id = phone.core.this_device_id().unwrap();
+    let laptop_id = laptop.core.this_device_id().unwrap();
+    let mut ids: Vec<&str> = receipts.iter().map(|r| r.device_id.as_str()).collect();
+    ids.sort_unstable();
+    let mut want = vec![phone_id, laptop_id];
+    want.sort_unstable();
+    assert_eq!(ids, want, "{receipts:?}");
+    assert!(receipts
+        .iter()
+        .all(|r| r.state == "delivered" && r.device_name.is_some() && r.at > 0));
+    // An unknown message has no receipts.
+    assert_eq!(
+        fran.core
+            .message_receipts(&MessageId::new("0".repeat(32)).unwrap()),
+        vec![]
+    );
 }
 
 /// Frames between two devices that are linked directly. `a_addr` is how `b` names `a`, `b_addr` how `a` names `b`.
@@ -1804,6 +1823,7 @@ fn pins_archive_mutes_and_quiet_hours_follow_the_person_to_every_device() {
         .unwrap();
     laptop.core.set_quiet_hours(true, 22 * 60, 7 * 60).unwrap();
     laptop.core.set_secure_screen(true).unwrap();
+    laptop.core.set_silent("chat-e", true).unwrap();
     for _ in 0..3 {
         laptop.online(&mut relay);
         phone.online(&mut relay);
@@ -1814,6 +1834,7 @@ fn pins_archive_mutes_and_quiet_hours_follow_the_person_to_every_device() {
     assert_eq!(p.mute_until.get("chat-d"), Some(&(now + 3_600_000)));
     assert!(p.quiet.enabled && p.quiet.from == 22 * 60 && p.quiet.to == 7 * 60);
     assert!(p.secure_screen, "the screen-privacy choice follows too");
+    assert_eq!(p.silent_chats, vec!["chat-e"], "silent chats follow too");
     // 1_700_000_000_000 ms is 22:13 UTC, inside the 22:00 to 07:00 window; a zone 10 hours behind makes it midday.
     assert!(!phone.core.should_notify("chat-x"), "quiet hours");
     phone.core.set_utc_offset(-613);
@@ -1847,6 +1868,7 @@ fn pins_archive_mutes_and_quiet_hours_follow_the_person_to_every_device() {
         laptop.online(&mut relay);
     }
     assert_eq!(tablet.core.prefs().pins, vec!["chat-b"]);
+    assert_eq!(tablet.core.prefs().silent_chats, vec!["chat-e"]);
     assert!(tablet.core.prefs().quiet.enabled);
 }
 

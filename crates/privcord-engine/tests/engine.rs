@@ -281,7 +281,7 @@ fn two_engines_authenticate_and_exchange_messages_with_receipts() {
     assert_eq!(status(&a, &id), DeliveryState::Delivered);
     assert_eq!(a.core.snapshot().queued, 0, "the receipt clears the outbox");
     assert!(
-        matches!(b.notifier.taken().as_slice(), [Notification::MessageReceived { preview, .. }] if preview.starts_with("héllo"))
+        matches!(b.notifier.taken().as_slice(), [Notification::MessageReceived { preview, silent: false, .. }] if preview.starts_with("héllo"))
     );
 
     // A reply quotes the original, and reading is reported back.
@@ -1099,4 +1099,27 @@ fn the_diagnostics_report_holds_counts_and_never_content_and_the_self_test_passe
     let results = a.core.self_test();
     assert!(results.iter().all(|r| r.ok), "{results:?}");
     assert!(results.len() >= 4);
+}
+
+#[test]
+fn a_silent_chat_notifies_flagged_silent_and_a_muted_one_not_at_all() {
+    let (mut a, mut b, au, bu) = pair();
+    connect(&mut a, &mut b, &au, &bu);
+
+    // A silent chat still notifies, flagged silent; a muted one does not notify at all.
+    b.core.set_silent(au.as_ref(), true).unwrap();
+    a.core.send_message(&bu, "quiet one", None).unwrap();
+    pump(&mut a, &mut b, &au, &bu);
+    assert!(
+        matches!(b.notifier.taken().as_slice(), [Notification::MessageReceived { preview, silent: true, .. }] if preview == "quiet one")
+    );
+    b.core.set_silent(au.as_ref(), false).unwrap();
+    assert!(b.core.prefs().silent_chats.is_empty());
+    b.core.set_silent(au.as_ref(), true).unwrap();
+    b.core
+        .set_mute_until(au.as_ref(), i64::MAX / 2)
+        .unwrap();
+    a.core.send_message(&bu, "muted one", None).unwrap();
+    pump(&mut a, &mut b, &au, &bu);
+    assert!(b.notifier.taken().is_empty());
 }

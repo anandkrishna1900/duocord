@@ -108,7 +108,13 @@ impl TransportCallbacks for MeshWire {
 #[derive(Default)]
 struct Bell(Mutex<Vec<(String, String, String)>>);
 impl NotifierCallbacks for Bell {
-    fn message_received(&self, conversation: String, sender: String, preview: String) {
+    fn message_received(
+        &self,
+        conversation: String,
+        sender: String,
+        preview: String,
+        _silent: bool,
+    ) {
         self.0.lock().unwrap().push((conversation, sender, preview));
     }
 }

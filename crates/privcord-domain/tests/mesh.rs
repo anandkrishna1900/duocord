@@ -385,3 +385,21 @@ fn a_noisy_neighbour_cannot_push_everyone_elses_messages_out_of_the_buffer() {
     let out = node.link_up("late", 3);
     assert!(out.iter().any(|o| o.packet.blob == honest));
 }
+
+#[test]
+fn hops_count_the_radio_hops_a_packet_travelled() {
+    // The writer sends at MESH_MAX_TTL and every forwarder takes one off: a neighbour's packet is 1 hop.
+    let mut node = MeshNode::default();
+    node.link_up("n1", 0);
+    for (n, ttl, hops) in [
+        (1, privcord_domain::limits::MESH_MAX_TTL, 1),
+        (2, privcord_domain::limits::MESH_MAX_TTL - 2, 3),
+        (3, 1, privcord_domain::limits::MESH_MAX_TTL),
+    ] {
+        let raw = serde_json::to_value(MeshPacket::new(blob(n, "bob"), ttl)).unwrap();
+        assert_eq!(node.handle(&raw, "n1", 0).hops, hops);
+    }
+    // Over the limit is clamped, never fewer than one hop.
+    let raw = serde_json::to_value(MeshPacket::new(blob(4, "bob"), 99)).unwrap();
+    assert_eq!(node.handle(&raw, "n1", 0).hops, 1);
+}

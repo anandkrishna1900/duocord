@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { THEMES, accentFill, contrast, themeById, themeVars } from './themes';
+import { THEMES, accentFill, classicTheme, contrast, themeById, themeVars } from './themes';
 
 describe('built-in themes', () => {
   it('has at least ten, with unique ids and names', () => {
@@ -32,5 +32,33 @@ describe('built-in themes', () => {
     expect(themeById('nord')?.name).toBe('Nord');
     expect(themeById('nope')).toBeUndefined();
     expect(accentFill('#000080')).toBe('#000080');
+  });
+});
+
+describe('every text colour reads on every surface it can sit on', () => {
+  const plum = '#7a3e73';
+  const all = [...THEMES, classicTheme(true, plum), classicTheme(false, plum)];
+  it.each(all.map((t) => [t.name, t] as const))('%s', (_name, t) => {
+    const v = themeVars(t);
+    const surfaces = [v['--bg']!, v['--surface']!, v['--tonal']!, v['--tonal-strong']!, v['--surface-hover']!, v['--surface-strong']!, v['--bg-elevated']!];
+    const failures: string[] = [];
+    const check = (label: string, fg: string, bg: string) => {
+      const r = contrast(fg, bg);
+      if (r < 4.5) failures.push(`${label} ${r.toFixed(2)}`);
+    };
+    for (const s of surfaces) {
+      check(`text on ${s}`, v['--text']!, s);
+      check(`text-soft on ${s}`, v['--text-soft']!, s);
+      check(`muted on ${s}`, v['--muted']!, s);
+      check(`accent text on ${s}`, v['--accent']!, s);
+      check(`danger on ${s}`, v['--danger']!, s);
+    }
+    check('white on accent-fill', '#ffffff', v['--accent-fill']!);
+    check('white on accent-fill-strong', '#ffffff', v['--accent-fill-strong']!);
+    check('on-ink on ink', v['--on-ink']!, v['--ink']!);
+    check('on-apricot on apricot', v['--on-apricot']!, v['--apricot']!);
+    check('on-apricot-container', v['--on-apricot-container']!, v['--apricot-container']!);
+    check('on-accent-container', v['--on-accent-container']!, v['--accent-container']!);
+    expect(failures).toEqual([]);
   });
 });

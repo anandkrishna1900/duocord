@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 // Components below are from React Bits (https://reactbits.dev, MIT + Commons Clause), copied into src/rb. See THIRD_PARTY.md.
-import Aurora from './rb/Aurora.jsx';
+import DotGrid from './rb/DotGrid.jsx';
 import SplitText from './rb/SplitText.jsx';
 import ShinyText from './rb/ShinyText.jsx';
 import ScrollVelocity from './rb/ScrollVelocity.jsx';
@@ -17,7 +17,6 @@ import FadeContent from './rb/FadeContent.jsx';
 
 const REPO = 'https://github.com/__REPO__';
 const asset = (n) => `${import.meta.env.BASE_URL}assets/${n}`;
-const ROSE = ['#ff2d7a', '#ff6b8f', '#e11d48'];
 
 function useReducedMotion() {
   const [r, setR] = useState(() => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -30,7 +29,7 @@ function useReducedMotion() {
   return r;
 }
 
-/** Pauses a WebGL background while it is off screen. */
+/** Pauses a canvas background while it is off screen. */
 function useOnScreen(ref) {
   const [on, setOn] = useState(true);
   useEffect(() => {
@@ -109,6 +108,8 @@ function Anim({ children, ...p }) {
 function Fade({ children, ...p }) {
   return useContext(ReduceCtx) ? <div className={p.className}>{children}</div> : <FadeContent {...p}>{children}</FadeContent>;
 }
+const INK = '#0a0a0a';
+const YELLOW = '#ffe500';
 
 export default function App() {
   const reduce = useReducedMotion();
@@ -116,203 +117,205 @@ export default function App() {
   const dlRef = useRef(null);
   const heroOn = useOnScreen(heroRef);
   const dlOn = useOnScreen(dlRef);
+  const split = (text, extra = {}) =>
+    reduce ? text : <SplitText tag="span" className="line" text={text} splitType="chars" delay={22} duration={0.9} textAlign="left" from={{ opacity: 0, y: 60 }} to={{ opacity: 1, y: 0 }} {...extra} />;
 
   return (
     <ReduceCtx.Provider value={reduce}>
-    <ClickSpark sparkColor="#ff8fb1" sparkCount={10} sparkRadius={26} duration={600} disabled={reduce}>
-      <div className="progress" aria-hidden="true" />
-      <a className="skip" href="#main">Skip to content</a>
+      <ClickSpark sparkColor={YELLOW} sparkCount={10} sparkRadius={26} duration={600} disabled={reduce}>
+        <div className="progress" aria-hidden="true" />
+        <a className="skip" href="#main">Skip to content</a>
 
-      <header className="top">
-        <div className="wrap">
-          <a className="brand" href="#top"><img src={asset('icon.png')} alt="" width="30" height="30" />PrivCord</a>
-          <nav className="links" aria-label="Main">
-            <a href="#features">Features</a>
-            <a href="#how">How it works</a>
-            <a href="#compare">Compare</a>
-            <a href="#faq">FAQ</a>
-            <a className="btn primary small" href="#download">Download</a>
-          </nav>
-        </div>
-      </header>
-
-      <main id="main">
-        {/* ---------- hero ---------- */}
-        <section className="hero" id="top" ref={heroRef}>
-          {!reduce && (
-            <div className="hero-bg" aria-hidden="true">
-              <Aurora colorStops={ROSE} amplitude={1.15} blend={0.7} speed={0.7} height={0.75} glow={0.8} paused={!heroOn} />
-            </div>
-          )}
-          <div className="wrap hero-grid">
-            <div className="hero-copy">
-              {reduce ? (
-                <h1 className="display">Chat privately. No number, no account, no server reading along.</h1>
-              ) : (
-                <SplitText tag="h1" className="display" text="Chat privately. No number, no account, no server reading along." splitType="words" delay={55} duration={1} textAlign="left" from={{ opacity: 0, y: 46 }} to={{ opacity: 1, y: 0 }} />
-              )}
-              <p className="lead">PrivCord is a peer-to-peer messenger for Windows and Android. Chats go straight from your device to your friend's over an encrypted link, you add people with a QR code or six words, and it can keep going over Bluetooth with no internet.</p>
-              <div className="cta">
-                <Magnet padding={80} magnetStrength={3} disabled={reduce}>
-                  <StarBorder as="a" href="#download" color="#ff8fb1" trailColor="#fff1f5" backgroundColor="#ff2d7a" textColor="#1a0610" borderColor="rgba(255,255,255,.0)" duration={5} radius={12} className="cta-star">Download for Windows or Android</StarBorder>
-                </Magnet>
-                <a className="btn ghost" href={REPO}>View the source</a>
-              </div>
-              <p className="note">
-                {reduce ? 'End-to-end encrypted · source-available · not yet independently audited' : <ShinyText text="End-to-end encrypted · source-available · not yet independently audited" color="#b79aa8" shineColor="#fff1f5" speed={3.5} />}
-              </p>
-            </div>
-            <div className="hero-visual">
-              {reduce ? (
-                <img className="shot" src={asset('group-chat-dark.webp')} alt="PrivCord on Windows: an encrypted group chat in the dark theme" width="1280" height="800" />
-              ) : (
-                <div className="tilt-frame"><TiltedCard imageSrc={asset('group-chat-dark.webp')} altText="PrivCord on Windows: an encrypted group chat in the dark theme" containerWidth="100%" containerHeight="100%" imageWidth="100%" imageHeight="100%" rotateAmplitude={9} scaleOnHover={1.03} showTooltip={false} glare={0.35} glareColor="#ff8fb1" shadow={0.6} flipOnClick={false} radius={16} floating /></div>
-              )}
-              <img className="phone-shot" src={asset('mobile-group.webp')} alt="PrivCord on Android: a group chat" width="390" height="800" loading="lazy" />
-            </div>
+        <header className="top">
+          <div className="wrap">
+            <a className="brand" href="#top"><img src={asset('icon.png')} alt="" width="30" height="30" />PrivCord</a>
+            <nav className="links" aria-label="Main">
+              <a href="#features">Features</a>
+              <a href="#how">How it works</a>
+              <a href="#compare">Compare</a>
+              <a href="#faq">FAQ</a>
+              <a className="btn primary small" href="#download">Download</a>
+            </nav>
           </div>
-        </section>
+        </header>
 
-        {/* ---------- scroll-velocity marquee ---------- */}
-        <section className="band" aria-label="What PrivCord does not ask of you">
-          {reduce ? (
-            <ul className="band-static"><li>No phone number</li><li>No account</li><li>No server reading along</li></ul>
-          ) : (
-            <ScrollVelocity texts={['NO PHONE NUMBER • NO ACCOUNT •', 'NO SERVER READING ALONG • NO TRACKING •']} velocity={60} className="vel" numCopies={5} skewWithVelocity={4} fadeEdges outlineAlternate />
-          )}
-        </section>
-
-        {/* ---------- statement ---------- */}
-        <section className="statement">
-          <div className="wrap narrow">
-            {reduce ? (
-              <p className="big">Your messages go from your device straight to your friend's. There is no company in the middle, no phone number to hand over, and no account to lose.</p>
-            ) : (
-              <ScrollReveal baseOpacity={0.12} enableBlur blurStrength={6} baseRotation={2} textClassName="big" containerClassName="statement-box">
-                Your messages go from your device straight to your friend's. There is no company in the middle, no phone number to hand over, and no account to lose.
-              </ScrollReveal>
+        <main id="main">
+          {/* ---------- hero: ink, with a springy dot grid the cursor flicks around ---------- */}
+          <section className="hero" id="top" ref={heroRef}>
+            {!reduce && (
+              <div className="hero-bg" aria-hidden="true">
+                <DotGrid dotSize={4} gap={22} baseColor="#2b2b2b" activeColor={YELLOW} proximity={150} shockRadius={340} shockStrength={5} glow={0} paused={!heroOn} />
+              </div>
             )}
-          </div>
-        </section>
-
-        {/* ---------- features ---------- */}
-        <section id="features" className="features">
-          <div className="wrap">
-            <div className="sec-head">
-              {reduce ? <h2>Everything a chat app needs, nothing that watches you</h2> : <ScrollFloat containerClassName="sf" textClassName="sf-text" splitBy="words" stagger={0.06}>Everything a chat app needs, nothing that watches you</ScrollFloat>}
-              <p className="sub">Built for people who want private conversations without handing over an identity.</p>
-            </div>
-            <div className="bento">
-              {FEATURES.map((f, n) => (
-                <Anim key={f.t} className={`bcell ${f.cls}`} distance={70} direction="vertical" duration={0.9} delay={(n % 3) * 0.08} scale={0.96} blur={6}>
-                  <SpotlightCard className="fcard" spotlightColor="rgba(255, 45, 122, 0.32)" spotlightSize={260} intensity={0.25} theme="dark">
-                    <h3><Icon d={P[f.i]} />{f.t}{f.tag ? <span className="tag">{f.tag}</span> : null}</h3>
-                    <p>{f.p}</p>
-                  </SpotlightCard>
-                </Anim>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* ---------- how it works: sticky stack ---------- */}
-        <section id="how" className="how">
-          <div className="wrap how-grid">
-            <div className="how-lhs">
-              <h2>Up and running in three steps</h2>
-              <p className="sub">No sign-up form. Your identity is made on your device.</p>
-            </div>
-            <ol className="stack">
-              {STEPS.map(([t, p], n) => (
-                <li className="stack-card" key={t} style={{ '--n': n }}>
-                  <span className="stack-n" aria-hidden="true">{n + 1}</span>
-                  <h3>{t}</h3>
-                  <p>{p}</p>
-                </li>
-              ))}
-            </ol>
-          </div>
-        </section>
-
-        {/* ---------- screens ---------- */}
-        <section className="screens" aria-label="PrivCord screens">
-          <div className="wrap screens-row">
-            {[['add-friend.webp', 'Add a friend: your invite QR code and a field for a friend\'s invite', '1280', '800', 'p1'], ['group-details.webp', 'Group details: the members of an encrypted group and who added them', '1280', '800', 'p2'], ['mobile-home.webp', 'PrivCord on Android: the chat list', '390', '800', 'p3']].map(([src, alt, w, h, cls]) => (
-              <div className={`screen ${cls}`} key={src}>
-                {reduce ? <img className="shot" src={asset(src)} alt={alt} width={w} height={h} loading="lazy" /> : (
-                  <GlareHover borderRadius="16px" glareColor="#ff8fb1" glareOpacity={0.4} glareSize={34} variant="streak" mode="hover">
-                    <img className="shot" src={asset(src)} alt={alt} width={w} height={h} loading="lazy" />
-                  </GlareHover>
+            <div className="wrap hero-grid">
+              <div className="hero-copy">
+                <h1 className="display">
+                  <span className="row-line">{split('Chat privately.')}</span>
+                  <span className="row-line"><mark>{split('No number, no account,')}</mark></span>
+                  <span className="row-line">{split('no server reading along.', { delay: 18 })}</span>
+                </h1>
+                <p className="lead">PrivCord is a peer-to-peer messenger for Windows and Android. Chats go straight from your device to your friend's over an encrypted link, you add people with a QR code or six words, and it can keep going over Bluetooth with no internet.</p>
+                <div className="cta">
+                  <Magnet padding={80} magnetStrength={3} disabled={reduce}>
+                    <StarBorder as="a" href="#download" color={YELLOW} trailColor="#ffffff" backgroundColor={YELLOW} textColor={INK} borderColor="rgba(0,0,0,0)" duration={5} radius={10} className="cta-star">Download for Windows or Android</StarBorder>
+                  </Magnet>
+                  <a className="btn ghost" href={REPO}>View the source</a>
+                </div>
+                <p className="note">
+                  {reduce ? 'End-to-end encrypted · source-available · not yet independently audited' : <ShinyText text="End-to-end encrypted · source-available · not yet independently audited" color="#8f8b82" shineColor="#ffffff" speed={3.5} />}
+                </p>
+              </div>
+              <div className="hero-visual">
+                {reduce ? (
+                  <img className="shot" src={asset('group-chat-dark.webp')} alt="PrivCord on Windows: an encrypted group chat in the dark theme" width="1280" height="800" />
+                ) : (
+                  <div className="tilt-frame"><TiltedCard imageSrc={asset('group-chat-dark.webp')} altText="PrivCord on Windows: an encrypted group chat in the dark theme" containerWidth="100%" containerHeight="100%" imageWidth="100%" imageHeight="100%" rotateAmplitude={9} scaleOnHover={1.03} showTooltip={false} glare={0.25} glareColor="#ffffff" shadow={0.5} flipOnClick={false} radius={12} floating /></div>
                 )}
+                <img className="phone-shot" src={asset('mobile-group.webp')} alt="PrivCord on Android: a group chat" width="390" height="800" loading="lazy" />
               </div>
-            ))}
-          </div>
-        </section>
+            </div>
+          </section>
 
-        {/* ---------- compare ---------- */}
-        <section id="compare" className="compare">
-          <div className="wrap">
-            <h2>How PrivCord compares</h2>
-            <p className="sub">A short, good-faith summary. It can go out of date, so check each project for its current state.</p>
-            <Fade blur duration={1} className="tablewrap-wrap">
-              <div className="tablewrap">
-                <table>
-                  <thead><tr><th></th><th>PrivCord</th><th>Signal</th><th>Session</th><th>Briar</th></tr></thead>
-                  <tbody>{COMPARE.map((r) => <tr key={r[0]}>{r.map((c, i) => <td key={i}>{c}</td>)}</tr>)}</tbody>
-                </table>
+          {/* ---------- yellow marquee that speeds up and skews with scroll ---------- */}
+          <section className="band" aria-label="What PrivCord does not ask of you">
+            {reduce ? (
+              <ul className="band-static"><li>No phone number</li><li>No account</li><li>No server reading along</li></ul>
+            ) : (
+              <ScrollVelocity texts={['NO PHONE NUMBER • NO ACCOUNT •', 'NO SERVER READING ALONG • NO TRACKING •']} velocity={60} className="vel" numCopies={5} skewWithVelocity={4} outlineAlternate />
+            )}
+          </section>
+
+          {/* ---------- statement on paper ---------- */}
+          <section className="statement">
+            <div className="wrap narrow">
+              {reduce ? (
+                <p className="big">Your messages go from your device straight to your friend's. There is no company in the middle, no phone number to hand over, and no account to lose.</p>
+              ) : (
+                <ScrollReveal baseOpacity={0.14} enableBlur blurStrength={6} baseRotation={2} textClassName="big" containerClassName="statement-box">
+                  Your messages go from your device straight to your friend's. There is no company in the middle, no phone number to hand over, and no account to lose.
+                </ScrollReveal>
+              )}
+            </div>
+          </section>
+
+          {/* ---------- features ---------- */}
+          <section id="features" className="features">
+            <div className="wrap">
+              <div className="sec-head">
+                {reduce ? <h2>Everything a chat app needs, nothing that watches you</h2> : <ScrollFloat containerClassName="sf" textClassName="sf-text" splitBy="words" stagger={0.06}>Everything a chat app needs, nothing that watches you</ScrollFloat>}
+                <p className="sub">Built for people who want private conversations without handing over an identity.</p>
               </div>
-            </Fade>
-            <p className="fine">PrivCord is a young project by one maintainer. If you need a battle-tested, audited messenger today, use one of the audited ones.</p>
-          </div>
-        </section>
+              <div className="bento">
+                {FEATURES.map((f, n) => (
+                  <Anim key={f.t} className={`bcell ${f.cls}`} distance={70} direction="vertical" duration={0.9} delay={(n % 3) * 0.08} scale={0.96} blur={6}>
+                    <SpotlightCard className="fcard" spotlightColor="rgba(255, 229, 0, 0.22)" spotlightSize={260} intensity={0.25} theme="dark">
+                      <h3><Icon d={P[f.i]} />{f.t}{f.tag ? <span className="tag">{f.tag}</span> : null}</h3>
+                      <p>{f.p}</p>
+                    </SpotlightCard>
+                  </Anim>
+                ))}
+              </div>
+            </div>
+          </section>
 
-        {/* ---------- faq ---------- */}
-        <section id="faq" className="faq-sec">
-          <div className="wrap">
-            <h2>Questions people ask</h2>
-            <div className="faq">
-              {FAQ.map(([q, a], n) => (
-                <Anim key={q} distance={30} duration={0.6} delay={Math.min(n, 3) * 0.05}>
-                  <details><summary>{q}</summary><p>{a}</p></details>
-                </Anim>
+          {/* ---------- how it works: sticky stacking cards on paper ---------- */}
+          <section id="how" className="how">
+            <div className="wrap how-grid">
+              <div className="how-lhs">
+                <h2>Up and running in three steps</h2>
+                <p className="sub">No sign-up form. Your identity is made on your device.</p>
+              </div>
+              <ol className="stack">
+                {STEPS.map(([t, p], n) => (
+                  <li className={`stack-card c${n}`} key={t} style={{ '--n': n }}>
+                    <span className="stack-n" aria-hidden="true">{n + 1}</span>
+                    <h3>{t}</h3>
+                    <p>{p}</p>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </section>
+
+          {/* ---------- screens ---------- */}
+          <section className="screens" aria-label="PrivCord screens">
+            <div className="wrap screens-row">
+              {[['add-friend.webp', "Add a friend: your invite QR code and a field for a friend's invite", '1280', '800', 'p1'], ['group-details.webp', 'Group details: the members of an encrypted group and who added them', '1280', '800', 'p2'], ['mobile-home.webp', 'PrivCord on Android: the chat list', '390', '800', 'p3']].map(([src, alt, w, h, cls]) => (
+                <div className={`screen ${cls}`} key={src}>
+                  {reduce ? <img className="shot" src={asset(src)} alt={alt} width={w} height={h} loading="lazy" /> : (
+                    <GlareHover borderRadius="12px" glareColor="#ffffff" glareOpacity={0.3} glareSize={34} variant="streak" mode="hover">
+                      <img className="shot" src={asset(src)} alt={alt} width={w} height={h} loading="lazy" />
+                    </GlareHover>
+                  )}
+                </div>
               ))}
             </div>
-          </div>
-        </section>
+          </section>
 
-        {/* ---------- download ---------- */}
-        <section id="download" className="download" ref={dlRef}>
-          {!reduce && <div className="dl-bg" aria-hidden="true"><Aurora colorStops={['#be123c', '#ff2d7a', '#ff8fb1']} amplitude={0.9} blend={0.6} speed={0.6} height={0.9} glow={0.7} direction="bottom" paused={!dlOn} /></div>}
-          <div className="wrap">
-            <h2>Get PrivCord</h2>
-            <p className="sub">Free. Pick your platform.</p>
-            <div className="dl">
-              <div className="dl-row">
-                <div><h3><Icon d={P.mon} />Windows</h3><p>Installer for Windows 10 and 11. The latest build is attached to the newest release.</p></div>
-                <Magnet padding={60} magnetStrength={3} disabled={reduce}><StarBorder as="a" href={`${REPO}/releases/latest`} color="#ff8fb1" trailColor="#fff1f5" backgroundColor="#ff2d7a" textColor="#1a0610" borderColor="rgba(255,255,255,.0)" duration={5} radius={12} className="cta-star">Download the installer</StarBorder></Magnet>
-              </div>
-              <div className="dl-row">
-                <div><h3><Icon d={P.ph} />Android</h3><p>Install the arm64 APK (almost every phone); the armeabi-v7a one is for old 32-bit phones.</p></div>
-                <Magnet padding={60} magnetStrength={3} disabled={reduce}><StarBorder as="a" href={`${REPO}/releases/latest`} color="#ff8fb1" trailColor="#fff1f5" backgroundColor="#ff2d7a" textColor="#1a0610" borderColor="rgba(255,255,255,.0)" duration={5} radius={12} className="cta-star">Download the APK</StarBorder></Magnet>
+          {/* ---------- compare (paper) ---------- */}
+          <section id="compare" className="compare">
+            <div className="wrap">
+              <h2>How PrivCord compares</h2>
+              <p className="sub">A short, good-faith summary. It can go out of date, so check each project for its current state.</p>
+              <Fade blur duration={1} className="tablewrap-wrap">
+                <div className="tablewrap">
+                  <table>
+                    <thead><tr><th></th><th>PrivCord</th><th>Signal</th><th>Session</th><th>Briar</th></tr></thead>
+                    <tbody>{COMPARE.map((r) => <tr key={r[0]}>{r.map((c, i) => <td key={i}>{c}</td>)}</tr>)}</tbody>
+                  </table>
+                </div>
+              </Fade>
+              <p className="fine">PrivCord is a young project by one maintainer. If you need a battle-tested, audited messenger today, use one of the audited ones.</p>
+            </div>
+          </section>
+
+          {/* ---------- faq ---------- */}
+          <section id="faq" className="faq-sec">
+            <div className="wrap">
+              <h2>Questions people ask</h2>
+              <div className="faq">
+                {FAQ.map(([q, a], n) => (
+                  <Anim key={q} distance={30} duration={0.6} delay={Math.min(n, 3) * 0.05}>
+                    <details><summary>{q}</summary><p>{a}</p></details>
+                  </Anim>
+                ))}
               </div>
             </div>
-            <p className="warn"><strong>Heads up:</strong> the Windows installer is not code-signed yet, so Windows SmartScreen will warn you: choose <em>More info</em>, then <em>Run anyway</em>. On Android you need to allow installing apps from this source. Windows will also ask to allow the firewall the first time, which lets PrivCord find friends on your local network.</p>
-          </div>
-        </section>
-      </main>
+          </section>
 
-      <footer>
-        <div className="wrap foot">
-          <div>© 2026 PrivCord · <a href={`${REPO}/blob/main/LICENSE`}>PC-NC licence (source-available)</a> · Fonts: Bricolage Grotesque, Figtree (OFL) · Motion components: <a href="https://reactbits.dev">React Bits</a></div>
-          <nav aria-label="Footer">
-            <a href={REPO}>GitHub</a>
-            <a href={`${REPO}/blob/main/SECURITY.md`}>Security</a>
-            <a href={`${REPO}/blob/main/docs/KNOWN_LIMITATIONS.md`}>Known limitations</a>
-            <a href={`${REPO}/issues`}>Report an issue</a>
-          </nav>
-        </div>
-      </footer>
-    </ClickSpark>
+          {/* ---------- download: yellow ---------- */}
+          <section id="download" className="download" ref={dlRef}>
+            {!reduce && <div className="dl-bg" aria-hidden="true"><DotGrid dotSize={4} gap={22} baseColor="#d6c000" activeColor={INK} proximity={150} shockRadius={340} shockStrength={5} glow={0} paused={!dlOn} /></div>}
+            <div className="wrap">
+              <h2>Get PrivCord</h2>
+              <p className="sub">Free. Pick your platform.</p>
+              <div className="dl">
+                <div className="dl-row">
+                  <div><h3><Icon d={P.mon} />Windows</h3><p>Installer for Windows 10 and 11. The latest build is attached to the newest release.</p></div>
+                  <Magnet padding={60} magnetStrength={3} disabled={reduce}><StarBorder as="a" href={`${REPO}/releases/latest`} color={INK} trailColor="#ffffff" backgroundColor={INK} textColor={YELLOW} borderColor="rgba(0,0,0,0)" duration={5} radius={10} className="cta-star">Download the installer</StarBorder></Magnet>
+                </div>
+                <div className="dl-row">
+                  <div><h3><Icon d={P.ph} />Android</h3><p>Install the arm64 APK (almost every phone); the armeabi-v7a one is for old 32-bit phones.</p></div>
+                  <Magnet padding={60} magnetStrength={3} disabled={reduce}><StarBorder as="a" href={`${REPO}/releases/latest`} color={INK} trailColor="#ffffff" backgroundColor={INK} textColor={YELLOW} borderColor="rgba(0,0,0,0)" duration={5} radius={10} className="cta-star">Download the APK</StarBorder></Magnet>
+                </div>
+              </div>
+              <p className="warn"><strong>Heads up:</strong> the Windows installer is not code-signed yet, so Windows SmartScreen will warn you: choose <em>More info</em>, then <em>Run anyway</em>. On Android you need to allow installing apps from this source. Windows will also ask to allow the firewall the first time, which lets PrivCord find friends on your local network.</p>
+            </div>
+          </section>
+        </main>
+
+        <footer>
+          <div className="wrap foot">
+            <div>© 2026 PrivCord · <a href={`${REPO}/blob/main/LICENSE`}>PC-NC licence (source-available)</a> · Fonts: Bricolage Grotesque, Figtree (OFL) · Motion components: <a href="https://reactbits.dev">React Bits</a></div>
+            <nav aria-label="Footer">
+              <a href={REPO}>GitHub</a>
+              <a href={`${REPO}/blob/main/SECURITY.md`}>Security</a>
+              <a href={`${REPO}/blob/main/docs/KNOWN_LIMITATIONS.md`}>Known limitations</a>
+              <a href={`${REPO}/issues`}>Report an issue</a>
+            </nav>
+          </div>
+        </footer>
+      </ClickSpark>
     </ReduceCtx.Provider>
   );
 }

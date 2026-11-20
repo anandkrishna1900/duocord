@@ -55,9 +55,14 @@ Today a user's id is derived from one device's keys (`uid_from_keys`). Multi-dev
 
 ### Linking a device
 
-1. The existing device shows a QR code (or a manual code, risk 110) carrying a one-time link key.
+1. **The new device shows the QR code** (it has no account yet) and the phone, which holds the account key, scans it,
+   like linking WhatsApp Web. The QR carries a one-time link key and the new device's name. (The other direction, the
+   phone showing a code or a manual code for a device that cannot show a QR, still works, risk 110.)
 2. The new device connects over the best available route (local Wi-Fi, Bluetooth, internet relay).
-3. **Both screens show a short code that must match** (risk 24).
+3. **The phone shows six digits, and they are typed on the new device** (risk 24). The new device never shows them, and
+   holds the phone's grant until they match (three tries). So a photo of the QR is useless on its own: whoever has
+   it still cannot produce the digits. The phone answers only the first request, and its explicit "Link it" tap is the
+   last gate. Remaining risk, as with WhatsApp: scanning a QR an attacker is showing you.
 4. The existing device issues the device certificate; the account-signed device list is bumped and announced to own
    devices and to friends.
 5. Bulk history transfer starts (§6), newest first. Live sync and the import meet at a recorded boundary, and entries

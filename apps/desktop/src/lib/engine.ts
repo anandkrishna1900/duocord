@@ -239,9 +239,12 @@ export interface DeviceInfo {
   removalAt?: number;
 }
 
-/** Linking a device, while it happens: the 6 digits to compare ("code"), then how it ended. */
+/**
+ * Linking a device, while it happens: the 6 digits to compare ("code"); on a new device that showed the QR, "enter-code"
+ * (type the phone's digits), "wrong-code" and "matched"; then how it ended.
+ */
 export interface DeviceLinkState {
-  stage: 'code' | 'done' | 'failed' | 'cancelled' | 'expired';
+  stage: 'code' | 'enter-code' | 'matched' | 'wrong-code' | 'done' | 'failed' | 'cancelled' | 'expired';
   code?: string;
   /** On the device holding the account key: the new device's name. */
   name?: string;

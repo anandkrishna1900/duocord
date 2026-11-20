@@ -350,6 +350,40 @@ export class HostedChatEngine implements ChatEngineApi {
     }
   }
 
+  /** On the new device: show a QR for the phone to scan (the phone then shows six digits to type here). */
+  async startScanLinkOffer(name: string): Promise<string> {
+    this.deviceLink = null;
+    try {
+      const code = await this.engine.call<string>('start_scan_link_offer', { name: name.trim() || 'Computer' });
+      this.scheduleRefresh();
+      return code;
+    } catch (e) {
+      throw new Error(friendly(e));
+    }
+  }
+
+  /** On the new device: the six digits from the phone. True when they match. */
+  async submitLinkCode(digits: string): Promise<boolean> {
+    try {
+      const ok = await this.engine.call<boolean>('submit_link_code', { digits });
+      this.scheduleRefresh();
+      return ok === true;
+    } catch (e) {
+      throw new Error(friendly(e));
+    }
+  }
+
+  /** On the device holding the account key: a code scanned from the new device's QR. */
+  async hostScannedLink(code: string): Promise<void> {
+    this.deviceLink = null;
+    try {
+      await this.engine.call('host_scanned_link', { code: code.trim() });
+      this.scheduleRefresh();
+    } catch (e) {
+      throw new Error(friendly(e));
+    }
+  }
+
   /** On the device holding the account key: the 6 digits match (or not). */
   async confirmDeviceLink(accept: boolean): Promise<void> {
     try {

@@ -11,6 +11,21 @@
 //! account's history. It talks to friends and changes groups as itself (docs/design/syncengine.md §4); linking another
 //! device needs the account key and answers [`ErrorCode::NeedsAccountKey`].
 //!
+//! There are two directions. In the first the device that holds the account key shows the code and the new device
+//! takes it (typed, or scanned where there is a camera). In the second, which is what a laptop with no camera needs, the
+//! **new device shows the code** ([`Core::start_scan_link_offer`]) and the device that holds the account key scans it
+//! ([`Core::host_scanned_link`]): nothing is typed and nothing travels through another app. The exchange is the same
+//! (the secret is only a meeting point and a key for the relay mailbox), with two additions that the new direction
+//! needs because the new device can no longer tell the real first device from someone who photographed its code:
+//!
+//! * the new device does not show its six digits. The person types the six digits the **first device** shows
+//!   ([`Core::submit_link_code`]); a grant that arrives earlier is held until they match, and three wrong tries end the
+//!   link. Someone who only has the photographed code never sees the first device's digits;
+//! * the first device answers the first request it sees and no other (a second request with different keys is
+//!   ignored; the same request again gets the same answer back, so a lost answer does not strand the link).
+//!
+//! The first device still grants only when the person taps Link on it.
+//!
 //! An offer lasts ten minutes and serves one new device.
 
 use super::{Core, StorageOp};
@@ -32,6 +47,19 @@ use serde_json::json;
 const LINK_TTL_MS: i64 = 10 * 60 * 1000;
 const LINK_TTL_SEC: u32 = 10 * 60;
 
+/// The new device shows the code and waits for the six digits from the first device (the scan direction).
+pub(super) struct ScanJoin {
+    /// The request as sent: posted again until an answer comes (the first device may scan it minutes later).
+    request: String,
+    posted_at: i64,
+    /// The six digits this side computed; they are never shown, only compared with what the person types.
+    expected: Option<String>,
+    matched: bool,
+    tries: u8,
+    /// A grant that arrived before the digits matched.
+    held_grant: Option<String>,
+}
+
 pub(super) enum LinkState {
     Hosting {
         host: Host,
@@ -39,6 +67,8 @@ pub(super) enum LinkState {
         device: Option<DeviceEntry>,
         code_shown: bool,
         until: i64,
+        /// The one request this offer answers, and the answer given: `(request, answer)`.
+        answered: Option<(String, String)>,
     },
     Joining {
         joiner: Joiner,
@@ -46,6 +76,7 @@ pub(super) enum LinkState {
         device: Identity,
         code_shown: bool,
         until: i64,
+        scan: Option<ScanJoin>,
     },
 }
 
@@ -63,6 +94,10 @@ const STEP_REQUEST: &str = "link-request";
 const STEP_ANSWER: &str = "link-answer";
 const STEP_REVEAL: &str = "link-reveal";
 const STEP_GRANT: &str = "link-grant";
+/// How long the new device waits for an answer before it posts its request again (a relay may have dropped it).
+const REPOST_AFTER_MS: i64 = 5_000;
+/// Wrong tries at the six digits before the link ends.
+const MAX_CODE_TRIES: u8 = 3;
 
 fn wrap(step: &str, message: &str) -> SealedBlob {
     SealedBlob {
@@ -97,6 +132,21 @@ impl Core {
 
     /// On the device holding the account key: a code for the new device (shown as a QR code, or typed). Needs a relay.
     pub fn start_device_link(&mut self) -> Result<String, ErrorCode> {
+        self.check_can_host()?;
+        let (secret, code) = link::new_offer(&mut *self.ports.entropy)?;
+        self.begin_hosting(secret)?;
+        Ok(code)
+    }
+
+    /// On the device holding the account key: the person scanned the code a new device shows. From here it is the same
+    /// as an offer made here, except that the new device made the secret and has already posted its request.
+    pub fn host_scanned_link(&mut self, code: &str) -> Result<(), ErrorCode> {
+        self.check_can_host()?;
+        let secret = link::parse_offer(code).ok_or(ErrorCode::InvalidInvite)?;
+        self.begin_hosting(secret)
+    }
+
+    fn check_can_host(&mut self) -> Result<(), ErrorCode> {
         self.require_live()?;
         self.identity()?;
         if self.device_list.is_none() {
@@ -105,7 +155,10 @@ impl Core {
         if !self.ports.transport.signal_available() {
             return Err(ErrorCode::NoSignaling);
         }
-        let (secret, code) = link::new_offer(&mut *self.ports.entropy)?;
+        Ok(())
+    }
+
+    fn begin_hosting(&mut self, secret: link::Secret) -> Result<(), ErrorCode> {
         let mailbox = link::mailbox(&secret);
         let host = Host::new(secret, &mut *self.ports.entropy)?;
         self.ports
@@ -118,8 +171,9 @@ impl Core {
             device: None,
             code_shown: false,
             until: self.now() + LINK_TTL_MS,
+            answered: None,
         });
-        Ok(code)
+        Ok(())
     }
 
     /// On the new device (no account yet): take the code from the other device.
@@ -147,8 +201,98 @@ impl Core {
             device,
             code_shown: false,
             until: now + LINK_TTL_MS,
+            scan: None,
         });
         Ok(())
+    }
+
+    /// On the new device (no account yet): make the code and show it (as a QR code) for the first device to scan. The
+    /// request is posted at once and waits on the relay; the first device reads it when it scans. Returns the code.
+    pub fn start_scan_link_offer(&mut self, name: &str) -> Result<String, ErrorCode> {
+        self.require_live()?;
+        if self.account.is_some() {
+            return Err(ErrorCode::IdentityExists);
+        }
+        if !self.ports.transport.signal_available() {
+            return Err(ErrorCode::NoSignaling);
+        }
+        let (secret, code) = link::new_offer(&mut *self.ports.entropy)?;
+        let mailbox = link::mailbox(&secret);
+        let device = Identity::generate(&mut *self.ports.entropy)?;
+        let now = self.now();
+        let (joiner, request) =
+            Joiner::start(secret, &device, name, now, &mut *self.ports.entropy)?;
+        self.ports
+            .transport
+            .signal_subscribe(&mailbox)
+            .map_err(|_| ErrorCode::NoSignaling)?;
+        if !self.link_put(&mailbox, STEP_REQUEST, &request) {
+            return Err(ErrorCode::NoSignaling);
+        }
+        self.link = Some(LinkState::Joining {
+            joiner,
+            mailbox,
+            device,
+            code_shown: false,
+            until: now + LINK_TTL_MS,
+            scan: Some(ScanJoin {
+                request,
+                posted_at: now,
+                expected: None,
+                matched: false,
+                tries: 0,
+                held_grant: None,
+            }),
+        });
+        Ok(code)
+    }
+
+    /// On the new device (scan direction): the six digits the person read off the first device. `Ok(true)` when they
+    /// match (a grant that came earlier is taken now), `Ok(false)` when they do not; after three wrong tries the link ends.
+    pub fn submit_link_code(&mut self, digits: &str) -> Result<bool, ErrorCode> {
+        self.require_live()?;
+        let typed: String = digits.chars().filter(char::is_ascii_digit).collect();
+        let Some(LinkState::Joining {
+            scan: Some(scan),
+            mailbox,
+            code_shown: true,
+            ..
+        }) = self.link.as_mut()
+        else {
+            return Err(ErrorCode::InviteNotFound);
+        };
+        let Some(expected) = scan.expected.clone() else {
+            return Err(ErrorCode::InviteNotFound);
+        };
+        if scan.matched {
+            return Ok(true);
+        }
+        if !same_digits(&typed, &expected) {
+            scan.tries += 1;
+            let ended = scan.tries >= MAX_CODE_TRIES;
+            let mailbox = mailbox.clone();
+            if ended {
+                self.end_link(&mailbox, "failed");
+            } else {
+                self.hub.publish(EngineEvent::DeviceLink {
+                    stage: "wrong-code".into(),
+                    code: None,
+                    name: None,
+                });
+            }
+            return Ok(false);
+        }
+        scan.matched = true;
+        let held = scan.held_grant.take();
+        self.hub.publish(EngineEvent::DeviceLink {
+            stage: "matched".into(),
+            code: None,
+            name: None,
+        });
+        if let Some(grant) = held {
+            self.link_blob(&wrap(STEP_GRANT, &grant));
+        }
+        Ok(true)
     }
 
     /// On the device holding the account key, once the person compared the codes: let the new device in (or not).
@@ -215,7 +359,8 @@ impl Core {
         matches!(&self.link, Some(LinkState::Hosting { mailbox: m, .. } | LinkState::Joining { mailbox: m, .. }) if m == mailbox)
     }
 
-    /// Ten minutes after the code was made, it is gone.
+    /// Ten minutes after the code was made, it is gone. A new device that shows the code posts its request again every
+    /// few seconds until it hears an answer (the first device may scan the code long after the request was posted).
     pub(super) fn tick_link(&mut self) {
         let now = self.now();
         let expired = match &self.link {
@@ -227,6 +372,29 @@ impl Core {
         };
         if let Some(m) = expired {
             self.end_link(&m, "expired");
+            return;
+        }
+        let repost = match &self.link {
+            Some(LinkState::Joining {
+                scan: Some(scan),
+                mailbox,
+                code_shown: false,
+                ..
+            }) if now - scan.posted_at >= REPOST_AFTER_MS => {
+                Some((mailbox.clone(), scan.request.clone()))
+            }
+            _ => None,
+        };
+        if let Some((mailbox, request)) = repost {
+            // A failed post is tried again at the next tick.
+            if self.link_put(&mailbox, STEP_REQUEST, &request) {
+                if let Some(LinkState::Joining {
+                    scan: Some(scan), ..
+                }) = self.link.as_mut()
+                {
+                    scan.posted_at = now;
+                }
+            }
         }
     }
 
@@ -251,72 +419,89 @@ impl Core {
                 device,
                 code_shown,
                 until,
-            } => match step {
-                STEP_REQUEST if device.is_none() => {
-                    match host.on_request(&message, &mut *self.ports.entropy) {
-                        Ok(answer) => {
-                            put = Some((mailbox.clone(), STEP_ANSWER, answer));
-                            Some(LinkState::Hosting {
-                                host,
-                                mailbox,
-                                device,
-                                code_shown,
-                                until,
-                            })
+                mut answered,
+            } => {
+                match step {
+                    STEP_REQUEST if device.is_none() => match &answered {
+                        // The one request this offer answers, seen again (the new device posts it until it hears back):
+                        // the same answer goes out again, with no new key.
+                        Some((request, answer)) if *request == message => {
+                            put = Some((mailbox.clone(), STEP_ANSWER, answer.clone()));
                         }
-                        // Not a request made with this code: ignore it, the real one may still come.
-                        Err(_) => Some(LinkState::Hosting {
-                            host,
-                            mailbox,
-                            device,
-                            code_shown,
-                            until,
-                        }),
+                        // Any other request, once one was answered: ignored.
+                        Some(_) => {}
+                        None => {
+                            // Not a request made with this code: ignored, the real one may still come.
+                            if let Ok(answer) = host.on_request(&message, &mut *self.ports.entropy)
+                            {
+                                put = Some((mailbox.clone(), STEP_ANSWER, answer.clone()));
+                                answered = Some((message.clone(), answer));
+                            }
+                        }
+                    },
+                    STEP_REVEAL if !code_shown && answered.is_some() => {
+                        match host.on_reveal(&message) {
+                            Ok((code, entry)) => {
+                                event = Some(EngineEvent::DeviceLink {
+                                    stage: "code".into(),
+                                    code: Some(code),
+                                    name: Some(entry.name.clone()),
+                                });
+                                self.link = Some(LinkState::Hosting {
+                                    host,
+                                    mailbox: mailbox.clone(),
+                                    device: Some(entry),
+                                    code_shown: true,
+                                    until,
+                                    answered,
+                                });
+                                return self.finish_link_blob(put, event, failed, granted);
+                            }
+                            Err(_) => {
+                                failed = Some(mailbox);
+                                self.link = None;
+                                return self.finish_link_blob(put, event, failed, granted);
+                            }
+                        }
                     }
+                    _ => {}
                 }
-                STEP_REVEAL if !code_shown => match host.on_reveal(&message) {
-                    Ok((code, entry)) => {
-                        event = Some(EngineEvent::DeviceLink {
-                            stage: "code".into(),
-                            code: Some(code),
-                            name: Some(entry.name.clone()),
-                        });
-                        Some(LinkState::Hosting {
-                            host,
-                            mailbox,
-                            device: Some(entry),
-                            code_shown: true,
-                            until,
-                        })
-                    }
-                    Err(_) => {
-                        failed = Some(mailbox);
-                        None
-                    }
-                },
-                _ => Some(LinkState::Hosting {
+                Some(LinkState::Hosting {
                     host,
                     mailbox,
                     device,
                     code_shown,
                     until,
-                }),
-            },
+                    answered,
+                })
+            }
             LinkState::Joining {
                 mut joiner,
                 mailbox,
                 device,
                 code_shown,
                 until,
+                mut scan,
             } => match step {
                 STEP_ANSWER if !code_shown => {
                     match joiner.on_answer(&message, &mut *self.ports.entropy) {
                         Ok((reveal, code)) => {
                             put = Some((mailbox.clone(), STEP_REVEAL, reveal));
-                            event = Some(EngineEvent::DeviceLink {
-                                stage: "code".into(),
-                                code: Some(code),
-                                name: None,
+                            event = Some(match scan.as_mut() {
+                                // Scan direction: the digits are not shown here, the person types the first device's.
+                                Some(sc) => {
+                                    sc.expected = Some(code);
+                                    EngineEvent::DeviceLink {
+                                        stage: "enter-code".into(),
+                                        code: None,
+                                        name: None,
+                                    }
+                                }
+                                None => EngineEvent::DeviceLink {
+                                    stage: "code".into(),
+                                    code: Some(code),
+                                    name: None,
+                                },
                             });
                             Some(LinkState::Joining {
                                 joiner,
@@ -324,6 +509,7 @@ impl Core {
                                 device,
                                 code_shown: true,
                                 until,
+                                scan,
                             })
                         }
                         Err(_) => Some(LinkState::Joining {
@@ -332,8 +518,23 @@ impl Core {
                             device,
                             code_shown,
                             until,
+                            scan,
                         }),
                     }
+                }
+                // Scan direction, digits not typed yet: the grant waits (and a newer one replaces an older one).
+                STEP_GRANT if code_shown && scan.as_ref().is_some_and(|s| !s.matched) => {
+                    if let Some(sc) = scan.as_mut() {
+                        sc.held_grant = Some(message.clone());
+                    }
+                    Some(LinkState::Joining {
+                        joiner,
+                        mailbox,
+                        device,
+                        code_shown,
+                        until,
+                        scan,
+                    })
                 }
                 STEP_GRANT if code_shown => match joiner.on_grant(&message) {
                     Ok(g) => {
@@ -351,10 +552,23 @@ impl Core {
                     device,
                     code_shown,
                     until,
+                    scan,
                 }),
             },
         };
         self.link = next;
+        self.finish_link_blob(put, event, failed, granted);
+    }
+
+    /// What a message of the exchange led to: the next message to post, an event, a failure, a grant to adopt.
+    #[allow(clippy::type_complexity)]
+    fn finish_link_blob(
+        &mut self,
+        put: Option<(String, &'static str, String)>,
+        event: Option<EngineEvent>,
+        failed: Option<String>,
+        granted: Option<(link::Granted, Identity, String)>,
+    ) {
         if let Some((mailbox, step, text)) = put {
             if !self.link_put(&mailbox, step, &text) {
                 self.end_link(&mailbox, "failed");
@@ -425,4 +639,9 @@ impl Core {
         self.hub.publish(EngineEvent::IdentityCreated);
         Ok(())
     }
+}
+
+/// Two strings of digits are equal (every position is looked at, whatever the first difference).
+fn same_digits(a: &str, b: &str) -> bool {
+    a.len() == b.len() && a.bytes().zip(b.bytes()).fold(0u8, |d, (x, y)| d | (x ^ y)) == 0
 }

@@ -179,18 +179,32 @@ private fun RemoveDeviceDialog(
     )
 }
 
-/** On the device holding the account key: the code for the new device, then the 6 digits to confirm. */
+/**
+ * On the device holding the account key. Scan the QR the new device shows (like WhatsApp Web), then the six digits
+ * appear here: type them on the new device and tap Link. "Show a code instead" keeps the old way, for a new device that
+ * cannot show a QR.
+ */
 @Composable
 fun LinkHostDialog(
     state: ChatState,
     onStart: ((Result<String>) -> Unit) -> Unit,
+    onScanned: (String, (Result<Unit>) -> Unit) -> Unit,
     onConfirm: (Boolean) -> Unit,
     onCancel: () -> Unit,
     onClose: () -> Unit,
 ) {
     var code by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) { onStart { r -> r.onSuccess { code = it }.onFailure { error = it.message } } }
+    var scanned by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    val scan = rememberQrScanner("Scan the code on the new device") { text ->
+        busy = true
+        error = null
+        onScanned(text.trim()) { r ->
+            busy = false
+            r.onSuccess { scanned = true }.onFailure { error = it.message ?: "That is not a code from PrivCord." }
+        }
+    }
     val link = state.deviceLink
     val finished = link != null && link.stage != "code"
     AlertDialog(
@@ -199,8 +213,16 @@ fun LinkHostDialog(
         text = {
             Column {
                 when {
-                    error != null -> Text(error ?: "", color = MaterialTheme.colorScheme.error)
                     finished -> Text(endText(link, host = true))
+                    link?.stage == "code" && link.code != null && scanned -> {
+                        Text("Link ${link.name ?: "this device"} to your account? Type these digits on it.")
+                        Digits(link.code)
+                        Text(
+                            "Only tap Link if you started this on your own computer. Never read these digits out to anyone.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     link?.stage == "code" && link.code != null -> {
                         Text("${link.name ?: "A device"} wants to join. Does it show these digits?")
                         Digits(link.code)
@@ -227,20 +249,35 @@ fun LinkHostDialog(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    else -> Text("Making a code…")
+                    scanned -> Text("Waiting for the new device…")
+                    else -> {
+                        Text("On the new device, choose \"Link to a device I already use\". It shows a code. Scan it with this phone.")
+                        Spacer(Modifier.height(12.dp))
+                        Button(enabled = !busy, onClick = scan, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+                            Text("Scan the new device")
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        TextButton(onClick = { onStart { r -> r.onSuccess { code = it }.onFailure { error = it.message } } }) {
+                            Text("Show a code instead")
+                        }
+                    }
+                }
+                error?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
             }
         },
         confirmButton = {
             if (link?.stage == "code" && !finished) {
-                Button(onClick = { onConfirm(true) }) { Text("They match, link it") }
+                Button(onClick = { onConfirm(true) }) { Text(if (scanned) "Link it" else "They match, link it") }
             } else {
                 TextButton(onClick = { if (!finished) onCancel(); onClose() }) { Text(if (finished) "Done" else "Cancel") }
             }
         },
         dismissButton = {
             if (link?.stage == "code" && !finished) {
-                OutlinedButton(onClick = { onConfirm(false); onClose() }) { Text("They don't match") }
+                OutlinedButton(onClick = { onConfirm(false); onClose() }) { Text(if (scanned) "Cancel" else "They don't match") }
             }
         },
     )

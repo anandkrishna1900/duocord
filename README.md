@@ -66,7 +66,7 @@ shared by both apps.
 PrivCord keeps your chats in step across your own devices **without a central server** and **without ever copying your
 account key off the first device**.
 
-- **Link a device** by scanning a QR code on the new device and comparing 6 digits on both screens. The new device gets
+- **Link a device** by scanning the QR code the new device shows with your phone, then typing the 6 digits your phone shows onto the new device. The new device gets
   its own keys; the account's signed device list says who belongs.
 - **Sync** runs through an end-to-end encrypted mailbox on relays that only see padded, sealed blobs, directly between
   your devices over Wi-Fi on the local network, or over Bluetooth. Messages, reactions, read state, contacts, groups

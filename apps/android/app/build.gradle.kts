@@ -170,9 +170,9 @@ dependencies {
     // The generated bindings call the Rust library through JNA.
     implementation("net.java.dev.jna:jna:5.14.0@aar")
 
-    implementation("androidx.room:room-runtime:2.6.1")
-    implementation("androidx.room:room-ktx:2.6.1")
-    ksp("androidx.room:room-compiler:2.6.1")
+    implementation("androidx.room:room-runtime:2.8.5")
+    implementation("androidx.room:room-ktx:2.8.5")
+    ksp("androidx.room:room-compiler:2.8.5")
 
     implementation("io.github.webrtc-sdk:android:150.7871.04")
     // Voice notes and audio files: plays the WebM/Opus that desktop browsers record (MediaPlayer often refuses it).

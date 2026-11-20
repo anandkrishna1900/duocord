@@ -14,7 +14,7 @@ pub struct OsEntropy;
 
 impl Entropy for OsEntropy {
     fn fill(&mut self, dest: &mut [u8]) -> Result<(), CryptoError> {
-        getrandom::getrandom(dest).map_err(|_| CryptoError::Random)
+        getrandom::fill(dest).map_err(|_| CryptoError::Random)
     }
 }
 

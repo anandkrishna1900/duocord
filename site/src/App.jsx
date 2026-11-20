@@ -237,8 +237,11 @@ export default function App() {
                 <h2>Up and running in three steps</h2>
                 <p className="sub">No sign-up form. Your identity is made on your device.</p>
               </div>
-              <StepStack steps={STEPS} />
-              <p className="more-row"><Go className="more" to="how">How it works, in detail →</Go></p>
+              <StepStack
+                steps={STEPS}
+                intro={<><h2>Up and running in three steps</h2><p className="sub">No sign-up form. Your identity is made on your device.</p></>}
+                more={<Go className="more" to="how">How it works, in detail →</Go>}
+              />
             </div>
           </section>
 

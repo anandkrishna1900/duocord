@@ -235,9 +235,15 @@ footer nav { display: flex; gap: 22px; flex-wrap: wrap; } footer a { text-decora
 
 .donate-cta { margin: 16px 0 6px !important; } .fcard.plain .btn { color: var(--ink); text-decoration: none; }
 
-/* the three steps: a pinned stack (StepStack.jsx). Without JavaScript or with reduced motion it is a plain list. */
-.stack { --peek: 64px; --card-h: 232px; list-style: none; margin: 0; padding: 0; }
-.stack-pin { display: grid; gap: 14px; }
+/* the three steps: a pinned stage (StepStack.jsx). Without JavaScript or with reduced motion it is a plain list. */
+.stack { --peek: 64px; --card-h: clamp(232px, 32svh, 300px); --pin-top: 96px; }
+.stack-stage { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.stack-intro { display: none; }
+.stack-foot { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 22px; flex-wrap: wrap; }
+.stack-progress { display: flex; align-items: center; gap: 14px; font-weight: 800; font-size: .95rem; color: var(--on-bone-soft); }
+.stack-dots { display: inline-flex; gap: 6px; } .stack-dots i { width: 22px; height: 6px; border-radius: 999px; background: var(--line-bone2); transition: background .4s ease, width .4s ease; }
+.stack[data-step="1"] .d0, .stack[data-step="2"] .d1, .stack[data-step="3"] .d2 { background: var(--ink); width: 40px; }
+.stack:not(.is-live) .stack-progress { display: none; }
 .stack-card { padding: 18px 28px 28px; border-radius: 20px; list-style: none; box-shadow: 0 -8px 22px rgba(0,0,0,.14); transform-origin: 50% 0; }
 .stack-card.c0 { background: var(--ink); color: var(--on-ink); }
 .stack-card.c1 { background: var(--yellow); color: var(--ink); }
@@ -248,10 +254,19 @@ footer nav { display: flex; gap: 22px; flex-wrap: wrap; } footer a { text-decora
 .stack-n { font-family: var(--display); font-weight: 800; font-size: 2.6rem; line-height: 1; }
 .stack-card h3 { margin: 0; font-size: 1.45rem; letter-spacing: -.02em; line-height: 1.15; }
 .stack-card p { margin: 0; max-width: 40ch; }
-.stack.is-live { --step: clamp(260px, 52vh, 460px); height: calc(var(--pin-h) + 2.35 * var(--step)); --pin-h: calc(var(--card-h) + (var(--count) - 1) * var(--peek)); }
-.stack.is-live .stack-pin { position: sticky; top: 96px; height: var(--pin-h); display: block; overflow: clip; padding-top: 4px; }
+.stack.is-live { --step: clamp(240px, 46svh, 420px); --stack-h: calc(var(--card-h) + (var(--count) - 1) * var(--peek)); --pin-h: max(calc(100svh - var(--pin-top) - 20px), calc(var(--stack-h) + 150px)); height: calc(var(--pin-h) + 2.35 * var(--step)); }
+.stack.is-live .stack-pin { position: sticky; top: var(--pin-top); height: var(--pin-h); display: flex; flex-direction: column; justify-content: center; }
+.stack.is-live .stack-stage { position: relative; display: block; height: var(--stack-h); clip-path: inset(-26px -26px 0 -26px); flex: none; }
 .stack.is-live .stack-card { position: absolute; left: 0; right: 0; top: calc(var(--n) * var(--peek)); height: var(--card-h); will-change: transform; }
-@media (max-width: 900px) { .stack { --peek: 76px; --card-h: 252px; } .stack.is-live .stack-pin { top: 84px; } .stack-card h3 { font-size: 1.2rem; } .stack-n { font-size: 2.2rem; } .stack-card { padding: 16px 22px 22px; } }
+.stack.is-live .stack-foot { flex: none; }
+@media (max-width: 900px) {
+  .stack { --peek: 76px; --card-h: clamp(248px, 33svh, 320px); --pin-top: 84px; }
+  .stack-card h3 { font-size: 1.2rem; } .stack-n { font-size: 2.2rem; } .stack-card { padding: 16px 22px 22px; }
+  .stack.is-live .stack-pin { justify-content: space-between; }
+  .stack.is-live .stack-intro { display: block; } .stack-intro h2 { margin: 0 0 8px; font-size: clamp(1.7rem, 7vw, 2.2rem); } .stack-intro .sub { margin: 0; }
+  .how-grid:has(.stack.is-live) .how-lhs { display: none; }
+  .how-grid:has(.stack.is-live) { gap: 0; }
+}
 
 /* page changes: the content cross-fades and drifts a little while the header stays put (View Transitions); other browsers get the same entrance from CSS */
 header.top { view-transition-name: site-header; }

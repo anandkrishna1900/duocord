@@ -43,7 +43,7 @@ export function openShot(src, from) {
   window.dispatchEvent(new CustomEvent('privcord:open-shot', { detail: { src, from } }));
 }
 
-export default function Gallery({ asset, footer, level = 'h2' }) {
+export default function Gallery({ asset, footer, level = 'h2', bare = false }) {
   const H = level;
   const dialogRef = useRef(null);
   const showRef = useRef(null);
@@ -140,7 +140,7 @@ export default function Gallery({ asset, footer, level = 'h2' }) {
   };
 
   return (
-    <section className="screens" id="screens" aria-labelledby="screens-h">
+    <section className={`screens${bare ? ' bare' : ''}`} id={bare ? undefined : 'screens'} aria-labelledby={bare ? undefined : 'screens-h'}>
       <div className="wrap">
         <p className="eyebrow">Screens</p>
         <H id="screens-h">Take a look around</H>

@@ -347,11 +347,13 @@ fun LinkJoinContent(
                 else -> {
                     val bitmap = remember(offer) { qrBitmap(offer ?: "") }
                     if (bitmap != null) {
-                        Image(
-                            bitmap.asImageBitmap(),
-                            contentDescription = "Code for your other device to scan",
-                            modifier = Modifier.size(220.dp).align(Alignment.CenterHorizontally),
-                        )
+                        androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Image(
+                                bitmap.asImageBitmap(),
+                                contentDescription = "Code for your other device to scan",
+                                modifier = Modifier.size(220.dp),
+                            )
+                        }
                     }
                     Spacer(Modifier.height(10.dp))
                     Text("On your other device, open Settings › Devices › Link a new device and scan this code.")

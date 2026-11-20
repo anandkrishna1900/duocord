@@ -90,7 +90,7 @@ rule(r"desktop/src/lib/hosted/(runtime)(\.test)?\.ts", "WebRTC and relay adapter
 rule(r"desktop/src/lib/hosted/(hostedEngine|start|enable|legacyIdentity)\.ts", "The desktop chat engine on the Rust engine: commands, state, identity migration, the on/off switch", "Desktop adapter + engine host", "Adapter", ADAPTER, "Stays; opt-in until M9")
 rule(r"desktop/src/lib/hosted/e2e\.test\.ts", "End to end: two hosted engines on real Rust engine processes", "Desktop adapter + engine host", "Adapter", ADAPTER, "Stays")
 rule(r"desktop/src/lib/selectedTab\.test\.ts", "Guards the look: later style layers must not repaint selected controls", "Desktop UI", "UI", UI, "Stays")
-rule(r"desktop/src/lib/(privacyCheckup|pins|networkHosts)(\.test)?\.ts", "Small pure helpers for the screens: privacy checkup, pinned chats, the hosts the app contacts", "Desktop UI", "UI", UI, "Stays")
+rule(r"desktop/src/lib/(privacyCheckup|pins|networkHosts|quietHours|deliveryDetails|storage)(\.test)?\.ts", "Small pure helpers for the screens: privacy checkup, pinned chats, the hosts the app contacts", "Desktop UI", "UI", UI, "Stays")
 # ---- android
 rule(r"android/.*/ui/.*", "Compose screens", "UI", "UI", UI, "Stays")
 rule(r"android/.*/rustcore/.*\.kt", "Android adapters for the Rust engine (Keystore secret store, on-device probe)", "Platform adapter for engine ports", "Adapter", ADAPTER, "Stays")

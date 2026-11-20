@@ -1,3 +1,4 @@
+import { parseQuiet, DEFAULT_QUIET, type QuietHours } from './quietHours';
 import { DEFAULT_PALETTE, THEMES, classicTheme, themeById, themeVars } from './themes';
 
 export type ThemeMode = 'system' | 'dark' | 'light';
@@ -20,6 +21,8 @@ export interface AppSettings {
   panicWipe: boolean;
   /** Chats pinned to the top of the list on this device (at most 3, in the order pinned). */
   pinned: string[];
+  /** No notifications between two times of day (messages still arrive and wait in the chat). */
+  quietHours: QuietHours;
 }
 
 export const ACCENTS = [
@@ -42,6 +45,7 @@ const DEFAULTS: AppSettings = {
   groupOnly: false,
   panicWipe: false,
   pinned: [],
+  quietHours: { ...DEFAULT_QUIET },
 };
 
 export function parseSettings(raw: string | null): AppSettings {
@@ -68,6 +72,7 @@ export function parseSettings(raw: string | null): AppSettings {
       palette: typeof parsed.palette === 'string' && (parsed.palette === DEFAULT_PALETTE || themeById(parsed.palette)) ? parsed.palette : DEFAULT_PALETTE,
       groupOnly: typeof parsed.groupOnly === 'boolean' ? parsed.groupOnly : DEFAULTS.groupOnly,
       panicWipe: typeof parsed.panicWipe === 'boolean' ? parsed.panicWipe : DEFAULTS.panicWipe,
+      quietHours: parseQuiet(parsed.quietHours),
       pinned: Array.isArray(parsed.pinned) ? parsed.pinned.filter((x): x is string => typeof x === 'string').slice(-3) : [],
       displayName:
         typeof parsed.displayName === 'string'

@@ -5,6 +5,8 @@ import {
 } from '@tauri-apps/plugin-notification';
 import { isTauri } from '../config';
 import { loadSettings } from './settings';
+import { inQuietHours, msUntilChange } from './quietHours';
+import { pushNativeConfig } from './network';
 
 function preview(text: string): string {
   const single = text.replace(/\s+/g, ' ').trim();
@@ -41,6 +43,7 @@ export async function notifyIncoming(
 ): Promise<void> {
   const settings = loadSettings();
   if (!settings.notificationsEnabled) return;
+  if (inQuietHours(settings.quietHours)) return;
   if (document.visibilityState === 'visible' && document.hasFocus()) return;
   const granted = await ensureNotificationPermission();
   if (!granted) return;
@@ -55,4 +58,17 @@ export async function notifyIncoming(
   } catch {
     // Notifications are best-effort.
   }
+}
+
+let quietTimer: number | undefined;
+
+/**
+ * The tray shows notifications itself while the window is closed. It only knows "on" or "off", so this switches it off
+ * during quiet hours and back on after, and re-arms itself for the next change.
+ */
+export function syncQuietHours(): void {
+  window.clearTimeout(quietTimer);
+  const s = loadSettings();
+  void pushNativeConfig({ enabled: s.notificationsEnabled && !inQuietHours(s.quietHours), previews: s.notificationPreviews });
+  if (s.quietHours.enabled) quietTimer = window.setTimeout(syncQuietHours, msUntilChange(s.quietHours) + 500);
 }

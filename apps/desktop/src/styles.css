@@ -3736,3 +3736,13 @@ input[type='checkbox'] {
 .undo-bar span { flex: 1; font-size: 0.9rem; }
 .undo-bar button { background: transparent; border: 0; color: inherit; font-weight: 700; cursor: pointer; padding: 4px 8px; border-radius: 8px; text-decoration: underline; }
 @media (prefers-reduced-motion: reduce) { .undo-bar { animation: none; } .checkup-bar span { transition: none; } }
+
+.quiet-times { display: flex; gap: 12px; }
+.quiet-times .field { flex: 1; }
+
+.banner.nearby { background: var(--tonal); color: var(--text); border: 0; }
+
+.storage-list { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 12px; }
+.storage-top { display: flex; justify-content: space-between; gap: 12px; }
+.storage-list .checkup-bar { margin: 4px 0 6px; }
+.delivery-details .host-list li { display: flex; justify-content: space-between; gap: 12px; }

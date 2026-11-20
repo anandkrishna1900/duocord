@@ -171,6 +171,7 @@ export function MessageList({
   onMute,
   onReact,
   onDelete,
+  onDetails,
   focusId,
   onFocused,
 }: {
@@ -180,6 +181,8 @@ export function MessageList({
   onFocused?: () => void;
   onReact?: (messageId: string, emoji: string) => void;
   onDelete?: (messageId: string, everyone: boolean) => void;
+  /** Show who got the message and how. */
+  onDetails?: (message: UiMessage) => void;
   messages: UiMessage[];
   isGroup: boolean;
   empty: string;
@@ -450,6 +453,11 @@ export function MessageList({
                             </button>
                           ))}
                         </div>
+                      ) : null}
+                      {own && !message.deleted && onDetails ? (
+                        <button type="button" role="menuitem" onClick={() => { onDetails(message); setMenuFor(null); }}>
+                          Delivery details
+                        </button>
                       ) : null}
                       <button type="button" role="menuitem" onClick={() => { onDelete?.(message.messageId, false); setMenuFor(null); }}>
                         Delete for me

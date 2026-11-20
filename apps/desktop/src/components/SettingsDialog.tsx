@@ -14,6 +14,7 @@ import { DeviceRow } from './DeviceRow';
 import { AutoBackupControl } from './AutoBackupControl';
 import { LAST_BACKUP_KEY, PrivacyCheckup } from './PrivacyCheckup';
 import { NetworkTransparency } from './NetworkTransparency';
+import { StorageByChat } from './StorageByChat';
 import { formatBytes } from '../lib/format';
 import { AlertIcon, CheckIcon, KeyIcon, TrashIcon } from './Icons';
 
@@ -481,6 +482,25 @@ export function SettingsDialog({
               onChange={(value) => updateSettings({ notificationPreviews: value })}
               disabled={!settings.notificationsEnabled}
             />
+            <Toggle
+              label="Quiet hours"
+              description="No notifications between these times. Messages still arrive and wait in the chat."
+              checked={settings.quietHours.enabled}
+              onChange={(value) => updateSettings({ quietHours: { ...settings.quietHours, enabled: value } })}
+              disabled={!settings.notificationsEnabled}
+            />
+            {settings.quietHours.enabled ? (
+              <div className="quiet-times">
+                <label className="field">
+                  <span>From</span>
+                  <input type="time" value={settings.quietHours.from} onChange={(e) => e.target.value && updateSettings({ quietHours: { ...settings.quietHours, from: e.target.value } })} />
+                </label>
+                <label className="field">
+                  <span>Until</span>
+                  <input type="time" value={settings.quietHours.to} onChange={(e) => e.target.value && updateSettings({ quietHours: { ...settings.quietHours, to: e.target.value } })} />
+                </label>
+              </div>
+            ) : null}
             {isTauri() ? <BackgroundToggles /> : null}
           </section>
         ) : null}
@@ -596,6 +616,7 @@ export function SettingsDialog({
 
         {section === 'about' ? (
           <section className="settings-section">
+            <StorageByChat state={state} engine={engine} />
             {state.usage ? (
               <div className="card-box">
                 <strong>On this device</strong>

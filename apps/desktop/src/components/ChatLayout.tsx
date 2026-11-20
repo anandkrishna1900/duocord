@@ -3,6 +3,9 @@ import type { ChatState, UiMessage } from '../lib/engine';
 import type { ChatEngineApi } from '../lib/engineApi';
 import type { AppSettings } from '../lib/settings';
 import { togglePin, withPinsFirst } from '../lib/pins';
+import { syncQuietHours } from '../lib/notifications';
+import { deliveryRows } from '../lib/deliveryDetails';
+import { Modal } from './Modal';
 import { LOCAL_ID } from '../lib/identity';
 import { formatTime } from '../lib/format';
 import { MAX_FILE_BYTES, formatBytes } from '@duochat/protocol';
@@ -75,6 +78,10 @@ export function ChatLayout({
   const [manualUid, setManualUid] = useState('');
   const [verifyUid, setVerifyUid] = useState<string | null>(null);
   const [replying, setReplying] = useState<UiMessage | null>(null);
+  const [detailsFor, setDetailsFor] = useState<UiMessage | null>(null);
+  useEffect(() => {
+    syncQuietHours();
+  }, [settings.quietHours, settings.notificationsEnabled, settings.notificationPreviews]);
   /** The message just sent, for a few seconds: "Undo" takes it back from everyone. */
   const [undo, setUndo] = useState<{ conv: string; text: string } | null>(null);
   useEffect(() => {
@@ -371,7 +378,7 @@ export function ChatLayout({
                 <Avatar name={current.name} size={40} group={!person} />
                 <div>
                   <h2>{current.name}</h2>
-                  <p className="muted small">
+                  <p className="muted small" title={person?.path?.detail}>
                     <span
                       className={`status-dot ${(person ? person.conn === 'connected' : (group?.connected ?? 0) > 0) ? 'live' : ''}`}
                       aria-hidden="true"
@@ -435,6 +442,12 @@ export function ChatLayout({
               </div>
             </header>
 
+            {person && person.conn === 'connected' && (person.path?.kind === 'bluetooth' || person.via === 'ble') ? (
+              <div className="banner nearby" role="status">
+                Nearby mode: no internet needed. This chat is going over Bluetooth, straight to {person.name}'s device.
+              </div>
+            ) : null}
+
             {state.error ? (
               <div className="banner error" role="alert">
                 <AlertIcon size={16} />
@@ -494,11 +507,36 @@ export function ChatLayout({
               onRetry={(id) => void engine?.retry(id)}
               onReact={(id, emoji) => engine?.react(id, emoji)}
               onDelete={(id, everyone) => engine?.deleteMessage(id, everyone)}
+              onDetails={setDetailsFor}
               focusId={focusId}
               onFocused={() => setFocusId(null)}
               onReply={setReplying}
               loadFile={loadFile}
             />
+
+            <Modal open={detailsFor !== null} onClose={() => setDetailsFor(null)} title="Delivery details">
+              {detailsFor ? (
+                <div className="delivery-details">
+                  <p className="muted small">Sent {new Date(detailsFor.clientCreatedAt).toLocaleString()}</p>
+                  <ul className="host-list">
+                    {deliveryRows(
+                      detailsFor.recipients,
+                      detailsFor.deliveryState,
+                      (uid) => state.contacts.find((c) => c.uid === uid)?.name ?? group?.members.find((m) => m.uid === uid)?.name ?? 'Someone',
+                    ).map((r) => (
+                      <li key={r.name}>
+                        <strong>{r.name}</strong>
+                        <span className="muted small">{r.status}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="muted small">
+                    {person?.path ? `Right now this chat is ${person.path.label.toLowerCase()}. ` : ''}
+                    Messages are end-to-end encrypted on every route. A person with several devices gets the message on each; the first one to receive it counts.
+                  </p>
+                </div>
+              ) : null}
+            </Modal>
 
             {readOnly ? (
               <div className="composer-note">{group!.status === 'removed' ? 'You were removed from this group.' : 'You left this group.'}</div>

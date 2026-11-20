@@ -29,7 +29,7 @@ import org.robolectric.annotation.GraphicsMode
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.LEGACY)
-@Config(sdk = [35], qualifiers = "w393dp-h851dp-xxhdpi")
+@Config(sdk = [35], qualifiers = "w393dp-h851dp-xxhdpi", application = android.app.Application::class)
 open class ScreensRenderTest {
     @get:Rule
     val compose = createComposeRule()

@@ -57,7 +57,7 @@ main:focus { outline: none; }
 /* hero */
 .hero { position: relative; isolation: isolate; overflow: clip; padding: 84px 0 96px; min-height: min(100svh, 860px); display: grid; align-items: center; background: var(--ink); }
 .hero-bg { position: absolute; inset: 0; z-index: -1; }
-.hero-grid { display: grid; grid-template-columns: 1.05fr 1fr; gap: 56px; align-items: center; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr); }
 @media (max-width: 980px) { .hero-grid { grid-template-columns: 1fr; gap: 40px; } .hero { padding-top: 56px; } }
 .display { font-size: clamp(2.5rem, 5.3vw, 4.4rem); line-height: 1.02; letter-spacing: -.04em; font-weight: 800; margin: 0 0 26px; }
 .row-line { display: block; } .line { display: inline; }
@@ -104,18 +104,6 @@ h2, section:not(.hero) h1 { font-size: clamp(2rem, 4.4vw, 3.5rem); letter-spacin
 .how-grid { display: grid; grid-template-columns: 1fr 1.2fr; gap: 64px; align-items: start; }
 @media (max-width: 900px) { .how-grid { grid-template-columns: 1fr; gap: 32px; } }
 .how-lhs { position: sticky; top: 120px; } @media (max-width: 900px) { .how-lhs { position: static; } }
-.stack { list-style: none; margin: 0; padding: 0; display: grid; gap: 34px; }
-.stack-card { --peek: 68px; position: sticky; top: calc(96px + var(--n) * var(--peek)); margin-bottom: calc((2 - var(--n)) * var(--peek)); padding: 18px 28px 32px; border-radius: 18px; min-height: 250px; box-shadow: 0 -6px 18px rgba(0,0,0,.12); }
-.stack::after { content: ""; height: 120px; }
-.stack-card.c0 { background: var(--ink); color: var(--on-ink); }
-.stack-card.c1 { background: var(--yellow); color: var(--ink); }
-.stack-card.c2 { background: #fff; color: var(--ink); border: 2px solid var(--ink); }
-.stack-head { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; min-height: 44px; }
-.stack-n { font-family: var(--display); font-weight: 800; font-size: 2.6rem; line-height: 1; }
-.stack-card.c0 .stack-n { color: var(--yellow); }
-.stack-card h3 { margin: 0; font-size: 1.45rem; letter-spacing: -.02em; line-height: 1.15; } .stack-card p { margin: 0; max-width: 40ch; }
-.stack-card.c0 p { color: var(--on-ink-soft); }
-@media (max-width: 900px) { .stack-card { --peek: 86px; top: calc(84px + var(--n) * var(--peek)); min-height: 230px; } .stack-card h3 { font-size: 1.2rem; } .stack-n { font-size: 2.2rem; } .stack-head { min-height: 56px; } }
 
 /* screens: a rail of real screenshots, and a lightbox */
 .screens { padding: 72px 0 84px; background: var(--ink); color: var(--on-ink); }
@@ -125,19 +113,6 @@ h2, section:not(.hero) h1 { font-size: clamp(2rem, 4.4vw, 3.5rem); letter-spacin
 @media (hover: none) { .rail .card .expand { opacity: 1; transform: none; } }
 
 /* hero: a window and a phone around real screenshots (frames after Magic UI device mocks) */
-.hero-visual { position: relative; padding: 0 0 8%; }
-.win-btn, .phone-btn { display: block; padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: zoom-in; text-align: left; }
-.win { display: block; border: 2px solid var(--bone); border-radius: 14px; overflow: hidden; background: var(--ink2); box-shadow: 0 30px 60px rgba(0,0,0,.5); }
-.win-bar { display: flex; align-items: center; gap: 6px; padding: 9px 12px; background: var(--ink3); border-bottom: 1px solid var(--line-ink); }
-.win-bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--on-ink-muted); opacity: .6; }
-.win-bar b { margin-left: 8px; font: 700 12px/1 'Figtree', sans-serif; color: var(--on-ink-muted); letter-spacing: .02em; }
-.win img { display: block; width: 100%; height: auto; }
-.ph { display: block; border: 3px solid var(--bone); border-radius: 26px; overflow: hidden; background: var(--ink2); box-shadow: 0 24px 50px rgba(0,0,0,.55); }
-.ph img { display: block; width: 100%; height: auto; }
-.phone-btn { position: absolute; right: -2%; bottom: 0; width: 24%; transition: transform .25s ease; }
-.win-btn { width: 100%; transition: transform .35s ease; }
-@media (min-width: 981px) and (hover: hover) { .win-btn { transform: perspective(1400px) rotateY(-5deg) rotateX(2deg); } .hero-visual:hover .win-btn { transform: none; } .hero-visual:hover .phone-btn { transform: translateY(-6px); } }
-@media (max-width: 980px) { .phone-btn { right: 3%; width: 26%; } .win { box-shadow: 0 24px 50px rgba(0,0,0,.5); } }
 
 /* screens showcase: chapter list + stage */
 .screens .sub { margin-bottom: 36px; }
@@ -259,3 +234,21 @@ footer nav { display: flex; gap: 22px; flex-wrap: wrap; } footer a { text-decora
 .screens.bare { padding: 0; } .screens.bare > .wrap { display: none; }
 
 .donate-cta { margin: 16px 0 6px !important; } .fcard.plain .btn { color: var(--ink); text-decoration: none; }
+
+/* the three steps: a pinned stack (StepStack.jsx). Without JavaScript or with reduced motion it is a plain list. */
+.stack { --peek: 64px; --card-h: 232px; list-style: none; margin: 0; padding: 0; }
+.stack-pin { display: grid; gap: 14px; }
+.stack-card { padding: 18px 28px 28px; border-radius: 20px; list-style: none; box-shadow: 0 -8px 22px rgba(0,0,0,.14); transform-origin: 50% 0; }
+.stack-card.c0 { background: var(--ink); color: var(--on-ink); }
+.stack-card.c1 { background: var(--yellow); color: var(--ink); }
+.stack-card.c2 { background: #fff; color: var(--ink); border: 2px solid var(--ink); }
+.stack-card.c0 p { color: var(--on-ink-soft); }
+.stack-card.c0 .stack-n { color: var(--yellow); }
+.stack-head { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; min-height: 44px; }
+.stack-n { font-family: var(--display); font-weight: 800; font-size: 2.6rem; line-height: 1; }
+.stack-card h3 { margin: 0; font-size: 1.45rem; letter-spacing: -.02em; line-height: 1.15; }
+.stack-card p { margin: 0; max-width: 40ch; }
+.stack.is-live { --step: clamp(260px, 52vh, 460px); height: calc(var(--pin-h) + 2.35 * var(--step)); --pin-h: calc(var(--card-h) + (var(--count) - 1) * var(--peek)); }
+.stack.is-live .stack-pin { position: sticky; top: 96px; height: var(--pin-h); display: block; overflow: clip; padding-top: 4px; }
+.stack.is-live .stack-card { position: absolute; left: 0; right: 0; top: calc(var(--n) * var(--peek)); height: var(--card-h); will-change: transform; }
+@media (max-width: 900px) { .stack { --peek: 76px; --card-h: 252px; } .stack.is-live .stack-pin { top: 84px; } .stack-card h3 { font-size: 1.2rem; } .stack-n { font-size: 2.2rem; } .stack-card { padding: 16px 22px 22px; } }

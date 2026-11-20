@@ -1,4 +1,5 @@
-import Gallery, { openShot, WindowFrame, PhoneFrame } from './Gallery.jsx';
+import Gallery from './Gallery.jsx';
+import StepStack from './StepStack.jsx';
 import { Icon, P, FEATURES, STEPS, FAQ, COMPARE } from './data.jsx';
 import { FeaturesPage, HowPage, ScreensPage, ComparePage, FaqPage, DownloadPage, AboutPage, DonatePage } from './Pages.jsx';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
@@ -169,14 +170,6 @@ export default function App() {
                   {reduce ? 'End-to-end encrypted · source-available · not yet independently audited' : <ShinyText text="End-to-end encrypted · source-available · not yet independently audited" color="#8f8b82" shineColor="#ffffff" speed={3.5} />}
                 </p>
               </div>
-              <div className="hero-visual">
-                <button type="button" className="win-btn" onClick={(e) => openShot('group-chat-dark.webp', e.currentTarget)} aria-label="Open the Windows screenshot full size">
-                  <WindowFrame src={asset('group-chat-dark.webp')} alt="PrivCord on Windows: an encrypted group chat in the dark theme" w={1280} h={800} enlarge eager />
-                </button>
-                <button type="button" className="phone-btn" onClick={(e) => openShot('mobile-group.webp', e.currentTarget)} aria-label="Open the Android screenshot full size">
-                  <PhoneFrame src={asset('mobile-group.webp')} alt="PrivCord on Android: a group chat" w={390} h={800} />
-                </button>
-              </div>
             </div>
           </section>
 
@@ -230,14 +223,7 @@ export default function App() {
                 <h2>Up and running in three steps</h2>
                 <p className="sub">No sign-up form. Your identity is made on your device.</p>
               </div>
-              <ol className="stack">
-                {STEPS.map(([t, p], n) => (
-                  <li className={`stack-card c${n}`} key={t} style={{ '--n': n }}>
-                    <div className="stack-head"><span className="stack-n" aria-hidden="true">{n + 1}</span><h3>{t}</h3></div>
-                    <p>{p}</p>
-                  </li>
-                ))}
-              </ol>
+              <StepStack steps={STEPS} />
               <p className="more-row"><Go className="more" to="how">How it works, in detail →</Go></p>
             </div>
           </section>
@@ -299,7 +285,6 @@ export default function App() {
           </section>
             </>
           )}
-          {route === 'home' && <Gallery asset={asset} bare />}
           {route === 'features' && <FeaturesPage Go={Go} />}
           {route === 'how' && <HowPage Go={Go} />}
           {route === 'screens' && <ScreensPage Go={Go} asset={asset} />}

@@ -72,6 +72,12 @@ interface ChatEngineApi {
 
     /** Small pure answers worked out in the shared engine (`checkup`, `hosts`): JSON in, JSON out. */
     suspend fun insight(name: String, inputJson: String): String
+    /** A counts-only report about this install (no messages, names or keys), as JSON from the shared engine. */
+    suspend fun diagnosticsJson(appJson: String): String
+    /** The engine's built-in self-test: a JSON list of {name, ok, detail}. */
+    suspend fun selfTestJson(): String
+    /** Hide the app from screenshots and the app switcher (kept in the shared preferences). */
+    suspend fun setSecureScreen(on: Boolean)
     /** What each chat takes on this phone, as JSON from the shared engine. */
     suspend fun storageByChatJson(): String
 

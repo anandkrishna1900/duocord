@@ -67,3 +67,85 @@ fun deliveryWords(s: DeliveryState): String = when (s) {
     DeliveryState.READ -> "Read"
     DeliveryState.FAILED -> "Could not be sent"
 }
+
+/** The sealed-chat explanation the engine gives for a chat kind ("direct", "group" or "channel"). */
+data class SecurityNote(val headline: String, val lines: List<String>)
+
+data class WhatsNew(val version: String, val lines: List<String>)
+
+data class HealthItem(val id: String, val ok: Boolean, val title: String, val hint: String, val fix: String)
+
+data class HealthVerdict(val ok: Boolean, val id: String, val text: String, val fix: String)
+
+data class Health(val items: List<HealthItem>, val verdict: HealthVerdict?)
+
+data class SelfTestRow(val name: String, val ok: Boolean, val detail: String)
+
+private fun JSONObject.strings(key: String): List<String> =
+    optJSONArray(key)?.let { a -> (0 until a.length()).map { a.getString(it) } } ?: emptyList()
+
+/** The engine takes a chat kind or a version as a JSON-encoded string. */
+fun jsonString(s: String): String = JSONObject.quote(s)
+
+fun parseSecurityNote(json: String): SecurityNote? = runCatching {
+    JSONObject(json).let { SecurityNote(it.getString("headline"), it.strings("lines")) }
+}.getOrNull()
+
+fun parseWhatsNew(json: String): WhatsNew? = runCatching {
+    JSONObject(json).let { WhatsNew(it.getString("version"), it.strings("lines")) }
+}.getOrNull()
+
+/** The delivery-health question; a null fact means "this phone cannot tell". */
+fun healthInput(
+    signaling: String, notificationsEnabled: Boolean, notificationPermission: Boolean?, batteryUnrestricted: Boolean?,
+    backgroundAllowed: Boolean?, quietHoursNow: Boolean, mutedChats: Int,
+): String = JSONObject()
+    .put("platform", "android").put("signaling", signaling).put("notifications_enabled", notificationsEnabled)
+    .put("notification_permission", notificationPermission ?: JSONObject.NULL)
+    .put("battery_unrestricted", batteryUnrestricted ?: JSONObject.NULL)
+    .put("background_allowed", backgroundAllowed ?: JSONObject.NULL)
+    .put("quiet_hours_now", quietHoursNow).put("muted_chats", mutedChats)
+    .toString()
+
+fun parseHealth(json: String): Health? = runCatching {
+    val o = JSONObject(json)
+    val items = o.getJSONArray("items").objects().map {
+        HealthItem(it.getString("id"), it.getBoolean("ok"), it.getString("title"), it.optString("hint"), it.optString("fix", "none"))
+    }
+    val v = o.optJSONObject("verdict")?.let { HealthVerdict(it.getBoolean("ok"), it.optString("id"), it.getString("text"), it.optString("fix", "none")) }
+    Health(items, v)
+}.getOrNull()
+
+/** The linked-devices question: last_seen is milliseconds or null. */
+fun devicesInput(devices: List<DeviceInfo>, now: Long = System.currentTimeMillis()): String = JSONObject()
+    .put(
+        "devices",
+        JSONArray(
+            devices.map {
+                JSONObject().put("name", it.name).put("last_seen", it.lastSeen ?: JSONObject.NULL)
+                    .put("this_device", it.thisDevice).put("stale", it.stale)
+            },
+        ),
+    )
+    .put("now_ms", now)
+    .toString()
+
+/** The one-line summary of the linked devices (the engine's `line`), or null. */
+fun parseDevicesLine(json: String): String? = runCatching { JSONObject(json).getString("line").takeIf { it.isNotBlank() } }.getOrNull()
+
+/** What the diagnostics report may say about this install: counts and versions only. */
+fun diagnosticsAppJson(version: String, sdk: Int, mode: String, relays: Int, tor: Boolean): String = JSONObject()
+    .put("version", version).put("platform", "android").put("sdk", sdk).put("transport_mode", mode)
+    .put("relay_count", relays).put("tor_mode", tor)
+    .toString()
+
+fun parseSelfTest(json: String): List<SelfTestRow> = runCatching {
+    JSONArray(json).objects().map { SelfTestRow(it.getString("name"), it.getBoolean("ok"), it.optString("detail")) }
+}.getOrDefault(emptyList())
+
+/** How many mutes are still running at [now] (the engine counts delivery health from this). */
+fun activeMutes(muteUntil: Map<String, Long>, now: Long = System.currentTimeMillis()): Int = muteUntil.values.count { it > now }
+
+/** Is the current local minute inside quiet hours (they may wrap midnight)? Inputs only; the engine decides what it means. */
+fun inQuietNow(q: QuietHoursPref, minuteOfDay: Int): Boolean = q.enabled &&
+    (if (q.from <= q.to) minuteOfDay in q.from until q.to else minuteOfDay >= q.from || minuteOfDay < q.to)

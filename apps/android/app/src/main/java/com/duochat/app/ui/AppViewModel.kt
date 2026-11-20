@@ -235,6 +235,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     suspend fun insight(name: String, inputJson: String): String = engine?.insight(name, inputJson) ?: "[]"
 
+    suspend fun diagnosticsJson(appJson: String): String = engine?.diagnosticsJson(appJson) ?: "{}"
+
+    suspend fun selfTestJson(): String = engine?.selfTestJson() ?: "[]"
+
+    fun setSecureScreen(on: Boolean) {
+        viewModelScope.launch { engine?.setSecureScreen(on) }
+    }
+
     suspend fun storageByChatJson(): String = engine?.storageByChatJson() ?: "[]"
 
     fun quickSendTimes(onResult: (List<Pair<String, Long>>) -> Unit) {

@@ -35,6 +35,8 @@ data class AppSettings(
     val mutedChats: Set<String> = emptySet(),
     /** When a backup was last made (milliseconds), or 0. Only used by the privacy checkup. */
     val lastBackupAt: Long = 0L,
+    /** The app version whose "What's new" was last shown (empty before the first run). */
+    val lastSeenVersion: String = "",
     val network: NetworkConfig = NetworkConfig(),
 )
 
@@ -72,6 +74,7 @@ class SettingsRepository(context: Context) {
             .putBoolean("appLock", next.appLock)
             .putStringSet("mutedChats", next.mutedChats)
             .putLong("lastBackupAt", next.lastBackupAt)
+            .putString("lastSeenVersion", next.lastSeenVersion)
             .putString("network", next.network.toJson())
             .apply()
     }
@@ -94,6 +97,7 @@ class SettingsRepository(context: Context) {
             appLock = prefs.getBoolean("appLock", true),
             mutedChats = prefs.getStringSet("mutedChats", emptySet())?.toSet() ?: emptySet(),
             lastBackupAt = prefs.getLong("lastBackupAt", 0L),
+            lastSeenVersion = prefs.getString("lastSeenVersion", "") ?: "",
             network = NetworkConfig.fromJson(
                 prefs.getString("network", null),
                 fallback = AppConfig.defaultNetworkConfig(),

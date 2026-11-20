@@ -84,6 +84,9 @@ fun SettingsDialog(
     onDeleteMessages: (List<String>) -> Unit = {},
     onSetQuietHours: (Boolean, Int, Int) -> Unit = { _, _, _ -> },
     insight: suspend (String, String) -> String = { _, _ -> "[]" },
+    diagnosticsJson: suspend (String) -> String = { "{}" },
+    selfTestJson: suspend () -> String = { "[]" },
+    onSetSecureScreen: (Boolean) -> Unit = {},
     storageByChatJson: suspend () -> String = { "[]" },
     onOpenManual: () -> Unit,
     onOpenNuke: () -> Unit,
@@ -197,6 +200,13 @@ fun SettingsDialog(
                 Spacer(Modifier.height(20.dp))
 
                 SectionTitle("Devices")
+                val devicesLine by androidx.compose.runtime.produceState<String?>(null, state.devices) {
+                    value = com.duochat.app.data.parseDevicesLine(insight("devices_summary", com.duochat.app.data.devicesInput(state.devices)))
+                }
+                devicesLine?.let {
+                    DevicesStrip(it)
+                    Spacer(Modifier.height(10.dp))
+                }
                 DevicesSection(state, onLinkNew = { linking = true }, onRemoval = onDeviceRemoval)
                 if (linking) {
                     LinkHostDialog(
@@ -292,6 +302,32 @@ SectionTitle("Appearance")
                 Spacer(Modifier.height(20.dp))
 
                 SectionTitle("Notifications")
+                val healthCtx = LocalContext.current
+                val healthPermission = androidx.core.app.NotificationManagerCompat.from(healthCtx).areNotificationsEnabled()
+                val healthBattery = com.duochat.app.notifications.BackgroundHelp.batteryUnrestricted(healthCtx)
+                val healthMinute = java.util.Calendar.getInstance().let { it.get(java.util.Calendar.HOUR_OF_DAY) * 60 + it.get(java.util.Calendar.MINUTE) }
+                val healthQuietNow = com.duochat.app.data.inQuietNow(state.prefs.quiet, healthMinute)
+                val healthMuted = com.duochat.app.data.activeMutes(state.prefs.muteUntil)
+                val healthSignaling = when (state.signaling) {
+                    com.duochat.app.signaling.SignalingStatus.IDLE -> "unconfigured"
+                    com.duochat.app.signaling.SignalingStatus.CONNECTING -> "connecting"
+                    com.duochat.app.signaling.SignalingStatus.ONLINE -> "online"
+                    com.duochat.app.signaling.SignalingStatus.ERROR -> "offline"
+                }
+                val healthJson by androidx.compose.runtime.produceState(
+                    "{}", healthSignaling, settings.notificationsEnabled, healthPermission, healthBattery, settings.keepRunning, healthQuietNow, healthMuted,
+                ) {
+                    value = insight(
+                        "health",
+                        com.duochat.app.data.healthInput(
+                            healthSignaling, settings.notificationsEnabled, healthPermission, healthBattery, settings.keepRunning, healthQuietNow, healthMuted,
+                        ),
+                    )
+                }
+                com.duochat.app.data.parseHealth(healthJson)?.let { h ->
+                    DeliveryHealthCard(h, onFix = { fix -> com.duochat.app.notifications.BackgroundHelp.openFix(healthCtx, fix) })
+                    Spacer(Modifier.height(10.dp))
+                }
                 ToggleRow(
                     "Message notifications",
                     "Show a system notification for new messages.",
@@ -783,6 +819,11 @@ ToggleRow(
                     "Tap the \"Chats\" title on the home screen three times quickly and everything on this phone is erased at once, with no confirmation. Your 12 recovery words are the only way back, so keep them somewhere safe first.",
                     settings.panicWipe,
                 ) { on -> onUpdateSettings { copy(panicWipe = on) } }
+                ToggleRow(
+                    "Hide the app from screenshots and the app switcher",
+                    "Screenshots, screen recordings and the recent-apps preview show a blank screen. Applies to your chats, on every device you link.",
+                    state.prefs.secureScreen,
+                ) { on -> onSetSecureScreen(on) }
                 Spacer(Modifier.height(14.dp))
                 SectionTitle("Backup")
                 BackupSection({ pass, done -> onExportBackup(pass) { r -> if (r.isSuccess) onUpdateSettings { copy(lastBackupAt = System.currentTimeMillis()) }; done(r) } }, onImportBackup)
@@ -822,6 +863,8 @@ SectionTitle("About DuoCord")
                 DetailRow("Rust engine", probe)
                 DetailRow("Created by", "anandkrishna1900")
                 DetailRow("License", "PC-NC (non-commercial)")
+                Spacer(Modifier.height(12.dp))
+                AboutTools(settings.network, insight, diagnosticsJson, selfTestJson)
                 Spacer(Modifier.height(12.dp))
                 Text(
                     "Connections use a challenge-response identity proof, and you can compare a safety " +

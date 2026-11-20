@@ -1277,6 +1277,12 @@ class RustChatEngine(
     override suspend fun insight(name: String, inputJson: String): String =
         call { insight(name, inputJson) }.getOrDefault("[]")
 
+    override suspend fun diagnosticsJson(appJson: String): String = call { diagnosticsJson(appJson) }.getOrDefault("{}")
+
+    override suspend fun selfTestJson(): String = call { selfTestJson() }.getOrDefault("[]")
+
+    override suspend fun setSecureScreen(on: Boolean) { call { setSecureScreen(on) }.also { requestRefresh() } }
+
     override suspend fun storageByChatJson(): String = call { storageByChatJson() }.getOrDefault("[]")
 
     override suspend fun quickSendTimes(): List<Pair<String, Long>> = withContext(Dispatchers.IO) {

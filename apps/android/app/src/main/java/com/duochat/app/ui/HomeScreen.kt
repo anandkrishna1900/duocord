@@ -101,6 +101,8 @@ fun HomeScreen(
     onOpenConversation: (String) -> Unit = {},
     onRecreateGroup: (String) -> Unit = {},
     onDismissOldGroup: (String) -> Unit = {},
+    whatsNew: com.duochat.app.data.WhatsNew? = null,
+    onDismissWhatsNew: () -> Unit = {},
     pinned: List<String> = emptyList(),
     archived: List<String> = emptyList(),
     onTogglePin: (String) -> Unit = {},
@@ -147,6 +149,7 @@ fun HomeScreen(
         Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).statusBarsPadding().imePadding()) {
             Header(onOpenSettings = onOpenSettings, onPanic = onPanic)
             state.notice?.let { Notice(it, onClearNotice) }
+            whatsNew?.let { n -> Notice("What's new in ${n.version}: " + n.lines.joinToString(" \u00B7 "), onDismissWhatsNew) }
             state.legacyGroups.forEach { g -> OldGroup(g, onRecreate = { onRecreateGroup(g.oldId) }, onDismiss = { onDismissOldGroup(g.oldId) }) }
             if (state.chats.isEmpty()) {
                 EmptyHome(onAddFriend, onChannels)

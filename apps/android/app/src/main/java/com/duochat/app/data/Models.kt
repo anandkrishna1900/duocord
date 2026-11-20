@@ -213,6 +213,8 @@ data class Prefs(
     /** Conversation id to the time (ms) its notifications are off until. */
     val muteUntil: Map<String, Long> = emptyMap(),
     val quiet: QuietHoursPref = QuietHoursPref(),
+    /** Hide this app from screenshots and the app switcher (follows the person to every device). */
+    val secureScreen: Boolean = false,
 )
 
 /** A mute with no end (the engine's value). */
@@ -223,7 +225,7 @@ fun parsePrefs(json: String): Prefs = runCatching {
     fun list(key: String) = o.optJSONArray(key)?.let { a -> (0 until a.length()).map { a.getString(it) } } ?: emptyList()
     val mute = o.optJSONObject("mute_until")?.let { m -> m.keys().asSequence().associateWith { m.getLong(it) } } ?: emptyMap()
     val q = o.optJSONObject("quiet")
-    Prefs(list("pins"), list("archived"), mute, QuietHoursPref(q?.optBoolean("enabled") ?: false, q?.optInt("from", 1320) ?: 1320, q?.optInt("to", 420) ?: 420))
+    Prefs(list("pins"), list("archived"), mute, QuietHoursPref(q?.optBoolean("enabled") ?: false, q?.optInt("from", 1320) ?: 1320, q?.optInt("to", 420) ?: 420), o.optBoolean("secure_screen", false))
 }.getOrDefault(Prefs())
 
 data class ChatState(

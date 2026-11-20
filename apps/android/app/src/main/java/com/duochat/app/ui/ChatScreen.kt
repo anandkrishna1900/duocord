@@ -171,6 +171,7 @@ fun ChatScreen(
     onReact: (String, String) -> Unit = { _, _ -> },
     onEnableStoreForward: () -> Unit = {},
     onOpenConnectionSettings: () -> Unit = {},
+    insight: suspend (String, String) -> String = { _, _ -> "[]" },
 ) {
     val friend: ContactView? = state.contacts.firstOrNull { it.uid == conversationId }
     val group: GroupView? = state.groups.firstOrNull { it.groupId == conversationId }
@@ -180,6 +181,7 @@ fun ChatScreen(
     val canWrite = state.phase == EnginePhase.READY && (friend != null || group?.iAmMember == true || channel != null)
     var menuOpen by remember { mutableStateOf(false) }
     var clearConfirm by remember { mutableStateOf(false) }
+    var sealedOpen by remember { mutableStateOf(false) }
     var detailsFor by remember { mutableStateOf<ChatMessage?>(null) }
     // "Sent. Undo": for a few seconds after sending, the message can be taken back from everyone.
     val snackbarHost = remember { androidx.compose.material3.SnackbarHostState() }
@@ -217,7 +219,11 @@ fun ChatScreen(
                         InitialsAvatar(title.removePrefix("# "), 40, group = group != null || channel != null)
                         Spacer(Modifier.width(12.dp))
                         Column {
-                            Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                                Spacer(Modifier.width(6.dp))
+                                SealedChip(onClick = { sealedOpen = true })
+                            }
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(
                                     Modifier.size(7.dp).clip(CircleShape)
@@ -429,6 +435,23 @@ fun ChatScreen(
             text = { Text("The messages are deleted from this phone only. $title keeps their copy.") },
             confirmButton = { TextButton(onClick = { clearConfirm = false; onClearChat() }) { Text("Clear") } },
             dismissButton = { TextButton(onClick = { clearConfirm = false }) { Text("Cancel") } },
+        )
+    }
+    if (sealedOpen) {
+        val kind = if (channel != null) "channel" else if (group != null) "group" else "direct"
+        val note by produceState<com.duochat.app.data.SecurityNote?>(null, kind) {
+            value = com.duochat.app.data.parseSecurityNote(insight("chat_security", com.duochat.app.data.jsonString(kind)))
+        }
+        AlertDialog(
+            onDismissRequest = { sealedOpen = false },
+            icon = { Icon(Icons.Filled.Lock, contentDescription = null) },
+            title = { Text(note?.headline ?: "Sealed chat") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    note?.lines?.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                }
+            },
+            confirmButton = { TextButton(onClick = { sealedOpen = false }) { Text("OK") } },
         )
     }
 }
@@ -1584,6 +1607,7 @@ private fun VoiceNote(messageId: String, arrived: Boolean, size: Int, color: Col
     var isPlaying by remember { mutableStateOf(false) }
     var position by remember { mutableStateOf(0L) }
     var duration by remember { mutableStateOf(0L) }
+    var speed by remember { mutableStateOf(1f) }
     androidx.compose.runtime.DisposableEffect(file) {
         // Capture the file this effect is for. Reading `file` inside onDispose saw the NEW file when the key changed
         // (null -> file), so the decrypted voice note was deleted the moment it was written: "can't be played".
@@ -1615,6 +1639,7 @@ private fun VoiceNote(messageId: String, arrived: Boolean, size: Int, color: Col
                 }
             })
             p.setMediaItem(androidx.media3.common.MediaItem.fromUri(android.net.Uri.fromFile(f)))
+            p.setPlaybackSpeed(speed)
             p.prepare()
             player = p
         }
@@ -1649,10 +1674,27 @@ private fun VoiceNote(messageId: String, arrived: Boolean, size: Int, color: Col
             )
             Spacer(Modifier.height(6.dp))
             val shown = if (isPlaying || position > 0) position else duration
-            Text(
-                if (shown > 0) "%d:%02d".format(shown / 60_000, (shown / 1000) % 60) else "Voice note \u00B7 ${formatBytes(size)}",
-                style = MaterialTheme.typography.labelSmall, color = color.copy(alpha = 0.8f),
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    if (shown > 0) "%d:%02d".format(shown / 60_000, (shown / 1000) % 60) else "Voice note \u00B7 ${formatBytes(size)}",
+                    style = MaterialTheme.typography.labelSmall, color = color.copy(alpha = 0.8f),
+                    modifier = Modifier.weight(1f),
+                )
+                // 1x -> 1.5x -> 2x -> 1x. ExoPlayer keeps the pitch when only the speed changes.
+                Surface(
+                    onClick = {
+                        speed = when (speed) { 1f -> 1.5f; 1.5f -> 2f; else -> 1f }
+                        player?.setPlaybackSpeed(speed)
+                    },
+                    shape = CircleShape, color = color.copy(alpha = 0.16f), contentColor = color,
+                ) {
+                    Text(
+                        (if (speed == 1.5f) "1.5" else speed.toInt().toString()) + "x",
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                    )
+                }
+            }
         }
     }
 }

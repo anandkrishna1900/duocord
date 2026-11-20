@@ -124,6 +124,20 @@ private fun RootScreen(viewModel: AppViewModel) {
     }
 
     val state = chat
+    // Screen privacy: hide this app from screenshots and the app switcher while the shared preference is on.
+    val secureScreen = state?.prefs?.secureScreen == true
+    LaunchedEffect(secureScreen) {
+        (context as? android.app.Activity)?.window?.let {
+            if (secureScreen) it.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE) else it.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        }
+    }
+    // "What's new", once after an update (the engine words it; the last version seen is kept on this phone).
+    val newVersion = settings.lastSeenVersion != AppConfig.APP_VERSION
+    val whatsNew by androidx.compose.runtime.produceState<com.duochat.app.data.WhatsNew?>(null, newVersion, state?.phase) {
+        value = if (newVersion && state?.phase == EnginePhase.READY) {
+            com.duochat.app.data.parseWhatsNew(viewModel.insight("whats_new", com.duochat.app.data.jsonString(AppConfig.APP_VERSION)))
+        } else null
+    }
     // Tell the engine which conversation is on screen (it marks messages read and stays quiet about them).
     val openChatId = route.takeIf { it.startsWith("chat:") }?.removePrefix("chat:")
     LaunchedEffect(openChatId, state?.phase) { if (state?.phase == EnginePhase.READY) viewModel.setOpenChat(openChatId) }
@@ -280,6 +294,7 @@ private fun RootScreen(viewModel: AppViewModel) {
                         onReact = viewModel::react,
                         onEnableStoreForward = { viewModel.updateSettings { copy(network = network.copy(storeForward = true)) } },
                         onOpenConnectionSettings = { settingsOpen = true },
+                        insight = viewModel::insight,
                         onConnectBluetooth = {
                             viewModel.connectBluetooth(openChatId) { result ->
                                 result.exceptionOrNull()?.message?.let { settingsOpen = true; android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_LONG).show() }
@@ -304,6 +319,8 @@ private fun RootScreen(viewModel: AppViewModel) {
                     onOpenConversation = { route = "chat:$it" },
                     onRecreateGroup = { old -> viewModel.recreateLegacyGroup(old) { r -> r.onSuccess { route = "chat:$it" } } },
                     onDismissOldGroup = viewModel::dismissLegacyGroup,
+                    whatsNew = whatsNew,
+                    onDismissWhatsNew = { viewModel.updateSettings { copy(lastSeenVersion = AppConfig.APP_VERSION) } },
                 )
             }
         }
@@ -345,6 +362,9 @@ private fun RootScreen(viewModel: AppViewModel) {
                     onUpdateSettings = viewModel::updateSettings,
                     onSetQuietHours = viewModel::setQuietHours,
                     insight = viewModel::insight,
+                    diagnosticsJson = viewModel::diagnosticsJson,
+                    selfTestJson = viewModel::selfTestJson,
+                    onSetSecureScreen = viewModel::setSecureScreen,
                     storageByChatJson = viewModel::storageByChatJson,
                     onClearLocalData = viewModel::clearLocalData,
                     onDeleteMessages = { ids -> ids.forEach { viewModel.deleteMessage(it, false) } },

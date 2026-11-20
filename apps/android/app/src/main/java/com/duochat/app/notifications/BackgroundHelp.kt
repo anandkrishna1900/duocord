@@ -49,6 +49,19 @@ object BackgroundHelp {
         startFirst(context, screens)
     }
 
+    /** Opens the phone screen the engine's health check points at ("notification_settings", "battery_settings", "background_settings"); anything else does nothing. */
+    fun openFix(context: Context, fix: String) {
+        val details = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))
+        when (fix) {
+            "notification_settings" -> startFirst(
+                context,
+                listOf(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName), details),
+            )
+            "battery_settings" -> askBatteryUnrestricted(context)
+            "background_settings" -> startFirst(context, listOf(details))
+        }
+    }
+
     private fun startFirst(context: Context, intents: List<Intent>) {
         for (i in intents) {
             if (runCatching { context.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess) return

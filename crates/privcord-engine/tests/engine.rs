@@ -1121,3 +1121,40 @@ fn a_silent_chat_notifies_flagged_silent_and_a_muted_one_not_at_all() {
     pump(&mut a, &mut b, &au, &bu);
     assert!(b.notifier.taken().is_empty());
 }
+
+
+#[test]
+fn the_chat_list_and_history_group_interleaved_chats_correctly() {
+    let clock = FakeClock::at(1_700_000_000_000);
+    let mut a = fresh("alice", &clock);
+    let b = fresh("bob", &clock);
+    let c = fresh("carol", &clock);
+    let bu = a
+        .core
+        .add_contact(&b.core.own_card(Some("Bob")).unwrap(), ContactTrust::Verified)
+        .unwrap();
+    let cu = a
+        .core
+        .add_contact(&c.core.own_card(Some("Carol")).unwrap(), ContactTrust::Verified)
+        .unwrap();
+    // Alternate between the two chats so the messages of one chat are never next to each other in storage order.
+    for i in 0..6 {
+        clock.advance(1_000);
+        a.core.send_message(&bu, &format!("to bob {i}"), None).unwrap();
+        clock.advance(1_000);
+        a.core.send_message(&cu, &format!("to carol {i}"), None).unwrap();
+    }
+    let snap = a.core.snapshot();
+    assert_eq!(snap.summaries.len(), 2);
+    for (who, label) in [(&bu, "to bob 5"), (&cu, "to carol 5")] {
+        let conv = ConversationId::Direct(who.clone());
+        let summary = snap.summaries.iter().find(|s| s.conversation == conv).unwrap();
+        assert_eq!(summary.last.as_ref().unwrap().text, label);
+        assert!(summary.last.as_ref().unwrap().own);
+        assert_eq!(summary.unread, 0);
+        let history = &snap.messages.iter().find(|(c, _)| *c == conv).unwrap().1;
+        assert_eq!(history.len(), 6);
+        assert!(history.windows(2).all(|w| w[0].client_created_at <= w[1].client_created_at), "oldest first");
+        assert!(history.iter().all(|m| m.text.starts_with(if label.contains("bob") { "to bob" } else { "to carol" })));
+    }
+}

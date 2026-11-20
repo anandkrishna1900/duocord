@@ -3013,20 +3013,31 @@ impl Core {
                 can_message: self.may_start_direct(&c.stored.uid),
             })
             .collect();
-        let mut by_conv: BTreeMap<ConversationId, Vec<ChatMessage>> = BTreeMap::new();
+        // Group by chat with a borrowed key; consecutive messages of one chat skip the lookup.
+        let mut lists: Vec<(&ConversationId, Vec<ChatMessage>)> = Vec::new();
+        let mut index: BTreeMap<&ConversationId, usize> = BTreeMap::new();
+        let mut last: Option<usize> = None;
         for m in self.messages.values() {
-            by_conv
-                .entry(m.conversation.clone())
-                .or_default()
-                .push(m.message.clone());
+            let slot =
+                match last.filter(|&i| lists.get(i).is_some_and(|(c, _)| *c == &m.conversation)) {
+                    Some(i) => i,
+                    None => *index.entry(&m.conversation).or_insert_with(|| {
+                        lists.push((&m.conversation, Vec::new()));
+                        lists.len() - 1
+                    }),
+                };
+            last = Some(slot);
+            if let Some((_, list)) = lists.get_mut(slot) {
+                list.push(m.message.clone());
+            }
         }
-        let messages = by_conv
-            .into_iter()
-            .map(|(c, mut v)| {
-                sort_messages(&mut v);
-                (c, v)
-            })
-            .collect();
+        let mut messages = Vec::with_capacity(index.len());
+        for &i in index.values() {
+            if let Some((c, v)) = lists.get_mut(i) {
+                sort_messages(v);
+                messages.push(((*c).clone(), std::mem::take(v)));
+            }
+        }
         let groups = self.groups.as_ref().map_or_else(Vec::new, |g| {
             g.my_groups()
                 .into_iter()

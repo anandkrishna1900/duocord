@@ -14,7 +14,7 @@ use crate::{
     aead,
     error::CryptoError,
     identity::Identity,
-    kdf::{hkdf_sha256, sha256},
+    kdf::{hkdf_sha256_info, sha256},
     rng::{random_array, Entropy},
     seal::{placeholder_epk, sign_blob},
 };
@@ -49,11 +49,17 @@ pub struct SealedMedia {
     pub chunks: Vec<Vec<u8>>,
 }
 
-fn iv_for(index: u32) -> [u8; 12] {
-    let mut iv = [0u8; 12];
-    iv[..4].copy_from_slice(b"dcm1");
-    iv[8..].copy_from_slice(&index.to_be_bytes());
-    iv
+/// The nonce for one piece: 8 bytes made from the key it is sealed under, then the piece's number (the receiver reads
+/// the number from it). No two pieces under one key share a nonce, and nothing about it is a fixed value in the code.
+fn iv_for(key: &[u8; 32], index: u32) -> Result<[u8; 12], CryptoError> {
+    let [a, b, c, d, e, f, g, h] = hkdf_sha256_info::<8>(key, &label("iv"))?;
+    let [i, j, k, l] = index.to_be_bytes();
+    Ok([a, b, c, d, e, f, g, h, i, j, k, l])
+}
+
+/// What `hkdf_sha256_info` is given for one purpose of this module.
+fn label(purpose: &str) -> Vec<u8> {
+    format!("{ROOT_TAG}/{purpose}").into_bytes()
 }
 
 fn root_of(size: u64, leaves: &[u8]) -> String {
@@ -72,10 +78,9 @@ pub fn seal_media(bytes: &[u8], entropy: &mut dyn Entropy) -> Result<SealedMedia
 /// files apart (a message id), so a file can be cut again later without keeping its chunks. Never the same for two
 /// messages, so equal files still look unrelated.
 pub fn file_key(secret: &[u8; 32], which: &str) -> Result<Zeroizing<[u8; 32]>, CryptoError> {
-    Ok(Zeroizing::new(hkdf_sha256::<32>(
+    Ok(Zeroizing::new(hkdf_sha256_info::<32>(
         secret,
-        ROOT_TAG.as_bytes(),
-        format!("file/{which}").as_bytes(),
+        &label(&format!("file/{which}")),
     )?))
 }
 
@@ -93,7 +98,7 @@ pub fn seal_media_with(bytes: &[u8], key: &[u8; 32]) -> Result<SealedMedia, Cryp
             .chunks(CHUNK_BYTES)
             .chain(bytes.is_empty().then_some(&[][..])),
     ) {
-        let ct = aead::encrypt(key, &iv_for(i), part, ROOT_TAG.as_bytes())?;
+        let ct = aead::encrypt(key, &iv_for(key, i)?, part, ROOT_TAG.as_bytes())?;
         leaves.extend_from_slice(&sha256(&ct));
         chunks.push(ct);
     }
@@ -145,10 +150,10 @@ impl std::fmt::Debug for MediaBox {
 impl MediaBox {
     pub fn of(r: &MediaRef) -> Result<Self, CryptoError> {
         let file = r.key().ok_or(CryptoError::Invalid)?;
-        let label = hkdf_sha256::<16>(&*file, ROOT_TAG.as_bytes(), b"label")?;
-        let key = hkdf_sha256::<32>(&*file, ROOT_TAG.as_bytes(), b"box")?;
+        let tag = hkdf_sha256_info::<16>(&*file, &label("label"))?;
+        let key = hkdf_sha256_info::<32>(&*file, &label("box"))?;
         Ok(Self {
-            label: format!("media-{}", codec::hex(&label)),
+            label: format!("media-{}", codec::hex(&tag)),
             key: Zeroizing::new(key),
         })
     }
@@ -162,13 +167,14 @@ impl MediaBox {
         entropy: &mut dyn Entropy,
     ) -> Result<SealedBlob, CryptoError> {
         let i = index.unwrap_or(LEAVES);
-        let ct = aead::encrypt(&*self.key, &iv_for(i), data, self.label.as_bytes())?;
+        let iv = iv_for(&self.key, i)?;
+        let ct = aead::encrypt(&*self.key, &iv, data, self.label.as_bytes())?;
         let mut blob = SealedBlob {
             v: 1,
             to: "media".into(),
             from: self.label.clone(),
             epk: placeholder_epk(entropy)?,
-            iv: codec::encode(&iv_for(i)),
+            iv: codec::encode(&iv),
             ct: codec::encode(&ct),
             sig: String::new(),
             kem: None,
@@ -185,7 +191,7 @@ impl MediaBox {
         }
         let iv = codec::decode(&blob.iv)?;
         let i = u32::from_be_bytes(<[u8; 4]>::try_from(iv.get(8..12)?).ok()?);
-        if iv.get(..4)? != b"dcm1" {
+        if iv != iv_for(&self.key, i).ok()? {
             return None;
         }
         let data = aead::decrypt(
@@ -250,7 +256,10 @@ impl MediaAssembler {
         let Some(key) = self.reference.key() else {
             return false;
         };
-        match aead::decrypt(&*key, &iv_for(index), ct, ROOT_TAG.as_bytes()) {
+        let Ok(iv) = iv_for(&key, index) else {
+            return false;
+        };
+        match aead::decrypt(&*key, &iv, ct, ROOT_TAG.as_bytes()) {
             Ok(plain) => {
                 self.parts.insert(index, plain);
                 true

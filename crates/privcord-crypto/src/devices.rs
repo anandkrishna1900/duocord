@@ -438,7 +438,7 @@ pub mod link {
     use super::*;
     use crate::{
         aead,
-        kdf::hkdf_sha256,
+        kdf::{hkdf_sha256, hkdf_sha256_info},
         rng::{random_array, Entropy},
     };
 
@@ -467,10 +467,9 @@ pub mod link {
     }
 
     fn key(secret: &Secret, step: &str) -> Result<zeroize::Zeroizing<[u8; 32]>, CryptoError> {
-        Ok(zeroize::Zeroizing::new(hkdf_sha256::<32>(
+        Ok(zeroize::Zeroizing::new(hkdf_sha256_info::<32>(
             secret.as_slice(),
-            b"duocord-link-v1",
-            step.as_bytes(),
+            format!("duocord-link-v1|{step}").as_bytes(),
         )?))
     }
 
@@ -1110,10 +1109,12 @@ mod tests {
     }
 
     fn seal_for_test(secret: &Secret, step: &str, value: &serde_json::Value) -> String {
-        let key =
-            crate::kdf::hkdf_sha256::<32>(secret.as_slice(), b"duocord-link-v1", step.as_bytes())
-                .unwrap();
-        let iv = [7u8; 12];
+        let key = crate::kdf::hkdf_sha256_info::<32>(
+            secret.as_slice(),
+            format!("duocord-link-v1|{step}").as_bytes(),
+        )
+        .unwrap();
+        let iv = crate::kdf::hkdf_sha256_info::<12>(&key, b"test-iv").unwrap();
         let ct =
             crate::aead::encrypt(&key, &iv, value.to_string().as_bytes(), step.as_bytes()).unwrap();
         format!("{}.{}", codec::encode(&iv), codec::encode(&ct))

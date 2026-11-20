@@ -37,6 +37,17 @@ pub fn hkdf_sha256<const N: usize>(
     Ok(out)
 }
 
+/// HKDF with no salt: everything that tells one use of the key from another goes in `info` (a purpose label and its
+/// parameters). For keys made from a secret that is already uniformly random, and for derivations whose only
+/// "salt" would be a public constant: the label belongs in `info`, where it separates uses just as well.
+pub fn hkdf_sha256_info<const N: usize>(ikm: &[u8], info: &[u8]) -> Result<[u8; N], CryptoError> {
+    let mut out = blank::<N>();
+    Hkdf::<Sha256>::new(None, ikm)
+        .expand(info, &mut out)
+        .map_err(|_| CryptoError::Invalid)?;
+    Ok(out)
+}
+
 /// HKDF-Expand only (RFC 5869 section 3.3): for a key that is already uniformly random (a chain key, a root from
 /// [`crate::pq::combine`]), the extract step and its salt add nothing, so there is no salt at all.
 pub fn hkdf_expand<const N: usize>(prk: &[u8; 32], info: &[u8]) -> Result<[u8; N], CryptoError> {

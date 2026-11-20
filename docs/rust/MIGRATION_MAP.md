@@ -9,12 +9,12 @@ Status meanings: **Ported, tested** = the Rust implementation exists and is chec
 | Status | Files | Lines |
 |---|---:|---:|
 | Ported, tested | 66 | 9855 |
-| Partly ported | 1 | 2298 |
+| Partly ported | 1 | 2300 |
 | Not yet ported | 0 | 0 |
-| Stays (UI) | 80 | 15627 |
-| Stays (platform adapter) | 57 | 11760 |
+| Stays (UI) | 82 | 15979 |
+| Stays (platform adapter) | 59 | 11862 |
 | Replaced by a library | 4 | 333 |
-| **All mapped files** | **208** | **39873** |
+| **All mapped files** | **212** | **40329** |
 
 Ported does not mean retired: the TypeScript and Kotlin versions stay in production until the apps call the Rust engine (M7 desktop, M8 Android) and the compatibility gates pass (PRD section 16).
 
@@ -68,17 +68,18 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 | `apps/desktop/src/components/AutoBackupControl.tsx` | 96 | `AutoBackupControl` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/Avatar.tsx` | 38 | `Avatar`, `BrandMark` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/ChannelsDialog.tsx` | 112 | `ChannelsDialog` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
-| `apps/desktop/src/components/ChatLayout.tsx` | 718 | `ChatLayout` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
+| `apps/desktop/src/components/ChatLayout.tsx` | 726 | `ChatLayout` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/Composer.tsx` | 345 | `Composer` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/DeviceLinkDialog.tsx` | 170 | `DeviceLinkDialog` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/DeviceRow.tsx` | 117 | `DeviceRow` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/FilterPills.tsx` | 30 | `ChatFilter`, `FilterPills` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/GroupDialogs.tsx` | 325 | `NewGroupDialog`, `GroupDetailsDialog` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/Icons.tsx` | 283 | `IconProps`, `SendIcon`, `ChatIcon`, `ShieldIcon`, `LockIcon`, `SettingsIcon` +32 | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
+| `apps/desktop/src/components/Insights.tsx` | 270 | `SealedBadge`, `DeliveryHealth`, `DevicesStrip`, `WhatsNew`, `WhatsNewBanner`, `SupportTools` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/KillSwitchDialogs.tsx` | 553 | `NukeDialog`, `ClearChatDialog` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/LockScreen.tsx` | 47 | `LockScreen` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/ManualConnectDialog.tsx` | 327 | `ManualConnectDialog` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
-| `apps/desktop/src/components/MessageList.tsx` | 502 | `MessageList` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
+| `apps/desktop/src/components/MessageList.tsx` | 530 | `MessageList` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/Modal.tsx` | 103 | `Modal` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/NetworkSettings.tsx` | 289 | `NetworkSettings` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/NetworkTransparency.tsx` | 59 | `NetworkTransparency` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
@@ -87,11 +88,12 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 | `apps/desktop/src/components/QrCode.tsx` | 18 | `QrCode` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/RecoveryDialogs.tsx` | 402 | `RecoveryDialogProps`, `RecoveryDialog` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/RequestDialog.tsx` | 57 | `RequestDialog` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
-| `apps/desktop/src/components/SettingsDialog.tsx` | 690 | `SettingsSection`, `SettingsDialog` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
+| `apps/desktop/src/components/SettingsDialog.tsx` | 703 | `SettingsSection`, `SettingsDialog` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/StorageByChat.tsx` | 69 | `StorageByChat` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/config.ts` | 14 | `config`, `isTauri` | App shell | UI | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/hooks/useChatEngine.ts` | 103 | `UseChatEngine`, `useChatEngine` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/hooks/useSettings.ts` | 33 | `useSettings` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
+| `apps/desktop/src/hooks/useWindowEffects.ts` | 28 | `useUnreadTitle`, `useSecureScreen` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/lib/appLock.ts` | 141 | `isLockEnabled`, `lockSupported`, `enableLock`, `disableLock`, `unlock`, `RELOCK_AFTER_MS` | WebAuthn app lock | UI/adapter (stays) | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/desktop/src/lib/ble.test.ts` | 128 | (none) | WebRTC peer connection and BLE link on the desktop | Transport adapters (stay); link policy moves to engine | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/desktop/src/lib/ble.ts` | 170 | `MessageTransport`, `BleBridgeEvent`, `BleBridge`, `BleHandlers`, `BleTransport`, `tauriBleBridge` | WebRTC peer connection and BLE link on the desktop | Transport adapters (stay); link policy moves to engine | Adapter | Stays (platform adapter) | Stays | n/a |
@@ -103,14 +105,14 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 | `apps/desktop/src/lib/deliveryDetails.test.ts` | 11 | (none) | Small pure helpers for the screens: privacy checkup, pinned chats, the hosts the app contacts | Desktop UI | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/lib/deliveryDetails.ts` | 27 | `DeliveryRow`, `stateWords`, `deliveryRows` | Small pure helpers for the screens: privacy checkup, pinned chats, the hosts the app contacts | Desktop UI | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/lib/encryption.ts` | 78 | `TextCipher`, `createTextCipher` | Secure storage and at-rest encryption helpers | SecureStore adapter (Tauri keyring) | Adapter | Stays (platform adapter) | Stays | n/a |
-| `apps/desktop/src/lib/engine.ts` | 2298 | `EnginePhase`, `Trust`, `ConnState`, `ContactRecord`, `LastMessage`, `ContactView` +17 | The desktop chat engine | engine: every rule, the chat list (last message, unread, delivery detail), group views, search, backups, invites, signaling, groups, files, channels, mesh, deletion. Left in TypeScript: starting and driving the WebRTC links and the Bluetooth bridge, turning events into screen state, notices and toasts, settings | Engine/Adapter | Partly ported | M7: rewire onto the engine; the WebRTC and Bluetooth driving becomes the adapter | engine integration tests |
-| `apps/desktop/src/lib/engineApi.ts` | 100 | `SendResult`, `ChatEngineApi` | The interface the screens use to talk to a chat engine (TypeScript or Rust) | Platform seam (stays) | Adapter | Stays (platform adapter) | Stays | n/a |
+| `apps/desktop/src/lib/engine.ts` | 2300 | `EnginePhase`, `Trust`, `ConnState`, `ContactRecord`, `LastMessage`, `ContactView` +17 | The desktop chat engine | engine: every rule, the chat list (last message, unread, delivery detail), group views, search, backups, invites, signaling, groups, files, channels, mesh, deletion. Left in TypeScript: starting and driving the WebRTC links and the Bluetooth bridge, turning events into screen state, notices and toasts, settings | Engine/Adapter | Partly ported | M7: rewire onto the engine; the WebRTC and Bluetooth driving becomes the adapter | engine integration tests |
+| `apps/desktop/src/lib/engineApi.ts` | 106 | `SendResult`, `ChatEngineApi` | The interface the screens use to talk to a chat engine (TypeScript or Rust) | Platform seam (stays) | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/desktop/src/lib/engineBridge.test.ts` | 65 | (none) | Page side of the hosted engine: ordered inbound calls, Busy retry, Tauri events | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; M7 seam (page not rewired yet) | n/a |
 | `apps/desktop/src/lib/engineBridge.ts` | 116 | `EngineBridge`, `PathName`, `LinkKindName`, `HostedEngine`, `tauriEngineBridge` | Page side of the hosted engine: ordered inbound calls, Busy retry, Tauri events | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; M7 seam (page not rewired yet) | n/a |
 | `apps/desktop/src/lib/format.ts` | 73 | `formatTime`, `formatDay`, `formatLastSeen`, `initials`, `avatarHue`, `truncateMiddle` +1 | Presentation helpers, UI settings, themes, notifications bridge | UI / adapter (stays) | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/lib/hosted/e2e.test.ts` | 360 | (none) | End to end: two hosted engines on real Rust engine processes | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/desktop/src/lib/hosted/enable.ts` | 13 | `hostedEngineAvailable`, `hostedEngineEnabled` | The desktop chat engine on the Rust engine: commands, state, identity migration, the on/off switch | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; opt-in until M9 | n/a |
-| `apps/desktop/src/lib/hosted/hostedEngine.ts` | 861 | `HostedDeps`, `ENGINE_IDENTITY_KEY`, `friendly`, `HostedChatEngine`, `shapePrefs` | The desktop chat engine on the Rust engine: commands, state, identity migration, the on/off switch | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; opt-in until M9 | n/a |
+| `apps/desktop/src/lib/hosted/hostedEngine.ts` | 874 | `HostedDeps`, `ENGINE_IDENTITY_KEY`, `friendly`, `HostedChatEngine`, `shapePrefs` | The desktop chat engine on the Rust engine: commands, state, identity migration, the on/off switch | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; opt-in until M9 | n/a |
 | `apps/desktop/src/lib/hosted/legacyIdentity.ts` | 29 | `legacySecretsHex`, `seedEngineIdentity` | The desktop chat engine on the Rust engine: commands, state, identity migration, the on/off switch | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; opt-in until M9 | n/a |
 | `apps/desktop/src/lib/hosted/runtime.test.ts` | 308 | (none) | WebRTC and relay adapters for the hosted engine | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/desktop/src/lib/hosted/runtime.ts` | 600 | `LinkTransport`, `BleLike`, `RelayHub`, `RuntimeOptions`, `HostedRuntime` | WebRTC and relay adapters for the hosted engine | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays | n/a |
@@ -118,6 +120,8 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 | `apps/desktop/src/lib/hosted/shape.ts` | 416 | `LinkStateJson`, `PathKindJson`, `DeliveryJson`, `ContactJson`, `MessageJson`, `ConversationJson` +7 | Shapes the Rust engine's snapshot into the screens' state | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; tested on a real engine snapshot | n/a |
 | `apps/desktop/src/lib/hosted/start.ts` | 36 | `startHostedEngine` | The desktop chat engine on the Rust engine: commands, state, identity migration, the on/off switch | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; opt-in until M9 | n/a |
 | `apps/desktop/src/lib/identity.ts` | 182 | `LOCAL_ID`, `DeviceIdentity`, `localDeviceId`, `createIdentityFromPhrase`, `loadIdentity`, `contactCardOf` +6 | Identity load and create | crypto::identity + engine | Engine | Ported, tested | M7 | n/a |
+| `apps/desktop/src/lib/insightInputs.test.ts` | 29 | (none) | Shapes app state into inputs of the engine insights (signaling words, quiet-now, unread sum, window title) | UI glue (stays); the rules live in engine::insights | Adapter | Stays (platform adapter) | Stays | n/a |
+| `apps/desktop/src/lib/insightInputs.ts` | 54 | `engineSignaling`, `quietNow`, `activeMutes`, `totalUnread`, `titleFor`, `whatsNewPending` +1 | Shapes app state into inputs of the engine insights (signaling words, quiet-now, unread sum, window title) | UI glue (stays); the rules live in engine::insights | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/desktop/src/lib/killSwitch.test.ts` | 263 | (none) | Emergency erase steps for the webview (local storage, IndexedDB, files, Tauri commands) | engine::core::privacy runs the plan and the report; these files only call web and OS APIs | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/desktop/src/lib/killSwitch.ts` | 270 | `KillSwitchTargets`, `WebStorageLike`, `DesktopKillSwitchDeps`, `KILL_SWITCH_REPORT_KEY`, `createAppKillSwitchExecutor`, `createConversationKillSwitchExecutor` +3 | Emergency erase steps for the webview (local storage, IndexedDB, files, Tauri commands) | engine::core::privacy runs the plan and the report; these files only call web and OS APIs | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/desktop/src/lib/killSwitchFactory.ts` | 60 | `buildKillSwitchDeps`, `clearPersistedKillSwitchReport` | Emergency erase steps for the webview (local storage, IndexedDB, files, Tauri commands) | engine::core::privacy runs the plan and the report; these files only call web and OS APIs | Adapter | Stays (platform adapter) | Stays | n/a |
@@ -242,6 +246,6 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 | `apps/android/app/src/main/java/com/duochat/app/ui/QrDecode.kt` | 48 | `QrDecode` | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/ui/QrScanner.kt` | 364 | `rememberQrScanner`, `QrScannerScreen`, `ScanFrame`, `analyze`, `decodeCaptured`, `decodeImage` +2 | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/ui/QrUtils.kt` | 35 | `qrBitmap` | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
-| `apps/android/app/src/main/java/com/duochat/app/ui/SettingsDialog.kt` | 1093 | `SettingsDialog`, `SectionTitle`, `DetailRow`, `ToggleRow`, `ChoiceChip`, `parseColor` +2 | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
+| `apps/android/app/src/main/java/com/duochat/app/ui/SettingsDialog.kt` | 1098 | `SettingsDialog`, `SectionTitle`, `DetailRow`, `ToggleRow`, `ChoiceChip`, `parseColor` +2 | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/ui/StatusScreens.kt` | 125 | `LoadingScreen`, `FatalScreen` | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/ui/Theme.kt` | 218 | `figtree`, `style`, `mix`, `scheme`, `DuoChatTheme`, `parseColor` +2 | Compose screens | UI | UI | Stays (UI) | Stays | n/a |

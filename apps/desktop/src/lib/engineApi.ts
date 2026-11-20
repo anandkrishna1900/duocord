@@ -59,6 +59,12 @@ export interface ChatEngineApi {
   insight?(name: string, input: unknown): Promise<unknown>;
   /** What each chat takes on this device (the shared engine counts it). */
   storageByChat?(): Promise<Array<{ id: string; messages: number; files: number; bytes: number; fileBytes: number; fileIds: string[] }>>;
+  /** A counts-only report of this install (the engine builds it from `app`); pretty JSON text. */
+  diagnostics?(app: unknown): Promise<string>;
+  /** The engine's own checks, each with a verdict. */
+  selfTest?(): Promise<Array<{ name: string; ok: boolean; detail: string }>>;
+  /** Hide the app from screenshots and recording (a preference that follows the account). */
+  setSecureScreen?(on: boolean): void;
   togglePin?(conversation: string): void;
   setArchived?(conversation: string, archived: boolean): void;
   /** Turn a chat's notifications off until a time in ms (0 turns them on again). */

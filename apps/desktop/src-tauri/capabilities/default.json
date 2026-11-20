@@ -5,6 +5,8 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "notification:default"
+    "notification:default",
+    "core:window:allow-set-content-protected",
+    "core:window:allow-set-title"
   ]
 }

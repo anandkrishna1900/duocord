@@ -70,6 +70,7 @@ rule(r"desktop/src/lib/bleFraming(\.test)?\.ts", "BLE chunk framing and rotating
 rule(r"desktop/src/lib/localDb\.ts", "Desktop SQLite schema, encrypted columns, file store", "storage::SqliteStorage; privcord-import (desktop importer)", "Storage", PORTED, "M7: after the importer has run on every install", "importer and migration tests on generated fixtures (docs/legacy-fixtures.json); the browser file store stays in the adapter")
 rule(r"desktop/src/lib/(secureStore|encryption)\.ts", "Secure storage and at-rest encryption helpers", "SecureStore adapter (Tauri keyring)", "Adapter", ADAPTER, "Stays")
 rule(r"desktop/src/lib/identity\.ts", "Identity load and create", "crypto::identity + engine", "Engine", PORTED, "M7")
+rule(r"desktop/src/lib/insightInputs(\.test)?\.ts", "Shapes app state into inputs of the engine insights (signaling words, quiet-now, unread sum, window title)", "UI glue (stays); the rules live in engine::insights", "Adapter", ADAPTER, "Stays")
 rule(r"desktop/src/lib/appLock\.ts", "WebAuthn app lock", "UI/adapter (stays)", "Adapter", ADAPTER, "Stays")
 rule(r"desktop/src/lib/killSwitch.*\.ts", "Emergency erase steps for the webview (local storage, IndexedDB, files, Tauri commands)", "engine::core::privacy runs the plan and the report; these files only call web and OS APIs", "Adapter", ADAPTER, "Stays")
 rule(r"desktop/src/lib/(outbox)(\.test)?\.ts", "Retry/outbox policy", "engine::core delivery", "Engine", PORTED, "M7", "engine tests")

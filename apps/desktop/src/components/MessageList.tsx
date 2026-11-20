@@ -18,6 +18,34 @@ import {
 
 type LoadFile = (messageId: string) => Promise<{ blob: Blob; meta: FileMeta } | null>;
 
+const SPEEDS = [1, 1.5, 2];
+let lastSpeed = 1; // remembered in memory only
+
+/** The browser's audio controls plus a 1x / 1.5x / 2x speed button. */
+function AudioPlayer({ src, label }: { src: string; label: string }) {
+  const ref = useRef<HTMLAudioElement>(null);
+  const [speed, setSpeed] = useState(lastSpeed);
+  useEffect(() => {
+    if (ref.current) ref.current.playbackRate = speed;
+  }, [speed, src]);
+  return (
+    <div className="audio-row">
+      <audio ref={ref} className="file-audio" src={src} controls preload="metadata" aria-label={label} onLoadedMetadata={(e) => (e.currentTarget.playbackRate = speed)} />
+      <button
+        type="button"
+        className="button ghost small speed-button"
+        aria-label={`Playback speed ${speed}x, change`}
+        onClick={() => {
+          lastSpeed = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]!;
+          setSpeed(lastSpeed);
+        }}
+      >
+        {speed}x
+      </button>
+    </div>
+  );
+}
+
 /** A received or sent file: a preview for safe image types, a card with Save for everything else. */
 function FileBubble({ message, loadFile }: { message: UiMessage; loadFile: LoadFile }) {
   const meta = message.file;
@@ -88,7 +116,7 @@ function FileBubble({ message, loadFile }: { message: UiMessage; loadFile: LoadF
         </div>
       ) : null}
       {isVideo && url ? <video className="file-video" src={url} controls preload="metadata" playsInline /> : null}
-      {isAudio && url ? <audio className="file-audio" src={url} controls preload="metadata" aria-label={meta.name.startsWith('voice-note') ? 'Voice note' : meta.name} /> : null}
+      {isAudio && url ? <AudioPlayer src={url} label={meta.name.startsWith('voice-note') ? 'Voice note' : meta.name} /> : null}
       <div className="file-card">
         <span className="file-icon" aria-hidden="true">
           <FileIcon size={22} />

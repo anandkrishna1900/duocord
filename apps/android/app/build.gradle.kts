@@ -168,7 +168,7 @@ dependencies {
     // WebSocket client for the signaling relay and Nostr relays.
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     // The generated bindings call the Rust library through JNA.
-    implementation("net.java.dev.jna:jna:5.14.0@aar")
+    implementation("net.java.dev.jna:jna:5.19.1@aar")
 
     implementation("androidx.room:room-runtime:2.8.5")
     implementation("androidx.room:room-ktx:2.8.5")

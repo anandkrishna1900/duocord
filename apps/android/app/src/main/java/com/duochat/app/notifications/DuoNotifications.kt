@@ -46,6 +46,7 @@ object DuoNotifications {
             body = body,
             settings = settings,
             replyTo = replyTo,
+            silent = notice.silent,
         )
     }
 
@@ -56,6 +57,7 @@ object DuoNotifications {
         body: String,
         settings: AppSettings,
         replyTo: String? = null,
+        silent: Boolean = false,
     ) {
         if (!settings.notificationsEnabled) return
         if (
@@ -87,6 +89,7 @@ object DuoNotifications {
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setSilent(silent)
         if (replyTo != null) {
             val reply = Intent(context, QuickReply::class.java).apply {
                 action = QuickReply.ACTION

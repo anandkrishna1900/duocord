@@ -67,6 +67,12 @@ interface ChatEngineApi {
     /** Turn a chat's notifications off until a time in ms (0 turns them on again). */
     suspend fun setMuteUntil(conversationId: String, untilMs: Long): Result<Unit>
     suspend fun setQuietHours(enabled: Boolean, from: Int, to: Int): Result<Unit>
+    /** Turn a chat's notification sound and vibration off or on. */
+    suspend fun setSilent(conversationId: String, silent: Boolean): Result<Unit>
+    /** Per-device delivery of one message, as JSON from the shared engine. */
+    suspend fun messageReceiptsJson(messageId: String): String
+    /** How many nearby phones each chat's Bluetooth route passes through, as JSON from the shared engine. */
+    suspend fun meshHopsJson(): String
     /** Ready-made times for "send later" in the person's own time zone: label and time in ms. */
     suspend fun quickSendTimes(): List<Pair<String, Long>>
 
@@ -105,7 +111,7 @@ interface ChatEngineApi {
 }
 
 /** Something the user should hear about while the app is in the background. */
-class IncomingNotice(val id: String, val conversationId: String, val title: String, val body: String, val isMessage: Boolean = true)
+class IncomingNotice(val id: String, val conversationId: String, val title: String, val body: String, val isMessage: Boolean = true, val silent: Boolean = false)
 
 /** One message found by [ChatEngineApi.search]. */
 class SearchHit(val messageId: String, val conversationId: String, val conversationName: String, val senderName: String, val text: String, val at: Long)

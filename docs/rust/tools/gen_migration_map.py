@@ -107,6 +107,7 @@ rule(r"android/.*/data/Social\.kt", "Delete/react frames, backup", "domain::soci
 rule(r"android/.*/data/(Models|MessageStore)\.kt", "Chat state models and the in-memory message store over Room", "engine state (snapshot, events) and storage::SqliteStorage", "Engine", PORTED, "M8: the engine owns this state", "engine and storage tests")
 rule(r"android/.*/data/Preferences\.kt", "App settings storage", "UI state (stays)", "UI", UI, "Stays")
 rule(r"android/.*/data/QuickWins\.kt", "Small pure helpers for the screens: pinned chats, hosts the app contacts, privacy checkup", "UI state (stays)", "UI", UI, "Stays")
+rule(r"android/.*/data/Waveform\.kt", "Voice-note waveform: peak per bar from decoded samples (drawing only)", "UI state (stays)", "UI", UI, "Stays")
 rule(r"android/.*/data/Themes\.kt", "Themes", "UI", "UI", UI, "Stays")
 rule(r"android/.*/data/local/DuoDatabase\.kt", "Room database", "storage::SqliteStorage; privcord-import (Room importer, Keystore decryptor supplied by the app)", "Storage", PORTED, "M8: after the importer has run on every install", "importer tests on generated Room v7 fixtures")
 rule(r"android/.*/engine/ChatEngineApi\.kt", "The interface the screens use to talk to a chat engine (the Rust engine)", "Platform seam (stays)", "Adapter", ADAPTER, "Stays")

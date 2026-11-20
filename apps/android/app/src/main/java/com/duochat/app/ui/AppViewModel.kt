@@ -221,6 +221,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { engine?.togglePin(conversationId) }
     }
 
+    fun setSilent(conversationId: String, silent: Boolean) {
+        viewModelScope.launch { engine?.setSilent(conversationId, silent) }
+    }
+
+    suspend fun messageReceiptsJson(messageId: String): String = engine?.messageReceiptsJson(messageId) ?: "[]"
+
     fun setArchived(conversationId: String, archived: Boolean) {
         viewModelScope.launch { engine?.setArchived(conversationId, archived) }
     }

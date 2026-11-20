@@ -150,6 +150,9 @@ fun ChatScreen(
     conversationId: String,
     muteUntil: Long,
     archived: Boolean,
+    silent: Boolean = false,
+    onSetSilent: (Boolean) -> Unit = {},
+    loadReceipts: suspend (String) -> String = { "[]" },
     onBack: () -> Unit,
     onSend: (String, String?, (Result<Unit>) -> Unit) -> Unit,
     onSendFile: (String, String, ByteArray, String?, (Result<Unit>) -> Unit) -> Unit,
@@ -273,6 +276,10 @@ fun ChatScreen(
                                     DropdownMenuItem(text = { Text(label) }, onClick = { menuOpen = false; onMuteUntil(until) })
                                 }
                             }
+                            DropdownMenuItem(
+                                text = { Text(if (silent) "Notifications with sound" else "Silent notifications") },
+                                onClick = { menuOpen = false; onSetSilent(!silent) },
+                            )
                             if (friend != null && friend.link != LinkStatus.CONNECTED) {
                                 DropdownMenuItem(
                                     text = { Text("Connect over Bluetooth") },
@@ -350,7 +357,7 @@ fun ChatScreen(
             if (friend != null && friend.link == LinkStatus.CONNECTED && friend.path == com.duochat.app.data.ConnectionPath.BLUETOOTH) {
                 Banner(
                     Icons.Filled.Shield,
-                    "Nearby mode: no internet needed. This chat is going over Bluetooth, straight to ${friend.name}'s phone.",
+                    "Nearby mode: no internet needed. This chat is going over Bluetooth ${com.duochat.app.data.hopsWords(state.meshHops[conversationId])} to ${friend.name}'s phone.",
                     MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -365,6 +372,19 @@ fun ChatScreen(
                             Text(com.duochat.app.data.deliveryWords(m.deliveryState), style = MaterialTheme.typography.titleMedium)
                             if (m.totalRecipients > 1) Text("Delivered to ${m.deliveredTo} of ${m.totalRecipients} people", style = MaterialTheme.typography.bodyMedium)
                             friend?.path?.let { Text("Right now this chat is ${it.label.lowercase()}.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                            val receipts by produceState(emptyList<com.duochat.app.data.Receipt>(), m.messageId) {
+                                value = withContext(Dispatchers.IO) { com.duochat.app.data.parseReceipts(loadReceipts(m.messageId)) }
+                            }
+                            if (receipts.isNotEmpty()) {
+                                Spacer(Modifier.height(8.dp))
+                                val timeFormat = java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT)
+                                receipts.forEach { r ->
+                                    Text(
+                                        com.duochat.app.data.receiptLine(r) { at -> timeFormat.format(java.util.Date(at)) },
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                }
+                            }
                             Spacer(Modifier.height(8.dp))
                             Text(
                                 "Messages are end-to-end encrypted on every route. A person with several devices gets the message on each; the first one to receive it counts.",
@@ -1029,7 +1049,15 @@ private fun FileContent(
             }
         }
         if (progress != null) {
-            LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().padding(top = 6.dp), color = color, trackColor = color.copy(alpha = 0.2f))
+            val percent = (progress * 100).toInt().coerceIn(0, 100)
+            Box(Modifier.padding(top = 6.dp).size(36.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier.fillMaxSize().semantics { contentDescription = "Transfer $percent percent" },
+                    color = color, trackColor = color.copy(alpha = 0.2f), strokeWidth = 3.dp,
+                )
+                Text("$percent", style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp), color = color)
+            }
         }
     }
     if (viewing) PhotoViewer(
@@ -1586,6 +1614,11 @@ private fun decodeUpright(bytes: ByteArray, maxSide: Int): androidx.compose.ui.g
     return android.graphics.Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true).asImageBitmap()
 }
 
+private const val WAVE_BARS = 48
+
+/** Bar heights by message id, so a bubble scrolled back into view does not decode its voice note again. */
+private val waveformCache = java.util.concurrent.ConcurrentHashMap<String, FloatArray>()
+
 /** The voice note playing right now, if any (weak: a released player is simply gone). */
 private var nowPlaying: java.lang.ref.WeakReference<androidx.media3.exoplayer.ExoPlayer>? = null
 
@@ -1608,6 +1641,11 @@ private fun VoiceNote(messageId: String, arrived: Boolean, size: Int, color: Col
     var position by remember { mutableStateOf(0L) }
     var duration by remember { mutableStateOf(0L) }
     var speed by remember { mutableStateOf(1f) }
+    // Bar heights from the real audio, decoded once per message; null (not decodable yet or at all) keeps the plain bar.
+    val peaks by produceState<FloatArray?>(waveformCache[messageId], file) {
+        val f = file ?: return@produceState
+        if (value == null) value = WaveformDecoder.peaks(f, WAVE_BARS)?.also { waveformCache[messageId] = it }
+    }
     androidx.compose.runtime.DisposableEffect(file) {
         // Capture the file this effect is for. Reading `file` inside onDispose saw the NEW file when the key changed
         // (null -> file), so the decrypted voice note was deleted the moment it was written: "can't be played".
@@ -1667,11 +1705,31 @@ private fun VoiceNote(messageId: String, arrived: Boolean, size: Int, color: Col
         }
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            LinearProgressIndicator(
-                progress = { if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f },
-                modifier = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape),
-                color = color, trackColor = color.copy(alpha = 0.22f), drawStopIndicator = {},
-            )
+            val bars = peaks
+            if (bars != null) {
+                androidx.compose.foundation.Canvas(
+                    Modifier.fillMaxWidth().height(28.dp).semantics { contentDescription = "Voice note waveform" },
+                ) {
+                    val played = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
+                    val slot = size.width / bars.size
+                    val barWidth = slot * 0.6f
+                    bars.forEachIndexed { i, v ->
+                        val h = (size.height * v).coerceAtLeast(3.dp.toPx())
+                        drawRoundRect(
+                            color = if ((i + 0.5f) / bars.size <= played) color else color.copy(alpha = 0.35f),
+                            topLeft = androidx.compose.ui.geometry.Offset(i * slot + (slot - barWidth) / 2, (size.height - h) / 2),
+                            size = androidx.compose.ui.geometry.Size(barWidth, h),
+                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(barWidth / 2),
+                        )
+                    }
+                }
+            } else {
+                LinearProgressIndicator(
+                    progress = { if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f },
+                    modifier = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape),
+                    color = color, trackColor = color.copy(alpha = 0.22f), drawStopIndicator = {},
+                )
+            }
             Spacer(Modifier.height(6.dp))
             val shown = if (isPlaying || position > 0) position else duration
             Row(verticalAlignment = Alignment.CenterVertically) {

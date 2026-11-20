@@ -106,6 +106,7 @@ fun HomeScreen(
     pinned: List<String> = emptyList(),
     archived: List<String> = emptyList(),
     onTogglePin: (String) -> Unit = {},
+    silentChats: List<String> = emptyList(),
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     var filter by rememberSaveable { mutableStateOf(Filter.ALL) }
@@ -225,7 +226,7 @@ fun HomeScreen(
                                 fadeOutSpec = androidx.compose.animation.core.tween(Motion.SMALL_OUT),
                             )
                             .riseIn(play = introPlaying && index < 10, delayMillis = 60 + index * 40),
-                    ) { ChatRow(chat, pinned = chat.id in pinned, onLongClick = { onTogglePin(chat.id) }) { onOpenChat(chat) } }
+                    ) { ChatRow(chat, pinned = chat.id in pinned, silent = chat.id in silentChats, onLongClick = { onTogglePin(chat.id) }) { onOpenChat(chat) } }
                 }
                 if (archived.isNotEmpty() || showArchived) item(key = "archived-toggle") {
                     androidx.compose.material3.TextButton(
@@ -422,7 +423,7 @@ private fun SheetAction(icon: ImageVector, title: String, detail: String, enable
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun ChatRow(chat: ChatSummary, pinned: Boolean = false, onLongClick: () -> Unit = {}, onClick: () -> Unit) {
+private fun ChatRow(chat: ChatSummary, pinned: Boolean = false, silent: Boolean = false, onLongClick: () -> Unit = {}, onClick: () -> Unit) {
     val unread = chat.unread > 0
     Row(
         modifier = Modifier.fillMaxWidth()
@@ -439,6 +440,13 @@ private fun ChatRow(chat: ChatSummary, pinned: Boolean = false, onLongClick: () 
                     fontWeight = if (unread) FontWeight.Bold else FontWeight.SemiBold,
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
                 )
+                if (silent) {
+                    Spacer(Modifier.width(6.dp))
+                    androidx.compose.material3.Icon(
+                        androidx.compose.material.icons.Icons.Filled.NotificationsOff, contentDescription = "Silent notifications",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp),
+                    )
+                }
                 if (pinned) {
                     Spacer(Modifier.width(6.dp))
                     androidx.compose.material3.Icon(

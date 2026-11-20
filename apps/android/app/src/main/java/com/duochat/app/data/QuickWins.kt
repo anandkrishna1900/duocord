@@ -149,3 +149,31 @@ fun activeMutes(muteUntil: Map<String, Long>, now: Long = System.currentTimeMill
 /** Is the current local minute inside quiet hours (they may wrap midnight)? Inputs only; the engine decides what it means. */
 fun inQuietNow(q: QuietHoursPref, minuteOfDay: Int): Boolean = q.enabled &&
     (if (q.from <= q.to) minuteOfDay in q.from until q.to else minuteOfDay >= q.from || minuteOfDay < q.to)
+
+/** One of the recipient's devices and what it did with a message. [state] is "delivered", "read" or "waiting". */
+data class Receipt(val deviceId: String, val deviceName: String?, val state: String, val at: Long)
+
+fun parseReceipts(json: String): List<Receipt> = runCatching {
+    JSONArray(json).objects().map {
+        Receipt(it.getString("device_id"), if (it.isNull("device_name")) null else it.optString("device_name").ifBlank { null }, it.getString("state"), it.optLong("at", 0L))
+    }
+}.getOrDefault(emptyList())
+
+/** "Laptop: read 12:03"; a device that has not got it yet shows "waiting". */
+fun receiptLine(r: Receipt, timeOf: (Long) -> String): String {
+    val who = r.deviceName ?: ("Device " + r.deviceId.take(4))
+    return if (r.state == "waiting" || r.at <= 0L) "$who: waiting" else "$who: ${r.state} ${timeOf(r.at)}"
+}
+
+/** Conversation id to the number of nearby phones its Bluetooth route passes through. */
+fun parseMeshHops(json: String): Map<String, Int> = runCatching {
+    val o = JSONObject(json)
+    o.keys().asSequence().associateWith { o.getInt(it) }
+}.getOrDefault(emptyMap())
+
+/** The Bluetooth banner's route: straight to the phone, or through [hops] nearby phones. */
+fun hopsWords(hops: Int?): String = when {
+    hops == null || hops <= 0 -> "directly"
+    hops == 1 -> "through 1 nearby phone"
+    else -> "through $hops nearby phones"
+}

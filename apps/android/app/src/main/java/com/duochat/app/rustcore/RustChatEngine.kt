@@ -117,6 +117,7 @@ class RustChatEngine(
     private val refreshRequests = Channel<Unit>(Channel.CONFLATED)
     private var last: SnapshotDto? = null
     private var prefs: com.duochat.app.data.Prefs = com.duochat.app.data.Prefs()
+    private var meshHops: Map<String, Int> = emptyMap()
     private var zoneSent: Int? = null
     private var notice: String? = null
     private var groupOnly = initialGroupOnly
@@ -344,7 +345,7 @@ class RustChatEngine(
     }
 
     private val notifier = object : NotifierCallbacks {
-        override fun messageReceived(conversation: String, sender: String, preview: String) {}
+        override fun messageReceived(conversation: String, sender: String, preview: String, silent: Boolean) {}
     }
 
     // ------------------------------------------------------------------ lifecycle
@@ -483,6 +484,7 @@ class RustChatEngine(
 
     private fun loadPrefs(e: PrivcordEngine) {
         runCatching { prefs = com.duochat.app.data.parsePrefs(e.prefsJson()) }
+        runCatching { meshHops = com.duochat.app.data.parseMeshHops(e.meshHopsJson()) }
     }
 
     private suspend fun migrateLegacyMutes(e: PrivcordEngine) {
@@ -564,7 +566,7 @@ class RustChatEngine(
             val title = snapshot.contacts.firstOrNull { it.uid == conversation }?.displayName
                 ?: snapshot.groups.firstOrNull { it.id == conversation }?.name ?: "New message"
             val body = message?.let { if (it.isFile) filePreviewText(it.text) else it.text } ?: "New message"
-            onNotify(IncomingNotice(messageId, conversation, title, body))
+            onNotify(IncomingNotice(messageId, conversation, title, body, silent = conversation in prefs.silentChats))
         }
     }
 
@@ -1034,7 +1036,7 @@ class RustChatEngine(
 
         _state.update {
             it.copy(
-                prefs = prefs, contacts = contacts, groups = groups, chats = summaries, messages = shaped,
+                prefs = prefs, meshHops = meshHops, contacts = contacts, groups = groups, chats = summaries, messages = shaped,
                 queuedCount = s.queued.toInt(), groupOnly = groupOnly,
                 channels = s.channels.map { name ->
                     ChannelView("chan:$name", name, s.conversations.firstOrNull { c -> c.id == "chan:$name" }?.unread?.toInt() ?: 0, online)
@@ -1273,6 +1275,10 @@ class RustChatEngine(
     override suspend fun setArchived(conversationId: String, archived: Boolean): Result<Unit> = call { setArchived(conversationId, archived) }.also { requestRefresh() }
     override suspend fun setMuteUntil(conversationId: String, untilMs: Long): Result<Unit> = call { setMuteUntil(conversationId, untilMs) }.also { requestRefresh() }
     override suspend fun setQuietHours(enabled: Boolean, from: Int, to: Int): Result<Unit> = call { setQuietHours(enabled, from.toUShort(), to.toUShort()) }.also { requestRefresh() }
+
+    override suspend fun setSilent(conversationId: String, silent: Boolean): Result<Unit> = call { setSilent(conversationId, silent) }.also { requestRefresh() }
+    override suspend fun messageReceiptsJson(messageId: String): String = call { messageReceiptsJson(messageId) }.getOrDefault("[]")
+    override suspend fun meshHopsJson(): String = call { meshHopsJson() }.getOrDefault("{}")
 
     override suspend fun insight(name: String, inputJson: String): String =
         call { insight(name, inputJson) }.getOrDefault("[]")

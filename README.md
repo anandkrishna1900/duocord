@@ -1,6 +1,6 @@
 # PrivCord: private, end-to-end encrypted messenger with no account, no phone number and no server that reads your chats
 
-[![CI](https://github.com/anandkrishna1900/duocord/actions/workflows/ci.yml/badge.svg)](https://github.com/anandkrishna1900/duocord/actions/workflows/ci.yml)
+[![CI](https://github.com/anandkrishna1900/PrivCord/actions/workflows/ci.yml/badge.svg)](https://github.com/anandkrishna1900/PrivCord/actions/workflows/ci.yml)
 ![Platforms: Windows and Android](https://img.shields.io/badge/platforms-Windows%20%7C%20Android-blue)
 ![Rust engine](https://img.shields.io/badge/engine-Rust-orange)
 ![End-to-end encrypted](https://img.shields.io/badge/chats-end--to--end%20encrypted-brightgreen)

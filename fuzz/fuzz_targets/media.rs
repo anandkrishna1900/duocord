@@ -21,7 +21,9 @@ fuzz_target!(|data: &[u8]| {
     }
     // A real file and pieces changed by the input: what comes out is the file or nothing.
     let file: Vec<u8> = data.iter().copied().cycle().take(70_000).collect();
-    let Ok(sealed) = seal_media_with(&file, &[7u8; 32]) else {
+    // The key comes from the input too, so no fixed key is built in.
+    let key = privcord_crypto::kdf::sha256(data);
+    let Ok(sealed) = seal_media_with(&file, &key) else {
         return;
     };
     let mut a = MediaAssembler::new(sealed.reference.clone()).expect("own reference");

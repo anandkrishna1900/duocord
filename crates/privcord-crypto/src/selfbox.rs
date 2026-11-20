@@ -17,7 +17,7 @@ use crate::{
     devices::DeviceEntry,
     error::CryptoError,
     identity::{uid_from_keys, Identity},
-    kdf::{hkdf_sha256, sha256},
+    kdf::{hkdf_sha256_info, sha256},
     rng::{random_array, Entropy},
     seal::{open, placeholder_epk, seal, sign_blob, verify_blob_signature},
 };
@@ -30,7 +30,12 @@ pub const EPOCH_MS: i64 = 7 * 24 * 3600 * 1000;
 /// The largest plaintext one blob carries (relays refuse large events; risk 3).
 pub const MAX_PLAIN_BYTES: usize = 30 * 1024;
 
-const SALT: &[u8] = b"duocord-self-mailbox-v1";
+/// Names this module's key derivations (it goes in the `info` of each, with what the key is for).
+const DOMAIN: &str = "duocord-self-mailbox-v1";
+
+fn derive<const N: usize>(ikm: &[u8], what: &str) -> Result<[u8; N], CryptoError> {
+    hkdf_sha256_info::<N>(ikm, format!("{DOMAIN}|{what}").as_bytes())
+}
 
 /// The key every device of an account shares for the self-mailbox. Not the account key: it cannot sign anything.
 #[derive(Clone, PartialEq, Eq)]
@@ -56,7 +61,7 @@ impl SyncKey {
         }
         Ok(Self {
             version: 0,
-            key: Zeroizing::new(hkdf_sha256::<32>(&*ikm, SALT, b"sync-key/v0")?),
+            key: Zeroizing::new(derive::<32>(&*ikm, "sync-key/v0")?),
         })
     }
 
@@ -97,8 +102,8 @@ pub fn epoch_at(now: i64) -> i64 {
 impl SelfBox {
     pub fn for_epoch(sync: &SyncKey, epoch: i64) -> Result<Self, CryptoError> {
         let v = sync.version;
-        let label = hkdf_sha256::<16>(&*sync.key, SALT, format!("label/{v}/{epoch}").as_bytes())?;
-        let key = hkdf_sha256::<32>(&*sync.key, SALT, format!("key/{v}/{epoch}").as_bytes())?;
+        let label = derive::<16>(&*sync.key, &format!("label/{v}/{epoch}"))?;
+        let key = derive::<32>(&*sync.key, &format!("key/{v}/{epoch}"))?;
         Ok(Self {
             epoch,
             label: format!("self-{}", codec::hex(&label)),
@@ -168,7 +173,7 @@ pub fn lan_beacon(
     payload: &Value,
     entropy: &mut dyn Entropy,
 ) -> Result<String, CryptoError> {
-    let key = Zeroizing::new(hkdf_sha256::<32>(&*sync.key, SALT, b"lan-beacon")?);
+    let key = Zeroizing::new(derive::<32>(&*sync.key, "lan-beacon")?);
     let iv: [u8; 12] = random_array(entropy)?;
     let ct = aead::encrypt(
         &*key,
@@ -185,7 +190,7 @@ pub fn lan_beacon(
 pub fn open_lan_beacon(sync: &SyncKey, text: &str) -> Option<Value> {
     let raw = codec::decode(text.trim().strip_prefix(LAN_PREFIX)?)?;
     let (iv, ct) = (raw.get(..12)?, raw.get(12..)?);
-    let key = Zeroizing::new(hkdf_sha256::<32>(&*sync.key, SALT, b"lan-beacon").ok()?);
+    let key = Zeroizing::new(derive::<32>(&*sync.key, "lan-beacon").ok()?);
     let plain = aead::decrypt(&*key, iv, ct, LAN_PREFIX.as_bytes()).ok()?;
     serde_json::from_slice(&plain).ok()
 }

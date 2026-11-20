@@ -1019,6 +1019,11 @@ class RustChatEngine(
                 },
                 holdsAccountKey = s.holdsAccountKey,
                 syncLost = s.syncLost.toLong(),
+                scheduled = s.scheduled.map { m -> com.duochat.app.data.ScheduledMessage(m.id, m.target, m.group, m.text, m.at) },
+                usage = com.duochat.app.data.UsageInfo(
+                    s.usage.messages.toLong(), s.usage.files.toLong(), s.usage.fileBytes.toLong(),
+                    s.usage.contacts.toLong(), s.usage.syncEntries.toLong(),
+                ),
                 legacyGroups = s.legacyGroups.map { g ->
                     com.duochat.app.data.LegacyGroup(g.oldId, g.name, g.members.map { m -> nameOf(s, m) }, g.missing.toInt())
                 },
@@ -1229,6 +1234,13 @@ class RustChatEngine(
         val e = engine ?: return
         scope.launch(Dispatchers.IO) { runCatching { e.cancelDeviceLink() } }
     }
+
+    override suspend fun scheduleMessage(conversationId: String, text: String, at: Long): Result<Unit> {
+        val group = isGroup(conversationId)
+        return call { scheduleMessage(conversationId, group, text, at) }
+    }
+
+    override suspend fun cancelScheduled(id: String): Result<Unit> = call { cancelScheduled(id) }
 
     override suspend fun deviceRemoval(action: com.duochat.app.data.DeviceRemoval): Result<Unit> = call {
         when (action) {

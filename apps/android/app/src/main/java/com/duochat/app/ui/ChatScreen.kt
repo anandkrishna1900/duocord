@@ -152,6 +152,8 @@ fun ChatScreen(
     onBack: () -> Unit,
     onSend: (String, String?, (Result<Unit>) -> Unit) -> Unit,
     onSendFile: (String, String, ByteArray, String?, (Result<Unit>) -> Unit) -> Unit,
+    onSchedule: (String, Long, (Result<Unit>) -> Unit) -> Unit = { _, _, done -> done(Result.failure(IllegalStateException("Not available."))) },
+    onCancelScheduled: (String) -> Unit = {},
     loadFile: suspend (String) -> Pair<FileMeta, ByteArray>?,
     onRetry: (String) -> Unit,
     onClearNotice: () -> Unit,
@@ -274,6 +276,9 @@ fun ChatScreen(
                     replyingTo = replyingTo,
                     replyName = replyingTo?.let { r -> if (r.senderId == state.uid) "yourself" else (group?.members?.firstOrNull { it.uid == r.senderId }?.name ?: friend?.name ?: "them") },
                     onCancelReply = { replyingTo = null },
+                    scheduled = state.scheduled.filter { it.target == conversationId },
+                    onSchedule = onSchedule,
+                    onCancelScheduled = onCancelScheduled,
                     onSend = { text, done -> onSend(text, replyingTo?.messageId) { r -> if (r.isSuccess) replyingTo = null; done(r) } },
                     onSendFile = { name, mime, bytes, done -> onSendFile(name, mime, bytes, replyingTo?.messageId) { r -> if (r.isSuccess) replyingTo = null; done(r) } },
                 )
@@ -1033,6 +1038,9 @@ private fun Composer(
     onCancelReply: () -> Unit,
     onSend: (String, (Result<Unit>) -> Unit) -> Unit,
     onSendFile: (String, String, ByteArray, (Result<Unit>) -> Unit) -> Unit,
+    scheduled: List<com.duochat.app.data.ScheduledMessage> = emptyList(),
+    onSchedule: (String, Long, (Result<Unit>) -> Unit) -> Unit = { _, _, done -> done(Result.failure(IllegalStateException("Not available."))) },
+    onCancelScheduled: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -1050,6 +1058,19 @@ private fun Composer(
             sending = false
             result.onSuccess { text = ""; error = null }.onFailure { error = it.message ?: "Message could not be queued." }
         }
+    }
+
+    // Send later: pick a day, then a time (the system's own pickers).
+    fun pickTimeAndSchedule() {
+        val now = java.util.Calendar.getInstance()
+        android.app.DatePickerDialog(context, { _, y, m, d ->
+            android.app.TimePickerDialog(context, { _, h, min ->
+                val at = java.util.Calendar.getInstance().apply { set(y, m, d, h, min, 0); set(java.util.Calendar.MILLISECOND, 0) }.timeInMillis
+                onSchedule(text, at) { result ->
+                    result.onSuccess { text = ""; error = null }.onFailure { error = it.message ?: "Could not schedule that." }
+                }
+            }, now.get(java.util.Calendar.HOUR_OF_DAY), now.get(java.util.Calendar.MINUTE), android.text.format.DateFormat.is24HourFormat(context)).show()
+        }, now.get(java.util.Calendar.YEAR), now.get(java.util.Calendar.MONTH), now.get(java.util.Calendar.DAY_OF_MONTH)).show()
     }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris: List<Uri> ->
@@ -1148,6 +1169,23 @@ private fun Composer(
             ) {
                 Text(lastError.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(bottom = 6.dp))
             }
+            // Messages waiting for their time in this chat.
+            if (scheduled.isNotEmpty()) {
+                val fmt = remember { java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT) }
+                scheduled.forEach { m ->
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+                        Text(
+                            fmt.format(java.util.Date(m.at)) + " · " + m.text,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = { onCancelScheduled(m.id) }) { Text("Cancel") }
+                    }
+                }
+            }
             // Typing and recording swap places: the recording bar rises in, the field comes back when it ends.
             androidx.compose.animation.AnimatedContent(
                 targetState = recorder != null,
@@ -1233,6 +1271,11 @@ private fun Composer(
                         disabledIndicatorColor = Color.Transparent,
                     ),
                 )
+                if (!isChannel && text.isNotBlank()) Box(Modifier.height(56.dp), contentAlignment = Alignment.Center) {
+                    IconButton(onClick = { pickTimeAndSchedule() }, enabled = canSend, modifier = Modifier.size(48.dp)) {
+                        Icon(Icons.Filled.Schedule, contentDescription = "Send later", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
                 }
                 Spacer(Modifier.width(8.dp))
                 val showMic = text.isBlank() && !isChannel && !sending

@@ -12,6 +12,7 @@ import { NetworkSettings } from './NetworkSettings';
 import { DeviceLinkDialog } from './DeviceLinkDialog';
 import { DeviceRow } from './DeviceRow';
 import { AutoBackupControl } from './AutoBackupControl';
+import { formatBytes } from '../lib/format';
 import { AlertIcon, CheckIcon, KeyIcon, TrashIcon } from './Icons';
 
 export type SettingsSection = 'profile' | 'devices' | 'appearance' | 'connection' | 'security' | 'about';
@@ -574,6 +575,34 @@ export function SettingsDialog({
 
         {section === 'about' ? (
           <section className="settings-section">
+            {state.usage ? (
+              <div className="card-box">
+                <strong>On this device</strong>
+                <ul className="usage-list">
+                  <li>
+                    <span>Messages</span>
+                    <span>{state.usage.messages.toLocaleString()}</span>
+                  </li>
+                  <li>
+                    <span>Friends</span>
+                    <span>{state.usage.contacts.toLocaleString()}</span>
+                  </li>
+                  <li>
+                    <span>Files and photos</span>
+                    <span>
+                      {state.usage.files.toLocaleString()} · {formatBytes(state.usage.fileBytes)}
+                    </span>
+                  </li>
+                  {state.usage.syncEntries > 0 ? (
+                    <li>
+                      <span>Kept for syncing your devices</span>
+                      <span>{state.usage.syncEntries.toLocaleString()} entries</span>
+                    </li>
+                  ) : null}
+                </ul>
+                <p className="muted small">Everything stays on this device, encrypted. Deleting a chat frees its files.</p>
+              </div>
+            ) : null}
             <p>
               <strong>DuoCord</strong> · version {config.appVersion}
             </p>

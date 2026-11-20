@@ -10,6 +10,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.app.RemoteInput
 import androidx.core.content.ContextCompat
 import com.duochat.app.MainActivity
 import com.duochat.app.R
@@ -35,12 +36,16 @@ object DuoNotifications {
     fun showNotice(context: Context, notice: com.duochat.app.engine.IncomingNotice, settings: AppSettings) {
         // With the app lock on, a message must not be readable from the lock screen either.
         val body = if (notice.isMessage && (!settings.notificationPreviews || settings.appLock)) "Open DuoCord to read it." else preview(notice.body)
+        // Quick reply from the notification (only for chats with a friend or a group, and never with the app lock on: a
+        // reply must not be sendable from a locked phone).
+        val replyTo = notice.conversationId.takeIf { notice.isMessage && !settings.appLock && !it.startsWith("chan:") }
         show(
             context = context,
             notificationId = notice.id.hashCode(),
             title = notice.title,
             body = body,
             settings = settings,
+            replyTo = replyTo,
         )
     }
 
@@ -50,6 +55,7 @@ object DuoNotifications {
         title: String,
         body: String,
         settings: AppSettings,
+        replyTo: String? = null,
     ) {
         if (!settings.notificationsEnabled) return
         if (
@@ -71,7 +77,7 @@ object DuoNotifications {
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(body)
@@ -81,7 +87,28 @@ object DuoNotifications {
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .build()
+        if (replyTo != null) {
+            val reply = Intent(context, QuickReply::class.java).apply {
+                action = QuickReply.ACTION
+                setPackage(context.packageName)
+                putExtra(QuickReply.EXTRA_CONVERSATION, replyTo)
+                putExtra(QuickReply.EXTRA_NOTIFICATION, notificationId)
+            }
+            // Mutable: the system fills in the typed text.
+            val flags = PendingIntent.FLAG_UPDATE_CURRENT or
+                (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0)
+            val action = NotificationCompat.Action.Builder(
+                R.drawable.ic_notification,
+                "Reply",
+                PendingIntent.getBroadcast(context, notificationId, reply, flags),
+            )
+                .addRemoteInput(RemoteInput.Builder(QuickReply.KEY_TEXT).setLabel("Reply").build())
+                .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY)
+                .setShowsUserInterface(false)
+                .build()
+            builder.addAction(action)
+        }
+        val notification = builder.build()
         try {
             NotificationManagerCompat.from(context).notify(notificationId, notification)
         } catch (_: SecurityException) {

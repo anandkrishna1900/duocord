@@ -69,12 +69,14 @@ mod linking;
 mod media;
 mod privacy;
 mod removal;
+mod scheduled;
 mod signaling;
 mod snapshots;
 mod social;
 mod sync;
 
 pub use backup::RestoreSummary;
+pub use scheduled::Scheduled;
 pub use social::SearchHit;
 
 pub use invites::InvitePreview;
@@ -1784,6 +1786,7 @@ impl Core {
         // Before the store-and-forward pass: a message's sync copy goes up no later than the message does.
         self.tick_sync();
         self.tick_removals();
+        self.tick_scheduled();
         if self.uid.is_none() {
             // This install was removed from the account and erased itself.
             return;
@@ -3021,7 +3024,7 @@ impl Core {
         });
         let (invite, requests, answer, lookup_pending) = self.invite_views();
         let (summaries, deliveries) = self.summaries();
-        let files = self
+        let files: Vec<(MessageId, privcord_ports::FileInfo)> = self
             .messages
             .values()
             .filter(|m| m.message.kind == MessageKind::File)
@@ -3035,6 +3038,13 @@ impl Core {
                     .map(|i| (id.clone(), i))
             })
             .collect();
+        let usage = crate::api::UsageView {
+            messages: self.messages.len() as u64,
+            files: files.len() as u64,
+            file_bytes: files.iter().map(|(_, f)| f.size).sum(),
+            contacts: self.contacts.len() as u64,
+            sync_entries: self.sync_log_len() as u64,
+        };
         Snapshot {
             seq: self.hub.seq(),
             own_uid: self.uid.clone(),
@@ -3086,6 +3096,8 @@ impl Core {
                 .unwrap_or_default(),
             holds_account_key: self.identity.is_some(),
             sync_lost: self.sync_lost(),
+            scheduled: self.scheduled(),
+            usage,
         }
     }
 

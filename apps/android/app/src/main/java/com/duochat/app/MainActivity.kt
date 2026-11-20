@@ -261,6 +261,8 @@ private fun RootScreen(viewModel: AppViewModel) {
                         muted = openChatId in settings.mutedChats,
                         onBack = back,
                         onSend = { text, replyToId, done -> viewModel.send(openChatId, text, replyToId, done) },
+                        onSchedule = { text, at, done -> viewModel.scheduleMessage(openChatId, text, at, done) },
+                        onCancelScheduled = viewModel::cancelScheduled,
                         onSendFile = { name, mime, bytes, replyToId, done -> viewModel.sendFile(openChatId, name, mime, bytes, replyToId, done) },
                         loadFile = { id -> viewModel.getFile(id) },
                         onRetry = viewModel::retry,

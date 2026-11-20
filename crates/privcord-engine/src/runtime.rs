@@ -184,6 +184,14 @@ pub enum Op {
         phrase: String,
         passphrase: String,
     },
+    /// Write a message to go out later.
+    ScheduleMessage {
+        target: String,
+        group: bool,
+        text: String,
+        at: i64,
+    },
+    CancelScheduled(String),
     /// Whether bulk work (media between devices) may run now.
     SetBulkAllowed(bool),
     /// The local-network beacon to send, saying this device listens on this port.
@@ -392,6 +400,15 @@ fn pump(core: &mut Core, cmd: Command) -> bool {
                 } => core
                     .remove_device_now(&device, &phrase, &passphrase)
                     .map(|()| Answer::Done),
+                Op::ScheduleMessage {
+                    target,
+                    group,
+                    text,
+                    at,
+                } => core
+                    .schedule_message(&target, group, &text, at)
+                    .map(|_| Answer::Done),
+                Op::CancelScheduled(id) => core.cancel_scheduled(&id).map(|()| Answer::Done),
                 Op::LanBeacon(port) => Ok(Answer::Maybe(core.lan_beacon(port))),
                 Op::LanBeaconSeen(text) => Ok(Answer::Lan(core.lan_beacon_seen(&text))),
                 Op::SetBulkAllowed(allowed) => {

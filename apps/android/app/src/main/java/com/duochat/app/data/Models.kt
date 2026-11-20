@@ -232,6 +232,10 @@ data class ChatState(
     val holdsAccountKey: Boolean = false,
     /** Items from other devices that could not be recovered (that device was gone before they were sent on). */
     val syncLost: Long = 0,
+    /** Messages written for later on this phone, soonest first. */
+    val scheduled: List<ScheduledMessage> = emptyList(),
+    /** What this phone holds (the usage screen). */
+    val usage: UsageInfo = UsageInfo(),
     val deviceLink: DeviceLinkState? = null,
     val answer: InviteAnswer? = null,
     val channels: List<ChannelView> = emptyList(),
@@ -369,6 +373,12 @@ data class DeviceInfo(
     /** A removal was asked for: when it takes effect, unless taken back. */
     val removalAt: Long? = null,
 )
+
+/** A message waiting for its time (kept on this phone, sent by it). [target] is a friend's uid or a group's id. */
+data class ScheduledMessage(val id: String, val target: String, val group: Boolean, val text: String, val at: Long)
+
+/** What this phone holds: counts and the size of the files. */
+data class UsageInfo(val messages: Long = 0, val files: Long = 0, val fileBytes: Long = 0, val contacts: Long = 0, val syncEntries: Long = 0)
 
 /** Removing another device of the account: in 24 hours (any device can take it back), or now with the recovery phrase. */
 sealed interface DeviceRemoval {

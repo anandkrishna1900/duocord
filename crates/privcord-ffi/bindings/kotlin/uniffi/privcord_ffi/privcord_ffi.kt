@@ -1064,6 +1064,10 @@ internal open class UniffiVTableCallbackInterfaceTransportCallbacks(
 
 
 
+
+
+
+
 // A JNA Library to expose the extern-C FFI definitions.
 // This is an implementation detail which will be called internally by the public API.
 
@@ -1131,6 +1135,8 @@ internal interface UniffiLib : Library {
     fun uniffi_privcord_ffi_fn_method_privcordengine_cancel_device_link(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_cancel_device_removal(`ptr`: Pointer,`device`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    fun uniffi_privcord_ffi_fn_method_privcordengine_cancel_scheduled(`ptr`: Pointer,`id`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_clear_answer(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
@@ -1213,6 +1219,8 @@ internal interface UniffiLib : Library {
     fun uniffi_privcord_ffi_fn_method_privcordengine_retry_answer(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_retry_message(`ptr`: Pointer,`messageId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    fun uniffi_privcord_ffi_fn_method_privcordengine_schedule_message(`ptr`: Pointer,`target`: RustBuffer.ByValue,`group`: Byte,`text`: RustBuffer.ByValue,`at`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_search(`ptr`: Pointer,`query`: RustBuffer.ByValue,`limit`: Int,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -1444,6 +1452,8 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_cancel_device_removal(
     ): Short
+    fun uniffi_privcord_ffi_checksum_method_privcordengine_cancel_scheduled(
+    ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_clear_answer(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_confirm_device_link(
@@ -1525,6 +1535,8 @@ internal interface UniffiLib : Library {
     fun uniffi_privcord_ffi_checksum_method_privcordengine_retry_answer(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_retry_message(
+    ): Short
+    fun uniffi_privcord_ffi_checksum_method_privcordengine_schedule_message(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_search(
     ): Short
@@ -1656,6 +1668,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_cancel_device_removal() != 32243.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_cancel_scheduled() != 29662.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_clear_answer() != 55739.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1777,6 +1792,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_retry_message() != 1610.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_schedule_message() != 2140.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_search() != 51141.toShort()) {
@@ -3192,6 +3210,11 @@ public interface PrivcordEngineInterface {
      */
     fun `cancelDeviceRemoval`(`device`: kotlin.String)
     
+    /**
+     * Take a scheduled message back.
+     */
+    fun `cancelScheduled`(`id`: kotlin.String)
+    
     fun `clearAnswer`()
     
     /**
@@ -3364,6 +3387,12 @@ public interface PrivcordEngineInterface {
      * Send one of your own messages again from the start (it was refused, or never got through).
      */
     fun `retryMessage`(`messageId`: kotlin.String)
+    
+    /**
+     * Write a message to go out at `at` (milliseconds): to a friend (`group` false, `target` their uid) or a group.
+     * Kept on this device, and sent by it.
+     */
+    fun `scheduleMessage`(`target`: kotlin.String, `group`: kotlin.Boolean, `text`: kotlin.String, `at`: kotlin.Long)
     
     /**
      * Search messages on this device (two characters at least). Newest first.
@@ -3643,6 +3672,21 @@ open class PrivcordEngine: Disposable, AutoCloseable, PrivcordEngineInterface {
     uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_cancel_device_removal(
         it, FfiConverterString.lower(`device`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Take a scheduled message back.
+     */
+    @Throws(FfiException::class)override fun `cancelScheduled`(`id`: kotlin.String)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_cancel_scheduled(
+        it, FfiConverterString.lower(`id`),_status)
 }
     }
     
@@ -4239,6 +4283,22 @@ open class PrivcordEngine: Disposable, AutoCloseable, PrivcordEngineInterface {
     uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_retry_message(
         it, FfiConverterString.lower(`messageId`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Write a message to go out at `at` (milliseconds): to a friend (`group` false, `target` their uid) or a group.
+     * Kept on this device, and sent by it.
+     */
+    @Throws(FfiException::class)override fun `scheduleMessage`(`target`: kotlin.String, `group`: kotlin.Boolean, `text`: kotlin.String, `at`: kotlin.Long)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_schedule_message(
+        it, FfiConverterString.lower(`target`),FfiConverterBoolean.lower(`group`),FfiConverterString.lower(`text`),FfiConverterLong.lower(`at`),_status)
 }
     }
     
@@ -6403,6 +6463,59 @@ public object FfiConverterTypeRestoreDto: FfiConverterRustBuffer<RestoreDto> {
 
 
 
+/**
+ * A message written for later on this device.
+ */
+data class ScheduledDto (
+    var `id`: kotlin.String, 
+    /**
+     * A friend's uid, or a group's id.
+     */
+    var `target`: kotlin.String, 
+    var `group`: kotlin.Boolean, 
+    var `text`: kotlin.String, 
+    /**
+     * When it goes out (milliseconds).
+     */
+    var `at`: kotlin.Long
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeScheduledDto: FfiConverterRustBuffer<ScheduledDto> {
+    override fun read(buf: ByteBuffer): ScheduledDto {
+        return ScheduledDto(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterLong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: ScheduledDto) = (
+            FfiConverterString.allocationSize(value.`id`) +
+            FfiConverterString.allocationSize(value.`target`) +
+            FfiConverterBoolean.allocationSize(value.`group`) +
+            FfiConverterString.allocationSize(value.`text`) +
+            FfiConverterLong.allocationSize(value.`at`)
+    )
+
+    override fun write(value: ScheduledDto, buf: ByteBuffer) {
+            FfiConverterString.write(value.`id`, buf)
+            FfiConverterString.write(value.`target`, buf)
+            FfiConverterBoolean.write(value.`group`, buf)
+            FfiConverterString.write(value.`text`, buf)
+            FfiConverterLong.write(value.`at`, buf)
+    }
+}
+
+
+
 data class SearchHitDto (
     var `messageId`: kotlin.String, 
     var `conversation`: kotlin.String, 
@@ -6514,7 +6627,9 @@ data class SnapshotDto (
     /**
      * Items from other devices of the account that could not be recovered.
      */
-    var `syncLost`: kotlin.ULong
+    var `syncLost`: kotlin.ULong, 
+    var `scheduled`: List<ScheduledDto>, 
+    var `usage`: UsageDto
 ) {
     
     companion object
@@ -6543,6 +6658,8 @@ public object FfiConverterTypeSnapshotDto: FfiConverterRustBuffer<SnapshotDto> {
             FfiConverterSequenceTypeDeviceDto.read(buf),
             FfiConverterBoolean.read(buf),
             FfiConverterULong.read(buf),
+            FfiConverterSequenceTypeScheduledDto.read(buf),
+            FfiConverterTypeUsageDto.read(buf),
         )
     }
 
@@ -6563,7 +6680,9 @@ public object FfiConverterTypeSnapshotDto: FfiConverterRustBuffer<SnapshotDto> {
             FfiConverterSequenceTypeLegacyGroupDto.allocationSize(value.`legacyGroups`) +
             FfiConverterSequenceTypeDeviceDto.allocationSize(value.`devices`) +
             FfiConverterBoolean.allocationSize(value.`holdsAccountKey`) +
-            FfiConverterULong.allocationSize(value.`syncLost`)
+            FfiConverterULong.allocationSize(value.`syncLost`) +
+            FfiConverterSequenceTypeScheduledDto.allocationSize(value.`scheduled`) +
+            FfiConverterTypeUsageDto.allocationSize(value.`usage`)
     )
 
     override fun write(value: SnapshotDto, buf: ByteBuffer) {
@@ -6584,6 +6703,55 @@ public object FfiConverterTypeSnapshotDto: FfiConverterRustBuffer<SnapshotDto> {
             FfiConverterSequenceTypeDeviceDto.write(value.`devices`, buf)
             FfiConverterBoolean.write(value.`holdsAccountKey`, buf)
             FfiConverterULong.write(value.`syncLost`, buf)
+            FfiConverterSequenceTypeScheduledDto.write(value.`scheduled`, buf)
+            FfiConverterTypeUsageDto.write(value.`usage`, buf)
+    }
+}
+
+
+
+/**
+ * What this device holds (the usage screen).
+ */
+data class UsageDto (
+    var `messages`: kotlin.ULong, 
+    var `files`: kotlin.ULong, 
+    var `fileBytes`: kotlin.ULong, 
+    var `contacts`: kotlin.ULong, 
+    var `syncEntries`: kotlin.ULong
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeUsageDto: FfiConverterRustBuffer<UsageDto> {
+    override fun read(buf: ByteBuffer): UsageDto {
+        return UsageDto(
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: UsageDto) = (
+            FfiConverterULong.allocationSize(value.`messages`) +
+            FfiConverterULong.allocationSize(value.`files`) +
+            FfiConverterULong.allocationSize(value.`fileBytes`) +
+            FfiConverterULong.allocationSize(value.`contacts`) +
+            FfiConverterULong.allocationSize(value.`syncEntries`)
+    )
+
+    override fun write(value: UsageDto, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`messages`, buf)
+            FfiConverterULong.write(value.`files`, buf)
+            FfiConverterULong.write(value.`fileBytes`, buf)
+            FfiConverterULong.write(value.`contacts`, buf)
+            FfiConverterULong.write(value.`syncEntries`, buf)
     }
 }
 
@@ -9038,6 +9206,34 @@ public object FfiConverterSequenceTypeRequestDto: FfiConverterRustBuffer<List<Re
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeRequestDto.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeScheduledDto: FfiConverterRustBuffer<List<ScheduledDto>> {
+    override fun read(buf: ByteBuffer): List<ScheduledDto> {
+        val len = buf.getInt()
+        return List<ScheduledDto>(len) {
+            FfiConverterTypeScheduledDto.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<ScheduledDto>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeScheduledDto.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<ScheduledDto>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeScheduledDto.write(it, buf)
         }
     }
 }

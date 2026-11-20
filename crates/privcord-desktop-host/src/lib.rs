@@ -420,6 +420,13 @@ impl DesktopHost {
             ),
             "cancel_device_link" => unit(e.cancel_device_link()),
             "request_device_removal" => unit(e.request_device_removal(text(args, "device")?)),
+            "schedule_message" => unit(e.schedule_message(
+                text(args, "target")?,
+                args.get("group").and_then(Value::as_bool).unwrap_or(false),
+                text(args, "text")?,
+                args.get("at").and_then(Value::as_i64).unwrap_or(0),
+            )),
+            "cancel_scheduled" => unit(e.cancel_scheduled(text(args, "id")?)),
             "cancel_device_removal" => unit(e.cancel_device_removal(text(args, "device")?)),
             "remove_device_now" => unit(
                 e.remove_device_now(

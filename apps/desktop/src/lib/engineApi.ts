@@ -56,6 +56,9 @@ export interface ChatEngineApi {
   joinDeviceLink?(code: string, name: string): Promise<void>;
   confirmDeviceLink?(accept: boolean): Promise<void>;
   cancelDeviceLink?(): void;
+  /** Scheduled send: a message to go out at a time (a friend or a group; kept on this device). */
+  scheduleMessage?(convId: string, text: string, at: number): Promise<{ ok: true } | { ok: false; error: string }>;
+  cancelScheduled?(id: string): Promise<void>;
   /** Removing another device of the account: in 24 hours (any device can take it back), or now with the phrase. */
   requestDeviceRemoval?(deviceId: string): Promise<void>;
   cancelDeviceRemoval?(deviceId: string): Promise<void>;

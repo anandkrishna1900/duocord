@@ -295,6 +295,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun send(conversationId: String, text: String, replyToId: String?, onResult: (Result<Unit>) -> Unit) =
         withEngine(onResult) { it.send(conversationId, text, replyToId) }
 
+    fun scheduleMessage(conversationId: String, text: String, at: Long, onResult: (Result<Unit>) -> Unit) =
+        withEngine(onResult) { it.scheduleMessage(conversationId, text, at) }
+
+    fun cancelScheduled(id: String) {
+        viewModelScope.launch { engine?.cancelScheduled(id) }
+    }
+
     fun sendFile(conversationId: String, name: String, mime: String, bytes: ByteArray, replyToId: String?, onResult: (Result<Unit>) -> Unit) =
         withEngine(onResult) { it.sendFile(conversationId, name, mime, bytes, replyToId) }
 

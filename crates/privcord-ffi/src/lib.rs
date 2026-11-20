@@ -613,6 +613,8 @@ pub struct SnapshotDto {
     pub holds_account_key: bool,
     /// Items from other devices of the account that could not be recovered.
     pub sync_lost: u64,
+    pub scheduled: Vec<ScheduledDto>,
+    pub usage: UsageDto,
 }
 
 /// Another device of ours heard on the local network.
@@ -640,6 +642,30 @@ pub struct DeviceDto {
     pub stale: bool,
     /// A removal was asked for: when it takes effect (milliseconds), unless taken back.
     pub removal_at: Option<i64>,
+}
+
+/// What this device holds (the usage screen).
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct UsageDto {
+    pub messages: u64,
+    pub files: u64,
+    pub file_bytes: u64,
+    pub contacts: u64,
+    pub sync_entries: u64,
+}
+
+/// A message written for later on this device.
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ScheduledDto {
+    pub id: String,
+    /// A friend's uid, or a group's id.
+    pub target: String,
+    pub group: bool,
+    pub text: String,
+    /// When it goes out (milliseconds).
+    pub at: i64,
 }
 
 /// A group from before protocol v2: its name and who was in it (their names, for friends who are still friends).
@@ -1419,6 +1445,30 @@ impl PrivcordEngine {
         Ok(())
     }
 
+    /// Write a message to go out at `at` (milliseconds): to a friend (`group` false, `target` their uid) or a group.
+    /// Kept on this device, and sent by it.
+    pub fn schedule_message(
+        &self,
+        target: String,
+        group: bool,
+        text: String,
+        at: i64,
+    ) -> Result<(), FfiError> {
+        pollster::block_on(self.handle.op(Op::ScheduleMessage {
+            target,
+            group,
+            text,
+            at,
+        }))?;
+        Ok(())
+    }
+
+    /// Take a scheduled message back.
+    pub fn cancel_scheduled(&self, id: String) -> Result<(), FfiError> {
+        pollster::block_on(self.handle.op(Op::CancelScheduled(id)))?;
+        Ok(())
+    }
+
     /// Take back a removal asked for.
     pub fn cancel_device_removal(&self, device: String) -> Result<(), FfiError> {
         pollster::block_on(self.handle.op(Op::CancelDeviceRemoval(device)))?;
@@ -1682,6 +1732,24 @@ impl PrivcordEngine {
                 .collect(),
             holds_account_key: s.holds_account_key,
             sync_lost: s.sync_lost,
+            usage: UsageDto {
+                messages: s.usage.messages,
+                files: s.usage.files,
+                file_bytes: s.usage.file_bytes,
+                contacts: s.usage.contacts,
+                sync_entries: s.usage.sync_entries,
+            },
+            scheduled: s
+                .scheduled
+                .iter()
+                .map(|m| ScheduledDto {
+                    id: m.id.clone(),
+                    target: m.target.clone(),
+                    group: m.group,
+                    text: m.text.clone(),
+                    at: m.at,
+                })
+                .collect(),
         })
     }
 

@@ -74,6 +74,10 @@
             android:exported="false" />
 
         <receiver
+            android:name=".notifications.QuickReply"
+            android:exported="false" />
+
+        <receiver
             android:name=".notifications.StartOnBoot"
             android:exported="false">
             <intent-filter>

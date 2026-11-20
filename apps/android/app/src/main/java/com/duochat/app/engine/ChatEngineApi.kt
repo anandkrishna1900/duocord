@@ -61,6 +61,10 @@ interface ChatEngineApi {
     suspend fun confirmDeviceLink(accept: Boolean): Result<Unit>
     fun cancelDeviceLink()
 
+    /** Scheduled send: a message to go out at [at] (milliseconds); kept on this phone, sent by it. */
+    suspend fun scheduleMessage(conversationId: String, text: String, at: Long): Result<Unit>
+    suspend fun cancelScheduled(id: String): Result<Unit>
+
     /** Removing another device of the account (see [com.duochat.app.data.DeviceRemoval]). */
     suspend fun deviceRemoval(action: com.duochat.app.data.DeviceRemoval): Result<Unit>
     suspend fun send(conversationId: String, rawText: String, replyToId: String? = null): Result<Unit>

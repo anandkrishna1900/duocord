@@ -156,6 +156,21 @@ pub struct Snapshot {
     pub holds_account_key: bool,
     /// Items from other devices of the account that could not be recovered (a device gone before they left it).
     pub sync_lost: u64,
+    /// Messages written for later on this device, soonest first.
+    pub scheduled: Vec<crate::core::Scheduled>,
+    /// What this device holds (the usage screen).
+    pub usage: UsageView,
+}
+
+/// What this device holds: counts and the size of the files (build step 10, the usage screen).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct UsageView {
+    pub messages: u64,
+    pub files: u64,
+    pub file_bytes: u64,
+    pub contacts: u64,
+    /// Entries of the account's sync log held here (zero on a one-device account that never synced).
+    pub sync_entries: u64,
 }
 
 /// One device of the account.

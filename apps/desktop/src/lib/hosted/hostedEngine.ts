@@ -366,6 +366,20 @@ export class HostedChatEngine implements ChatEngineApi {
     this.scheduleRefresh();
   }
 
+  async scheduleMessage(convId: string, text: string, at: number): Promise<SendResult> {
+    try {
+      await this.engine.call('schedule_message', { target: convId, group: this.kindOf(convId) === 'group', text, at });
+      this.scheduleRefresh();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: friendly(e) };
+    }
+  }
+
+  async cancelScheduled(id: string): Promise<void> {
+    await this.deviceCall('cancel_scheduled', { id });
+  }
+
   async requestDeviceRemoval(deviceId: string): Promise<void> {
     await this.deviceCall('request_device_removal', { device: deviceId });
   }

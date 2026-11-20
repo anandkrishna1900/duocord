@@ -215,6 +215,16 @@ export interface LegacyGroup {
   missing: number;
 }
 
+/** A message waiting for its time (kept on this device, sent by it). */
+export interface ScheduledMessage {
+  id: string;
+  /** The conversation: a friend's uid or a group's id. */
+  target: string;
+  group: boolean;
+  text: string;
+  at: number;
+}
+
 /** One device of the account (hosted engine only). */
 export interface DeviceInfo {
   id: string;
@@ -243,6 +253,10 @@ export interface ChatState {
   holdsAccountKey?: boolean;
   /** Items from other devices that could not be recovered (the device was gone before they left it). */
   syncLost?: number;
+  /** What this device holds (the usage screen). */
+  usage?: { messages: number; files: number; fileBytes: number; contacts: number; syncEntries: number };
+  /** Messages written for later on this device, soonest first. */
+  scheduled?: ScheduledMessage[];
   deviceLink?: DeviceLinkState | null;
   channels: ChannelView[];
   answer: InviteAnswer | null;

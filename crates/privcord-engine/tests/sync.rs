@@ -1701,3 +1701,83 @@ fn a_device_not_heard_from_for_ninety_days_is_shown_as_stale() {
             .stale
     );
 }
+
+#[test]
+fn a_scheduled_message_waits_goes_out_at_its_time_and_can_be_taken_back() {
+    let clock = FakeClock::at(1_700_000_000_000);
+    let mut relay = Relay::default();
+    let mut pat = Device::new("pat", &clock);
+    pat.core.create_identity().unwrap();
+    let mut fran = Device::new("fran", &clock);
+    fran.core.create_identity().unwrap();
+    let fran_uid = fran.core.own_uid().unwrap().clone();
+    let pat_uid = pat.core.own_uid().unwrap().clone();
+    pat.core
+        .add_contact(
+            &fran.core.own_card(Some("Fran")).unwrap(),
+            ContactTrust::Verified,
+        )
+        .unwrap();
+    fran.core
+        .add_contact(
+            &pat.core.own_card(Some("Pat")).unwrap(),
+            ContactTrust::Verified,
+        )
+        .unwrap();
+    pat.core.set_store_forward(true).unwrap();
+    fran.core.set_store_forward(true).unwrap();
+    let now = 1_700_000_000_000;
+    let hour = 3_600_000;
+
+    // Bad input is refused up front.
+    assert!(pat
+        .core
+        .schedule_message(fran_uid.as_str(), false, "  ", now + hour)
+        .is_err());
+    assert!(pat
+        .core
+        .schedule_message("nobody", false, "hi", now + hour)
+        .is_err());
+    assert!(pat
+        .core
+        .schedule_message("nobody", true, "hi", now + hour)
+        .is_err());
+
+    pat.core
+        .schedule_message(fran_uid.as_str(), false, "later", now + hour)
+        .unwrap();
+    let dropped = pat
+        .core
+        .schedule_message(fran_uid.as_str(), false, "never", now + 2 * hour)
+        .unwrap();
+    assert_eq!(pat.core.snapshot().scheduled.len(), 2);
+    pat.core.cancel_scheduled(&dropped).unwrap();
+    for _ in 0..2 {
+        pat.online(&mut relay);
+        fran.online(&mut relay);
+    }
+    assert!(
+        !fran.texts().contains(&"later".to_owned()),
+        "not before its time"
+    );
+
+    clock.advance(hour + 1);
+    for _ in 0..3 {
+        pat.online(&mut relay);
+        fran.online(&mut relay);
+    }
+    assert!(fran.texts().contains(&"later".to_owned()));
+    assert!(!fran.texts().contains(&"never".to_owned()));
+    assert!(pat.core.snapshot().scheduled.is_empty());
+    assert_eq!(
+        fran.core
+            .snapshot()
+            .messages
+            .into_iter()
+            .flat_map(|(_, v)| v)
+            .find(|m| m.text == "later")
+            .unwrap()
+            .sender_id,
+        pat_uid
+    );
+}

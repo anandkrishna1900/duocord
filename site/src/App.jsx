@@ -3,6 +3,7 @@ import StepStack from './StepStack.jsx';
 import { Icon, P, FEATURES, STEPS, FAQ, COMPARE } from './data.jsx';
 import { FeaturesPage, HowPage, ScreensPage, ComparePage, FaqPage, DownloadPage, AboutPage, DonatePage } from './Pages.jsx';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import DotGrid from './rb/DotGrid.jsx';
 import SplitText from './rb/SplitText.jsx';
 import ShinyText from './rb/ShinyText.jsx';
@@ -72,7 +73,19 @@ function usePage() {
       if (legacy) history.replaceState(null, '', hrefOf(legacy));
     };
     fromHash();
-    const on = () => setRoute(locate().route);
+    // Switching page cross-fades with the browser's View Transitions where they exist (the header stays put); other browsers
+    // get the CSS entrance on .page. Reduced motion switches instantly.
+    const on = () => {
+      const next = locate().route;
+      const animate = typeof document.startViewTransition === 'function' && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (!animate) { setRoute(next); return; }
+      document.documentElement.classList.add('vt');
+      const t = document.startViewTransition(() => {
+        flushSync(() => setRoute(next));
+        window.scrollTo({ top: 0, behavior: 'instant' });
+      });
+      t.finished.finally(() => document.documentElement.classList.remove('vt'));
+    };
     const onHash = () => { fromHash(); on(); };
     addEventListener('popstate', on);
     addEventListener('hashchange', onHash);
@@ -143,6 +156,7 @@ export default function App() {
         </header>
 
         <main id="main" tabIndex={-1} ref={mainRef}>
+          <div className="page" key={route}>
           {route === 'home' && (
             <>
 {/* ---------- hero: ink, with a springy dot grid the cursor flicks around ---------- */}
@@ -293,6 +307,7 @@ export default function App() {
           {route === 'download' && <DownloadPage Go={Go} repo={REPO} reduce={reduce} dlRef={dlRef} dlOn={dlOn} />}
           {route === 'about' && <AboutPage Go={Go} repo={REPO} />}
           {route === 'donate' && <DonatePage Go={Go} />}
+          </div>
         </main>
 
         <footer>

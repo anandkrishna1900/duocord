@@ -290,8 +290,7 @@ export default function App() {
               <ol className="stack">
                 {STEPS.map(([t, p], n) => (
                   <li className={`stack-card c${n}`} key={t} style={{ '--n': n }}>
-                    <span className="stack-n" aria-hidden="true">{n + 1}</span>
-                    <h3>{t}</h3>
+                    <div className="stack-head"><span className="stack-n" aria-hidden="true">{n + 1}</span><h3>{t}</h3></div>
                     <p>{p}</p>
                   </li>
                 ))}

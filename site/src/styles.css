@@ -103,19 +103,18 @@ h2, section:not(.hero) h1 { font-size: clamp(2rem, 4.4vw, 3.5rem); letter-spacin
 .how-grid { display: grid; grid-template-columns: 1fr 1.2fr; gap: 64px; align-items: start; }
 @media (max-width: 900px) { .how-grid { grid-template-columns: 1fr; gap: 32px; } }
 .how-lhs { position: sticky; top: 120px; } @media (max-width: 900px) { .how-lhs { position: static; } }
-.stack { list-style: none; margin: 0; padding: 0 0 24px; display: grid; gap: 28px; }
-.stack-card { position: sticky; top: calc(110px + var(--n) * 26px); padding: 36px; border-radius: 18px; min-height: 240px; }
+.stack { list-style: none; margin: 0; padding: 0; display: grid; gap: 34px; }
+.stack-card { position: sticky; top: calc(96px + var(--n) * 68px); padding: 18px 28px 32px; border-radius: 18px; min-height: 250px; box-shadow: 0 -6px 18px rgba(0,0,0,.12); }
+.stack::after { content: ""; height: 120px; }
 .stack-card.c0 { background: var(--ink); color: var(--on-ink); }
 .stack-card.c1 { background: var(--yellow); color: var(--ink); }
 .stack-card.c2 { background: #fff; color: var(--ink); border: 2px solid var(--ink); }
-.stack-n { font-family: var(--display); font-weight: 800; font-size: 4.6rem; line-height: 1; }
+.stack-head { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; min-height: 44px; }
+.stack-n { font-family: var(--display); font-weight: 800; font-size: 2.6rem; line-height: 1; }
 .stack-card.c0 .stack-n { color: var(--yellow); }
-.stack-card h3 { margin: 10px 0 8px; font-size: 1.6rem; letter-spacing: -.02em; } .stack-card p { margin: 0; max-width: 40ch; }
+.stack-card h3 { margin: 0; font-size: 1.45rem; letter-spacing: -.02em; line-height: 1.15; } .stack-card p { margin: 0; max-width: 40ch; }
 .stack-card.c0 p { color: var(--on-ink-soft); }
-@supports (animation-timeline: view()) {
-  .stack-card { animation: shrink linear both; animation-timeline: view(); animation-range: exit-crossing 0% exit-crossing 100%; }
-  @keyframes shrink { to { transform: scale(.94); opacity: .6; } }
-}
+@media (max-width: 900px) { .stack-card { top: calc(84px + var(--n) * 86px); min-height: 230px; } .stack-card h3 { font-size: 1.2rem; } .stack-n { font-size: 2.2rem; } .stack-head { min-height: 56px; } }
 
 /* screens: a rail of real screenshots, and a lightbox */
 .screens { padding: 72px 0 84px; background: var(--ink); color: var(--on-ink); }

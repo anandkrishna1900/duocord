@@ -11,6 +11,19 @@ function preview(text: string): string {
   return single.length > 140 ? `${single.slice(0, 137)}…` : single;
 }
 
+/**
+ * Windows gives the page no click event for a notification. Clicking one brings the window to the front, so the chat
+ * that notified last is remembered for a short while and opened when the window next gains focus.
+ */
+const OPEN_WINDOW_MS = 30_000;
+let lastNotified: { conversation: string; at: number } | null = null;
+
+export function takeRecentNotified(now = Date.now()): string | null {
+  const recent = lastNotified && now - lastNotified.at <= OPEN_WINDOW_MS ? lastNotified.conversation : null;
+  lastNotified = null;
+  return recent;
+}
+
 export async function ensureNotificationPermission(): Promise<boolean> {
   if (isTauri()) {
     if (await isPermissionGranted()) return true;
@@ -23,7 +36,7 @@ export async function ensureNotificationPermission(): Promise<boolean> {
 }
 
 export async function notifyIncoming(
-  message: { text: string; messageId: string },
+  message: { text: string; messageId: string; conversationId?: string },
   title: string,
 ): Promise<void> {
   const settings = loadSettings();
@@ -31,8 +44,9 @@ export async function notifyIncoming(
   if (document.visibilityState === 'visible' && document.hasFocus()) return;
   const granted = await ensureNotificationPermission();
   if (!granted) return;
-    const body = settings.notificationPreviews ? preview(message.text) : 'Open PrivCord to read it.';
+  const body = settings.notificationPreviews ? preview(message.text) : 'Open PrivCord to read it.';
   try {
+    if (message.conversationId) lastNotified = { conversation: message.conversationId, at: Date.now() };
     if (isTauri()) {
       sendNotification({ title, body });
     } else {

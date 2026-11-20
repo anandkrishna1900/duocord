@@ -11,10 +11,10 @@ Status meanings: **Ported, tested** = the Rust implementation exists and is chec
 | Ported, tested | 66 | 9828 |
 | Partly ported | 1 | 2215 |
 | Not yet ported | 0 | 0 |
-| Stays (UI) | 65 | 14051 |
+| Stays (UI) | 65 | 14084 |
 | Stays (platform adapter) | 57 | 11597 |
 | Replaced by a library | 4 | 333 |
-| **All mapped files** | **193** | **38024** |
+| **All mapped files** | **193** | **38057** |
 
 Ported does not mean retired: the TypeScript and Kotlin versions stay in production until the apps call the Rust engine (M7 desktop, M8 Android) and the compatibility gates pass (PRD section 16).
 
@@ -68,7 +68,7 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 | `apps/desktop/src/components/AutoBackupControl.tsx` | 96 | `AutoBackupControl` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/Avatar.tsx` | 38 | `Avatar`, `BrandMark` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/ChannelsDialog.tsx` | 112 | `ChannelsDialog` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
-| `apps/desktop/src/components/ChatLayout.tsx` | 580 | `ChatLayout` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
+| `apps/desktop/src/components/ChatLayout.tsx` | 599 | `ChatLayout` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/Composer.tsx` | 332 | `Composer` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/DeviceLinkDialog.tsx` | 170 | `DeviceLinkDialog` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/DeviceRow.tsx` | 117 | `DeviceRow` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
@@ -118,7 +118,7 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 | `apps/desktop/src/lib/killSwitchFactory.ts` | 60 | `buildKillSwitchDeps`, `clearPersistedKillSwitchReport` | Emergency erase steps for the webview (local storage, IndexedDB, files, Tauri commands) | engine::core::privacy runs the plan and the report; these files only call web and OS APIs | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/desktop/src/lib/localDb.ts` | 423 | `OutboxRow`, `FileMeta`, `StoredMessage`, `LocalStore` | Desktop SQLite schema, encrypted columns, file store | storage::SqliteStorage; privcord-import (desktop importer) | Storage | Ported, tested | M7: after the importer has run on every install | importer and migration tests on generated fixtures (docs/legacy-fixtures.json); the browser file store stays in the adapter |
 | `apps/desktop/src/lib/network.ts` | 86 | `BUILTIN_TURN`, `loadTorMode`, `torModeActive`, `setTorMode`, `loadNetworkConfig`, `saveNetworkConfig` +2 | WebRTC peer connection and BLE link on the desktop | Transport adapters (stay); link policy moves to engine | Adapter | Stays (platform adapter) | Stays | n/a |
-| `apps/desktop/src/lib/notifications.ts` | 44 | `ensureNotificationPermission`, `notifyIncoming` | Presentation helpers, UI settings, themes, notifications bridge | UI / adapter (stays) | UI | Stays (UI) | Stays | n/a |
+| `apps/desktop/src/lib/notifications.ts` | 58 | `takeRecentNotified`, `ensureNotificationPermission`, `notifyIncoming` | Presentation helpers, UI settings, themes, notifications bridge | UI / adapter (stays) | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/lib/outbox.test.ts` | 15 | (none) | Retry/outbox policy | engine::core delivery | Engine | Ported, tested | M7 | engine tests |
 | `apps/desktop/src/lib/outbox.ts` | 6 | `needsDelivery` | Retry/outbox policy | engine::core delivery | Engine | Ported, tested | M7 | engine tests |
 | `apps/desktop/src/lib/p2p.ts` | 212 | `PeerTransportHandlers`, `PeerTransport` | WebRTC peer connection and BLE link on the desktop | Transport adapters (stay); link policy moves to engine | Adapter | Stays (platform adapter) | Stays | n/a |

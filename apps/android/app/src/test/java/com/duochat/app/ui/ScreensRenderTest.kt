@@ -1,7 +1,11 @@
 package com.duochat.app.ui
 
-import app.cash.paparazzi.DeviceConfig
-import app.cash.paparazzi.Paparazzi
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.duochat.app.data.AppSettings
 import com.duochat.app.data.ChatMessage
 import com.duochat.app.data.ChatState
@@ -14,15 +18,34 @@ import com.duochat.app.data.LinkStatus
 import com.duochat.app.data.ReplyRef
 import org.junit.Rule
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /**
- * Renders the main screens (home, a chat in both themes, a group chat, an empty chat, Add friend) on the JVM with Paparazzi, so
- * a screen that crashes while drawing fails the build. To look at them: `./gradlew :app:recordPaparazziDebug`, then
- * open `app/src/test/snapshots/images` (not committed: the images change with every intended UI change).
+ * Renders the main screens (home, a chat in both themes, a group chat, an empty chat, Add friend) on the JVM with
+ * Robolectric and the Compose test rule, so a screen that crashes while composing, measuring or laying out fails the build
+ * (pixels are not drawn: that needs Robolectric's native graphics mode, which CI runners do not have).
  */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
+@Config(sdk = [35], qualifiers = "w393dp-h851dp-xxhdpi", application = android.app.Application::class)
 open class ScreensRenderTest {
     @get:Rule
-    open val paparazzi = Paparazzi(deviceConfig = DeviceConfig.PIXEL_5, maxPercentDifference = 100.0)
+    val compose = createComposeRule()
+
+    /** System font scale (Settings > Display > Font size) for this run. */
+    open val fontScale = 1.0f
+
+    /** Shows [content] and lets a few frames run (without waiting for idle: some screens animate forever). */
+    private fun snapshot(scale: Float = fontScale, content: @Composable () -> Unit) {
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, scale)) { content() }
+        }
+        compose.mainClock.advanceTimeBy(400)
+    }
 
     private val me = "me-uid"
     private val ann = "ann-uid"
@@ -85,7 +108,7 @@ open class ScreensRenderTest {
     )
 
     @Test
-    fun groupChat() = paparazzi.snapshot {
+    fun groupChat() = snapshot {
         androidx.compose.runtime.CompositionLocalProvider(
             androidx.activity.compose.LocalActivityResultRegistryOwner provides registryOwner,
         ) {
@@ -101,7 +124,7 @@ open class ScreensRenderTest {
     }
 
     @Test
-    fun addFriend() = paparazzi.snapshot {
+    fun addFriend() = snapshot {
         androidx.compose.runtime.CompositionLocalProvider(
             androidx.activity.compose.LocalActivityResultRegistryOwner provides registryOwner,
         ) {
@@ -116,7 +139,7 @@ open class ScreensRenderTest {
     }
 
     @Test
-    fun emptyChat() = paparazzi.snapshot {
+    fun emptyChat() = snapshot {
         androidx.compose.runtime.CompositionLocalProvider(
             androidx.activity.compose.LocalActivityResultRegistryOwner provides registryOwner,
         ) {
@@ -134,55 +157,55 @@ open class ScreensRenderTest {
     private fun noop1(@Suppress("UNUSED_PARAMETER") a: String) = Unit
 
     @Test
-    fun home() = paparazzi.snapshot {
+    fun home() = snapshot {
         DuoChatTheme(AppSettings(theme = "dark")) {
             HomeScreen(state = state, onOpenChat = {}, onAddFriend = {}, onNewGroup = {}, onChannels = {}, onOpenSettings = {}, onClearNotice = {})
         }
     }
 
     @Test
-    fun homeLight() = paparazzi.snapshot {
+    fun homeLight() = snapshot {
         DuoChatTheme(AppSettings(theme = "light")) {
             HomeScreen(state = state, onOpenChat = {}, onAddFriend = {}, onNewGroup = {}, onChannels = {}, onOpenSettings = {}, onClearNotice = {})
         }
     }
 
     @Test
-    fun homeEmpty() = paparazzi.snapshot {
+    fun homeEmpty() = snapshot {
         DuoChatTheme(AppSettings(theme = "light")) {
             HomeScreen(state = state.copy(chats = emptyList()), onOpenChat = {}, onAddFriend = {}, onNewGroup = {}, onChannels = {}, onOpenSettings = {}, onClearNotice = {})
         }
     }
 
     @Test
-    fun onboarding() = paparazzi.snapshot {
+    fun onboarding() = snapshot {
         DuoChatTheme(AppSettings(theme = "light")) { OnboardingScreen(onCreate = { _, _, _ -> }) }
     }
 
     @Test
-    fun onboardingDark() = paparazzi.snapshot {
+    fun onboardingDark() = snapshot {
         DuoChatTheme(AppSettings(theme = "dark")) { OnboardingScreen(onCreate = { _, _, _ -> }) }
     }
 
     @Test
-    fun lock() = paparazzi.snapshot {
+    fun lock() = snapshot {
         DuoChatTheme(AppSettings(theme = "dark")) { LockScreen(onUnlocked = {}) }
     }
 
     @Test
-    fun loading() = paparazzi.snapshot {
+    fun loading() = snapshot {
         DuoChatTheme(AppSettings(theme = "light")) { LoadingScreen("Opening your chats") }
     }
 
     @Test
-    fun newGroup() = paparazzi.snapshot {
+    fun newGroup() = snapshot {
         DuoChatTheme(AppSettings(theme = "light")) {
             NewGroupScreen(state = groupState, onCreate = { _, _, _ -> }, onBack = {}, onCreated = {})
         }
     }
 
     @Test
-    fun groupDetails() = paparazzi.snapshot {
+    fun groupDetails() = snapshot {
         DuoChatTheme(AppSettings(theme = "dark")) {
             GroupDetailsScreen(
                 state = groupState, groupId = "g1", onBack = {}, onAddMembers = { _, _ -> }, onRemove = { _, _ -> },
@@ -192,22 +215,20 @@ open class ScreensRenderTest {
     }
 
     @Test
-    fun chatDark() = paparazzi.snapshot { chat(AppSettings(theme = "dark")) }
+    fun chatDark() = snapshot { chat(AppSettings(theme = "dark")) }
 
     @Test
-    fun chatLight() = paparazzi.snapshot { chat(AppSettings(theme = "light")) }
+    fun chatLight() = snapshot { chat(AppSettings(theme = "light")) }
 
     /** Larger system font (Settings > Display > Font size): nothing may be cut off or overlap. */
     @Test
     fun chatLargeText() {
-        paparazzi.unsafeUpdateConfig(deviceConfig = DeviceConfig.PIXEL_5.copy(fontScale = 1.3f))
-        paparazzi.snapshot { chat(AppSettings(theme = "dark")) }
+        snapshot(1.3f) { chat(AppSettings(theme = "dark")) }
     }
 
     @Test
     fun homeLargeText() {
-        paparazzi.unsafeUpdateConfig(deviceConfig = DeviceConfig.PIXEL_5.copy(fontScale = 1.3f))
-        paparazzi.snapshot {
+        snapshot(1.3f) {
             DuoChatTheme(AppSettings(theme = "dark")) {
                 HomeScreen(state = state, onOpenChat = {}, onAddFriend = {}, onNewGroup = {}, onChannels = {}, onOpenSettings = {}, onClearNotice = {})
             }
@@ -225,14 +246,14 @@ open class ScreensRenderTest {
         }
     }
 
-    @androidx.compose.runtime.Composable
+    @Composable
     private fun chat(settings: AppSettings) {
         androidx.compose.runtime.CompositionLocalProvider(
             androidx.activity.compose.LocalActivityResultRegistryOwner provides registryOwner,
         ) { chatInner(settings) }
     }
 
-    @androidx.compose.runtime.Composable
+    @Composable
     private fun chatInner(settings: AppSettings) {
         DuoChatTheme(settings) {
             ChatScreen(

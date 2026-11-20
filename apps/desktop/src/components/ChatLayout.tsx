@@ -8,7 +8,11 @@ import { MAX_FILE_BYTES, formatBytes } from '@duochat/protocol';
 import { Avatar, BrandMark } from './Avatar';
 import { Composer } from './Composer';
 import { MessageList } from './MessageList';
+<<<<<<< HEAD
 import { FilterPills, type ChatFilter } from './FilterPills';
+=======
+import { takeRecentNotified } from '../lib/notifications';
+>>>>>>> claude/ui-polish
 import { SettingsDialog, type SettingsSection } from './SettingsDialog';
 import { ManualConnectDialog } from './ManualConnectDialog';
 import { ClearChatDialog, NukeDialog } from './KillSwitchDialogs';
@@ -112,6 +116,21 @@ export function ChatLayout({
     };
   }, [engine]);
 
+  // Coming back to the window right after a notification (a click on it) opens the chat it was about.
+  useEffect(() => {
+    const onFocus = () => {
+      const id = takeRecentNotified();
+      if (!id || !state) return;
+      const exists =
+        state.contacts.some((c) => c.uid === id) ||
+        state.groups.some((g) => g.groupId === id) ||
+        state.channels.some((c) => c.id === id);
+      if (exists) setSelected(id);
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [state]);
+
   useEffect(() => {
     engine?.openConversation(selected);
     setReplying(null);
@@ -209,9 +228,9 @@ export function ChatLayout({
           </button>
         </header>
         <div className="sidebar-actions">
-          <button type="button" className="button ink" aria-label="Add friend" onClick={() => setDialog('add')}>
+          <button type="button" className="button ink" aria-label="Add a friend" onClick={() => setDialog('add')}>
             <UserIcon size={16} />
-            Add friend
+            Add a friend
           </button>
           <button
             type="button"
@@ -221,7 +240,7 @@ export function ChatLayout({
           >
             New group
           </button>
-          <button type="button" className="button secondary" aria-label="Channels" onClick={() => setDialog('channels')}>
+          <button type="button" className="button secondary" aria-label="Public channels" onClick={() => setDialog('channels')}>
             Channels
           </button>
         </div>
@@ -493,19 +512,19 @@ export function ChatLayout({
                 <circle className="duo-pulse" cx="44" cy="32" r="3.5" />
               </svg>
             </div>
-            <h2>{hasChats ? 'Pick a chat' : 'Welcome to DuoCord'}</h2>
+            <h2>{hasChats ? 'Pick a chat' : 'Your first conversation'}</h2>
             {hasChats ? (
               <p className="muted">Choose someone from the list, or add a friend.</p>
             ) : (
               <>
-                <p className="muted">Private chats and groups. No account, no cloud.</p>
+                <p className="muted">Swap invite codes with a friend in person or by message. Your chats go device to device; no server keeps them.</p>
                 <ol className="welcome-steps">
-                  <li>Tap <strong>Add friend</strong> and swap invites.</li>
+                  <li>Tap <strong>Add a friend</strong> and swap invites.</li>
                   <li>Start chatting. Messages go straight to their device.</li>
                   <li>Make a <strong>group</strong>. Friends you add can add theirs, and everyone connects automatically.</li>
                 </ol>
                 <button type="button" className="button primary" onClick={() => setDialog('add')}>
-                  Add your first friend
+                  Add a friend
                 </button>
               </>
             )}

@@ -1127,8 +1127,8 @@ export class ChatEngine implements ChatEngineApi {
       if (this.canDirect(convId)) return null;
       const who = this.nameOf(convId);
       return this.groupOnly
-        ? `You stay group-only with people you meet in groups. To message ${who} directly, swap invites (Add friend).`
-        : `${who} stays group-only, so you can talk in your groups but not directly. To message them, swap invites (Add friend).`;
+        ? `You stay group-only with people you meet in groups. To message ${who} directly, swap invites (Add a friend).`
+        : `${who} stays group-only, so you can talk in your groups but not directly. To message them, swap invites (Add a friend).`;
     }
     if (convId.startsWith('chan:')) return this.channels.has(convId.slice(5)) ? null : 'You left this channel.';
     const s = this.coord.state(convId);

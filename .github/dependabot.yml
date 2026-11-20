@@ -41,16 +41,11 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 3
-    # These need a newer Android Gradle Plugin (8.12+ / 9), which the screenshot-test plugin (Paparazzi 1.3.5) cannot run
-    # on yet. Update them together with that migration, not one by one.
+    # The Android toolchain was moved to AGP 8.13 / Gradle 8.14 / Kotlin 2.4 / KSP 2.3 together; AGP 9 (built-in Kotlin,
+    # new DSL) is a separate migration.
     ignore:
-      # AGP 9 needs the screenshot-test plugin (Paparazzi 2) and Kotlin changes first: migrate it as one piece of work.
       - dependency-name: "com.android.application"
         update-types: ["version-update:semver-major"]
-      - dependency-name: "com.google.devtools.ksp"
-        update-types: ["version-update:semver-major", "version-update:semver-minor"]
-      - dependency-name: "org.jetbrains.kotlin.android"
-        update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "gradle-wrapper"
         update-types: ["version-update:semver-major"]
       - dependency-name: "androidx.fragment:fragment-ktx"

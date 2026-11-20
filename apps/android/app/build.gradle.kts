@@ -43,7 +43,7 @@ kotlin {
 
 android {
     namespace = "com.duochat.app"
-    compileSdk = 36
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.duochat.app"

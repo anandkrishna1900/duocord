@@ -131,6 +131,16 @@ fn number(args: &Value, key: &str) -> Result<u32, HostError> {
         .ok_or_else(|| format!("missing number argument `{key}`"))
 }
 
+fn big(args: &Value, key: &str) -> Result<i64, HostError> {
+    args.get(key)
+        .and_then(Value::as_i64)
+        .ok_or_else(|| format!("missing number argument `{key}`"))
+}
+
+fn minutes(args: &Value, key: &str) -> Result<u16, HostError> {
+    u16::try_from(number(args, key)?).map_err(|_| format!("missing number argument `{key}`"))
+}
+
 fn texts(args: &Value, key: &str) -> Result<Vec<String>, HostError> {
     args.get(key)
         .and_then(Value::as_array)
@@ -379,33 +389,32 @@ impl DesktopHost {
             "rename_contact" => unit(e.rename_contact(text(args, "uid")?, text(args, "name")?)),
             "remove_contact" => unit(e.remove_contact(text(args, "uid")?)),
             "set_muted" => unit(e.set_muted(text(args, "uid")?, flag(args, "muted")?)),
-            "set_group_only" => unit(e.set_group_only(flag(args, "value")?)),
-            "set_store_forward" => unit(e.set_store_forward(flag(args, "value")?)),
-            "accept_request" => Ok(json!(e
-                .accept_request(text(args, "uid")?)
-                .map_err(failed)?)),
-            "dismiss_request" => unit(e.dismiss_request(text(args, "uid")?)),
-            "stop_invite" => unit(e.stop_invite()),
-            "retry_answer" => unit(e.retry_answer()),
-            "clear_answer" => unit(e.clear_answer()),
-            // message actions
-            "delete_message" => {
-                unit(e.delete_message(text(args, "message_id")?, flag(args, "everyone")?))
+            "toggle_pin" => unit(e.toggle_pin(text(args, "conversation")?)),
+            "set_archived" => {
+                unit(e.set_archived(text(args, "conversation")?, flag(args, "archived")?))
             }
-            "react" => unit(e.react(text(args, "message_id")?, text(args, "emoji")?)),
-            "retry_message" => unit(e.retry_message(text(args, "message_id")?)),
-            "mark_conversation_read" => unit(e.mark_conversation_read(text(args, "conversation")?)),
-            "search" => json_of(
-                &e.search(text(args, "query")?, number(args, "limit").unwrap_or(50))
-                    .map_err(failed)?,
+            "set_mute_until" => {
+                unit(e.set_mute_until(text(args, "conversation")?, big(args, "until_ms")?))
+            }
+            "set_quiet_hours" => unit(e.set_quiet_hours(
+                flag(args, "enabled")?,
+                minutes(args, "from")?,
+                minutes(args, "to")?,
+            )),
+            "prefs" => {
+                Ok(serde_json::from_str(&e.prefs_json().map_err(failed)?).unwrap_or(Value::Null))
+            }
+            "set_utc_offset" => unit(
+                e.set_utc_offset_minutes(
+                    args.get("minutes")
+                        .and_then(Value::as_i64)
+                        .and_then(|m| i32::try_from(m).ok())
+                        .ok_or_else(|| "missing number argument `minutes`".to_owned())?,
+                ),
             ),
-            // Bluetooth: the secret shared with a friend (hex), from which the page works out the tags to scan for
-            "ble_secret" => Ok(json!(e
-                .ble_secret(text(args, "peer")?)
-                .map_err(failed)?
-                .iter()
-                .map(|b| format!("{b:02x}"))
-                .collect::<String>())),
+            "should_notify" => Ok(json!(e
+                .should_notify(text(args, "conversation")?)
+                .map_err(failed)?)),
             // link bookkeeping
             "set_link_path" => {
                 unit(e.set_link_path(text(args, "peer")?, path_kind(&text(args, "path")?)?))

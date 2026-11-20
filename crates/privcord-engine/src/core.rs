@@ -67,6 +67,7 @@ pub mod lan;
 mod legacy_groups;
 mod linking;
 mod media;
+mod prefs;
 mod privacy;
 mod removal;
 mod scheduled;
@@ -76,6 +77,7 @@ mod social;
 mod sync;
 
 pub use backup::RestoreSummary;
+pub use prefs::{Prefs, QuietHours, MUTE_FOREVER};
 pub use scheduled::Scheduled;
 pub use social::SearchHit;
 
@@ -268,6 +270,10 @@ pub struct Core {
     deleted: std::collections::HashSet<MessageId>,
     /// People whose channel messages we hide.
     muted: BTreeSet<UserId>,
+    /// Pins, archive, mute-for-a-while and quiet hours (synced to the account's devices).
+    prefs: Prefs,
+    /// Minutes east of UTC, set by the app (see `set_utc_offset`).
+    utc_offset_min: i32,
     /// True only while a message that came through the signaling service is being handled.
     relay_inbound: bool,
     /// Tests only: behave like an app from before device lists (accepts only account signatures, says nothing of
@@ -336,6 +342,8 @@ impl Core {
             reactions: HashMap::new(),
             deleted: std::collections::HashSet::new(),
             muted: BTreeSet::new(),
+            prefs: Prefs::default(),
+            utc_offset_min: 0,
             relay_inbound: false,
             old_version: false,
             removed_from_account: false,
@@ -435,6 +443,7 @@ impl Core {
                     .collect();
             }
         }
+        self.load_prefs();
         self.group_only = self
             .ports
             .storage
@@ -1337,7 +1346,7 @@ impl Core {
             message_id: message.message_id.clone(),
             own: false,
         });
-        self.ports.notifier.notify(Notification::MessageReceived {
+        self.notify_message(Notification::MessageReceived {
             conversation,
             sender: who.clone(),
             preview: message.text.chars().take(80).collect(),
@@ -2349,7 +2358,7 @@ impl Core {
             message_id: message.message_id.clone(),
             own: false,
         });
-        self.ports.notifier.notify(Notification::MessageReceived {
+        self.notify_message(Notification::MessageReceived {
             conversation,
             sender: who.clone(),
             preview: message.text.chars().take(80).collect(),
@@ -2658,7 +2667,7 @@ impl Core {
             message_id: message.message_id.clone(),
             own: false,
         });
-        self.ports.notifier.notify(Notification::MessageReceived {
+        self.notify_message(Notification::MessageReceived {
             conversation,
             sender: who.clone(),
             preview: privcord_domain::files::file_preview_text(&offer.name),
@@ -2936,7 +2945,7 @@ impl Core {
             message_id: id,
             own: false,
         });
-        self.ports.notifier.notify(Notification::MessageReceived {
+        self.notify_message(Notification::MessageReceived {
             conversation,
             sender: m.contact.uid,
             preview: m.text.chars().take(80).collect(),

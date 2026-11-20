@@ -1385,6 +1385,55 @@ impl PrivcordEngine {
         })
     }
 
+    /// Pin a chat to the top of the list, or take it off. At most three pins; the same on all your devices.
+    pub fn toggle_pin(&self, conversation: String) -> Result<(), FfiError> {
+        self.misc(Op::TogglePin(conversation))
+    }
+
+    /// Archive a chat (hide it from the list), or bring it back. The same on all your devices.
+    pub fn set_archived(&self, conversation: String, archived: bool) -> Result<(), FfiError> {
+        self.misc(Op::SetArchived {
+            id: conversation,
+            archived,
+        })
+    }
+
+    /// Turn a chat's notifications off until a time in milliseconds (`0` turns them back on). The same on all devices.
+    pub fn set_mute_until(&self, conversation: String, until_ms: i64) -> Result<(), FfiError> {
+        self.misc(Op::SetMuteUntil {
+            id: conversation,
+            until_ms,
+        })
+    }
+
+    /// No notifications between two times of day (minutes after midnight). The same on all your devices.
+    pub fn set_quiet_hours(&self, enabled: bool, from: u16, to: u16) -> Result<(), FfiError> {
+        self.misc(Op::SetQuietHours { enabled, from, to })
+    }
+
+    /// The synced preferences as JSON: `{pins, archived, mute_until, quiet}`.
+    pub fn prefs_json(&self) -> Result<String, FfiError> {
+        match pollster::block_on(self.handle.op(Op::Prefs))? {
+            Answer::Text(t) => Ok(t),
+            _ => Err(FfiError::InvalidArgument),
+        }
+    }
+
+    /// Tell the engine the person's time zone (minutes east of UTC) so quiet hours mean local time. Call it at start
+    /// and when the zone changes.
+    pub fn set_utc_offset_minutes(&self, minutes: i32) -> Result<(), FfiError> {
+        self.misc(Op::SetUtcOffset(minutes))
+    }
+
+    /// Would a notification from this conversation be shown now? (The engine already holds back muted chats and
+    /// quiet hours itself; this is for showing the state.)
+    pub fn should_notify(&self, conversation: String) -> Result<bool, FfiError> {
+        match pollster::block_on(self.handle.op(Op::ShouldNotify(conversation)))? {
+            Answer::Text(t) => Ok(t == "1"),
+            _ => Err(FfiError::InvalidArgument),
+        }
+    }
+
     /// Search messages on this device (two characters at least). Newest first.
     pub fn search(&self, query: String, limit: u32) -> Result<Vec<SearchHitDto>, FfiError> {
         match pollster::block_on(self.handle.op(Op::Search {

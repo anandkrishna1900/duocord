@@ -1017,3 +1017,41 @@ fn retrying_a_message_queues_it_again_once_and_only_for_our_own_messages() {
         .retry_message(&privcord_domain::MessageId::new("nope").unwrap())
         .is_err());
 }
+
+#[test]
+fn the_engine_itself_keeps_quiet_for_a_muted_chat_and_in_quiet_hours() {
+    let (mut a, mut b, au, bu) = pair();
+    connect(&mut a, &mut b, &au, &bu);
+    let chat = au.as_str().to_owned();
+    // Heard normally.
+    a.core.send_message(&bu, "one", None).unwrap();
+    pump(&mut a, &mut b, &au, &bu);
+    assert_eq!(b.notifier.taken().len(), 1);
+
+    // Muted for an hour: nothing shown, and it comes back by itself.
+    let now = privcord_ports::Clock::now_ms(&*b.clock);
+    b.core.set_mute_until(&chat, now + 3_600_000).unwrap();
+    b.clock.advance(1000);
+    a.core.send_message(&bu, "two", None).unwrap();
+    pump(&mut a, &mut b, &au, &bu);
+    assert!(b.notifier.taken().is_empty(), "a muted chat stays quiet");
+    b.clock.advance(2 * 3_600_000);
+    a.core.send_message(&bu, "three", None).unwrap();
+    pump(&mut a, &mut b, &au, &bu);
+    assert_eq!(b.notifier.taken().len(), 1, "the mute ran out");
+
+    // Quiet hours in the person's own time: 1_700_000_000_000 ms is 22:13 UTC; with +1 hour it is 23:13 local.
+    b.core.set_quiet_hours(true, 22 * 60, 7 * 60).unwrap();
+    b.core.set_utc_offset(60);
+    b.clock.advance(1000);
+    a.core.send_message(&bu, "four", None).unwrap();
+    pump(&mut a, &mut b, &au, &bu);
+    assert!(b.notifier.taken().is_empty(), "inside quiet hours");
+    // Eight hours on it is morning there.
+    b.clock.advance(9 * 3_600_000);
+    a.core.send_message(&bu, "five", None).unwrap();
+    pump(&mut a, &mut b, &au, &bu);
+    assert_eq!(b.notifier.taken().len(), 1, "quiet hours are over");
+    // The messages themselves were all kept.
+    assert_eq!(texts(&b, &au).len(), 5);
+}

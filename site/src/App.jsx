@@ -1,4 +1,4 @@
-import Gallery, { openShot } from './Gallery.jsx';
+import Gallery, { openShot, WindowFrame, PhoneFrame } from './Gallery.jsx';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 // Components below are from React Bits (https://reactbits.dev, MIT + Commons Clause), copied into src/rb. See THIRD_PARTY.md.
 import DotGrid from './rb/DotGrid.jsx';
@@ -9,7 +9,6 @@ import ScrollReveal from './rb/ScrollReveal.jsx';
 import ScrollFloat from './rb/ScrollFloat.jsx';
 import SpotlightCard from './rb/SpotlightCard.jsx';
 import GlareHover from './rb/GlareHover.jsx';
-import TiltedCard from './rb/TiltedCard.jsx';
 import ClickSpark from './rb/ClickSpark.jsx';
 import Magnet from './rb/Magnet.jsx';
 import StarBorder from './rb/StarBorder.jsx';
@@ -166,15 +165,13 @@ export default function App() {
                   {reduce ? 'End-to-end encrypted · source-available · not yet independently audited' : <ShinyText text="End-to-end encrypted · source-available · not yet independently audited" color="#8f8b82" shineColor="#ffffff" speed={3.5} />}
                 </p>
               </div>
-              <div className="hero-visual" onClick={(e) => { if (!e.target.closest('.phone-shot, .hero-enlarge')) openShot('group-chat-dark.webp', e.currentTarget); }}>
-                <img className="shot plain" src={asset('group-chat-dark.webp')} alt="PrivCord on Windows: an encrypted group chat in the dark theme" width="1280" height="800" />
-                {!reduce && (
-                  <div className="tilt-frame"><TiltedCard imageSrc={asset('group-chat-dark.webp')} altText="" containerWidth="100%" containerHeight="100%" imageWidth="100%" imageHeight="100%" rotateAmplitude={9} scaleOnHover={1.03} showTooltip={false} glare={0.25} glareColor="#ffffff" shadow={0.5} flipOnClick={false} radius={12} floating /></div>
-                )}
-                <button type="button" className="phone-shot-btn" onClick={(e) => openShot('mobile-group.webp', e.currentTarget)} aria-label="Open the Android screenshot full size">
-                  <img className="phone-shot" src={asset('mobile-group.webp')} alt="PrivCord on Android: a group chat" width="390" height="800" loading="lazy" />
+              <div className="hero-visual">
+                <button type="button" className="win-btn" onClick={(e) => openShot('group-chat-dark.webp', e.currentTarget)} aria-label="Open the Windows screenshot full size">
+                  <WindowFrame src={asset('group-chat-dark.webp')} alt="PrivCord on Windows: an encrypted group chat in the dark theme" w={1280} h={800} enlarge eager />
                 </button>
-                <button type="button" className="hero-enlarge" onClick={(e) => openShot('group-chat-dark.webp', e.currentTarget)}>⤢ Full size</button>
+                <button type="button" className="phone-btn" onClick={(e) => openShot('mobile-group.webp', e.currentTarget)} aria-label="Open the Android screenshot full size">
+                  <PhoneFrame src={asset('mobile-group.webp')} alt="PrivCord on Android: a group chat" w={390} h={800} />
+                </button>
               </div>
             </div>
           </section>

@@ -184,6 +184,7 @@ impl Core {
 }
 
 #[cfg(test)]
+#[allow(clippy::indexing_slicing)]
 mod quick_tests {
     use super::*;
 

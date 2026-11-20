@@ -33,6 +33,10 @@ data class AppSettings(
     val appLock: Boolean = true,
     /** Conversation ids (contact uid / group id) whose notifications are muted. */
     val mutedChats: Set<String> = emptySet(),
+    /** Chats pinned to the top of the list on this phone (at most 3, in the order pinned). */
+    val pinned: List<String> = emptyList(),
+    /** When a backup was last made (milliseconds), or 0. Only used by the privacy checkup. */
+    val lastBackupAt: Long = 0L,
     val network: NetworkConfig = NetworkConfig(),
 )
 
@@ -69,6 +73,8 @@ class SettingsRepository(context: Context) {
             .putBoolean("panicWipe", next.panicWipe)
             .putBoolean("appLock", next.appLock)
             .putStringSet("mutedChats", next.mutedChats)
+            .putString("pinned", next.pinned.joinToString(","))
+            .putLong("lastBackupAt", next.lastBackupAt)
             .putString("network", next.network.toJson())
             .apply()
     }
@@ -90,6 +96,8 @@ class SettingsRepository(context: Context) {
             panicWipe = prefs.getBoolean("panicWipe", false),
             appLock = prefs.getBoolean("appLock", true),
             mutedChats = prefs.getStringSet("mutedChats", emptySet())?.toSet() ?: emptySet(),
+            pinned = (prefs.getString("pinned", "") ?: "").split(",").filter { it.isNotBlank() }.takeLast(MAX_PINS),
+            lastBackupAt = prefs.getLong("lastBackupAt", 0L),
             network = NetworkConfig.fromJson(
                 prefs.getString("network", null),
                 fallback = AppConfig.defaultNetworkConfig(),

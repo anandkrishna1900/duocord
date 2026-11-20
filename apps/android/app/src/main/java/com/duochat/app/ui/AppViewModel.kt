@@ -217,6 +217,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         runCatching { if (on) com.duochat.app.notifications.DuoBackgroundService.start(app) else com.duochat.app.notifications.DuoBackgroundService.stop(app) }
     }
 
+    fun togglePin(conversationId: String) {
+        updateSettings { copy(pinned = com.duochat.app.data.togglePin(pinned, conversationId)) }
+    }
+
     fun toggleMute(conversationId: String) {
         updateSettings {
             copy(mutedChats = if (conversationId in mutedChats) mutedChats - conversationId else mutedChats + conversationId)

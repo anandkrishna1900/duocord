@@ -354,6 +354,8 @@ SectionTitle("Appearance")
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(8.dp))
+                NetworkHostsCard(com.duochat.app.data.networkHosts(settings.network))
+                Spacer(Modifier.height(8.dp))
                 DetailRow("Friends connected now", "${state.linkCount} of ${state.contacts.size}")
                 DetailRow("Messages waiting to send", state.queuedCount.toString())
                 DetailRow("Your ID", state.uid.take(16) + "…", monospace = true)
@@ -605,6 +607,30 @@ SectionTitle("Appearance")
                 Spacer(Modifier.height(20.dp))
 
 SectionTitle("Security")
+                PrivacyCheckupCard(
+                    items = com.duochat.app.data.privacyCheckup(
+                        appLock = settings.appLock,
+                        lastBackupAt = settings.lastBackupAt,
+                        hideIp = settings.network.forceRelay,
+                        previewsOff = !settings.notificationPreviews,
+                        groupOnly = settings.groupOnly,
+                        panicWipe = settings.panicWipe,
+                        staleDevices = state.devices.count { it.stale },
+                    ),
+                    canTurnOn = setOf("lock", "previews", "grouponly", "panic"),
+                    onTurnOn = { id ->
+                        onUpdateSettings {
+                            when (id) {
+                                "lock" -> copy(appLock = true)
+                                "previews" -> copy(notificationPreviews = false)
+                                "grouponly" -> copy(groupOnly = true)
+                                "panic" -> copy(panicWipe = true)
+                                else -> this
+                            }
+                        }
+                    },
+                )
+                Spacer(Modifier.height(12.dp))
                 val appContext = LocalContext.current
                 val lockAvailable = remember { com.duochat.app.security.AppLock.available(appContext) }
                 ToggleRow(
@@ -726,7 +752,7 @@ ToggleRow(
                 ) { on -> onUpdateSettings { copy(panicWipe = on) } }
                 Spacer(Modifier.height(14.dp))
                 SectionTitle("Backup")
-                BackupSection(onExportBackup, onImportBackup)
+                BackupSection({ pass, done -> onExportBackup(pass) { r -> if (r.isSuccess) onUpdateSettings { copy(lastBackupAt = System.currentTimeMillis()) }; done(r) } }, onImportBackup)
                 Spacer(Modifier.height(20.dp))
 
 SectionTitle("About DuoCord")

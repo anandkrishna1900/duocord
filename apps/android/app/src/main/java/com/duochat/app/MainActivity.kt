@@ -288,6 +288,8 @@ private fun RootScreen(viewModel: AppViewModel) {
                 else -> HomeScreen(
                     state = state,
                     onOpenChat = { route = "chat:${it.id}" },
+                    pinned = settings.pinned,
+                    onTogglePin = viewModel::togglePin,
                     onAddFriend = { route = "add" },
                     onNewGroup = { route = "newgroup" },
                     onChannels = { channelsOpen = true },

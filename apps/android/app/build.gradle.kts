@@ -177,7 +177,7 @@ dependencies {
     implementation("io.github.webrtc-sdk:android:150.7871.04")
     // Voice notes and audio files: plays the WebM/Opus that desktop browsers record (MediaPlayer often refuses it).
     implementation("androidx.media3:media3-exoplayer:1.5.1")
-    implementation("com.google.zxing:core:3.5.3")
+    implementation("com.google.zxing:core:3.5.4")
     // The QR scanner: CameraX for the camera, ZXing core (above) for decoding.
     implementation("androidx.camera:camera-camera2:1.4.1")
     implementation("androidx.camera:camera-lifecycle:1.4.1")

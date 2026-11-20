@@ -491,7 +491,7 @@ SectionTitle("Appearance")
                 DuoTextField(
                     value = turnSecret,
                     onValueChange = { turnSecret = it },
-                    label = { Text("TURN credential") },
+                    label = { Text("TURN password") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -582,7 +582,7 @@ SectionTitle("Appearance")
                             networkStatus = "Defaults restored."
                         },
                     ) {
-                        Text("Defaults")
+                        Text("Reset to defaults")
                     }
                 }
                 networkStatus?.let {

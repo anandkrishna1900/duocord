@@ -127,7 +127,7 @@ fun OnboardingScreen(
                     TextButton(
                         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                         onClick = { step = Step.LINK },
-                    ) { Text("Link to a device I already use", color = MaterialTheme.colorScheme.onSurface) }
+                    ) { Text("Link to a device you already use", color = MaterialTheme.colorScheme.onSurface) }
                 }
 
                 Step.LINK -> LinkJoinContent(

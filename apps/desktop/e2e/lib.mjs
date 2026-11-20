@@ -240,7 +240,9 @@ export async function groupAdd(page, friendName) {
 
 export async function groupRemove(page, memberName) {
   await openGroupDetails(page);
-  await page.locator('.member-row', { hasText: memberName }).locator('button:has-text("Remove")').click();
+  const row = page.locator('.member-row', { hasText: memberName });
+  await row.locator('button:has-text("Remove")').click();
+  await row.locator('button:has-text("Remove"):has-text("?")').click(); // the confirmation
   await page.waitForFunction((n) => ![...document.querySelectorAll('.member-row')].some((r) => r.textContent.includes(n)), memberName);
   await page.keyboard.press('Escape');
 }

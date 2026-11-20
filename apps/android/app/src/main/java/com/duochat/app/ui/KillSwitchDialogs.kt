@@ -103,7 +103,7 @@ private fun StepList(steps: List<KillSwitchPlanStep>, report: KillSwitchReport?)
 }
 
 /* ------------------------------------------------------------------ */
-/* NUKE DUOCHAT (Settings → Security → Emergency Actions)              */
+/* Erase everything (Settings → Security → Emergency Actions)              */
 /* ------------------------------------------------------------------ */
 
 @Composable
@@ -151,7 +151,7 @@ fun NukeDialog(
                     )
                     Spacer(Modifier.width(10.dp))
                     Text(
-                        "NUKE DUOCHAT",
+                        "Erase everything on this phone",
                         style = MaterialTheme.typography.headlineSmall,
                         color = MaterialTheme.colorScheme.error,
                     )
@@ -222,7 +222,7 @@ fun NukeDialog(
                         } else {
                             Text(
                                 "Partial erase. Red steps could not be deleted; the erase can " +
-                                    "be re-run after signing in again.",
+                                    "be run again.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.error,
                                 fontWeight = FontWeight.SemiBold,
@@ -230,7 +230,7 @@ fun NukeDialog(
                         }
                         Spacer(Modifier.height(8.dp))
                         Button(onClick = onDone) {
-                            Text(if (summary.complete) "Done — return to sign in" else "Close")
+                            Text(if (summary.complete) "Done — return to setup" else "Close")
                         }
                     }
                 }

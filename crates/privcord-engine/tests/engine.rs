@@ -1116,9 +1116,7 @@ fn a_silent_chat_notifies_flagged_silent_and_a_muted_one_not_at_all() {
     b.core.set_silent(au.as_ref(), false).unwrap();
     assert!(b.core.prefs().silent_chats.is_empty());
     b.core.set_silent(au.as_ref(), true).unwrap();
-    b.core
-        .set_mute_until(au.as_ref(), i64::MAX / 2)
-        .unwrap();
+    b.core.set_mute_until(au.as_ref(), i64::MAX / 2).unwrap();
     a.core.send_message(&bu, "muted one", None).unwrap();
     pump(&mut a, &mut b, &au, &bu);
     assert!(b.notifier.taken().is_empty());

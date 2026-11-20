@@ -3152,7 +3152,7 @@ input[type='checkbox'] {
 }
 
 .bubble.own .quote {
-  border-left-color: rgba(255, 255, 255, 0.8);
+  border-color: rgba(255, 255, 255, 0.55);
 }
 
 [data-mid].flash .bubble {

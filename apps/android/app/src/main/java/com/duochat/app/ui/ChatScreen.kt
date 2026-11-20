@@ -1147,7 +1147,7 @@ private fun DeliveryIndicator(state: DeliveryState, ink: Color, onRetry: () -> U
     when (state) {
         DeliveryState.FAILED -> Icon(
             Icons.Filled.ErrorOutline, contentDescription = "Not delivered. Tap to retry.",
-            tint = ink, modifier = Modifier.size(15.dp).clickable(onClick = onRetry),
+            tint = ink, modifier = Modifier.clickable(onClick = onRetry).padding(6.dp).size(16.dp),
         )
         DeliveryState.QUEUED -> Icon(Icons.Filled.Schedule, contentDescription = "Waiting to send", tint = color, modifier = Modifier.size(14.dp))
         DeliveryState.SENT -> Icon(Icons.Filled.Check, contentDescription = "Sent", tint = color, modifier = Modifier.size(14.dp))

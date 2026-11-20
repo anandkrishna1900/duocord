@@ -1,15 +1,12 @@
 package com.duochat.app.ui
 
-import app.cash.paparazzi.DeviceConfig
-import app.cash.paparazzi.Paparazzi
+import org.robolectric.annotation.Config
 
 /**
  * Every screen of ScreensRenderTest again on a small phone (360 dp wide) with large text (1.6x), where clipped labels,
  * wrapping buttons and overlapping rows show up first.
  */
+@Config(sdk = [35], qualifiers = "w360dp-h640dp-xhdpi", application = android.app.Application::class)
 class StressRenderTest : ScreensRenderTest() {
-    override val paparazzi = Paparazzi(
-        deviceConfig = DeviceConfig.NEXUS_5.copy(fontScale = 1.6f),
-        maxPercentDifference = 100.0,
-    )
+    override val fontScale = 1.6f
 }

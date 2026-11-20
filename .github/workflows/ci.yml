@@ -1,9 +1,13 @@
 name: CI
 
+# The landing page (site/) has its own workflow (pages.yml, which builds and deploys it), so a change that touches only
+# site/ does not need the app's tests.
 on:
   push:
     branches: [main]
+    paths-ignore: ['site/**']
   pull_request:
+    paths-ignore: ['site/**']
 
 permissions:
   contents: read

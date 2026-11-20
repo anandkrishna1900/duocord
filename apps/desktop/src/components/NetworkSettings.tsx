@@ -168,7 +168,7 @@ export function NetworkSettings({ engine, state }: { engine: ChatEngineApi | nul
           </button>
         </div>
         <p className="muted small" style={{ marginTop: '4px' }}>
-          {transportMode === 'AUTOMATIC' && 'Tries direct BLE, then BLE Mesh, then WebRTC P2P, then decentralized relay outbox.'}
+          {transportMode === 'AUTOMATIC' && 'Tries direct Bluetooth, then WebRTC P2P, then the relay outbox.'}
           {transportMode === 'BLUETOOTH_ONLY' && 'Never touches Internet, WebRTC, TURN, or Nostr relays. Direct radio and BLE mesh only.'}
           {transportMode === 'INTERNET_ONLY' && 'Disables Bluetooth completely; uses WebRTC P2P and configured relays.'}
         </p>
@@ -237,7 +237,7 @@ export function NetworkSettings({ engine, state }: { engine: ChatEngineApi | nul
         />
       ) : null}
       <Toggle
-        label="Always relay through TURN"
+        label="Hide my IP address from friends"
         hint="Hides your IP address from your friend. Slower, and needs a TURN server."
         checked={forceRelay}
         onChange={setForceRelay}

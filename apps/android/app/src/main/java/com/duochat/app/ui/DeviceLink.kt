@@ -237,7 +237,7 @@ fun LinkHostDialog(
                             )
                         }
                         Spacer(Modifier.height(10.dp))
-                        Text("On the new device, choose \"Link to a device I already use\" and scan this code, or type it:")
+                        Text("On the new device, choose \"Link to a device you already use\" and scan this code, or type it:")
                         Spacer(Modifier.height(6.dp))
                         SelectionContainer {
                             Text(code ?: "", fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)

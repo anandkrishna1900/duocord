@@ -792,7 +792,7 @@ await scenario(17, 'themes: 16 built-in colour themes apply, survive a reload, a
   const bg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor + '|' + getComputedStyle(document.documentElement).getPropertyValue('--accent').trim());
   const classic = await bg();
   await page.click('button[aria-label="Settings"]');
-  await page.click('.tab:has-text("Look")');
+  await page.click('.tab:has-text("Appearance")');
   const names = await page.locator('.theme-tile > span:last-child').allInnerTexts();
   check(names.length >= 11 && names[0] === 'Classic', 'Classic plus at least ten named themes', names);
   const seen = new Set();
@@ -815,7 +815,7 @@ await scenario(17, 'themes: 16 built-in colour themes apply, survive a reload, a
   await page.waitForSelector('.sidebar', { timeout: 20000 });
   check((await bg()) === nord, 'the chosen theme is still there after a reload');
   await page.click('button[aria-label="Settings"]');
-  await page.click('.tab:has-text("Look")');
+  await page.click('.tab:has-text("Appearance")');
   await page.click('.theme-tile:has-text("Classic")');
   await page.waitForFunction((c) => true, classic);
   check((await bg()) === classic, 'Classic brings the original look back');
@@ -1001,7 +1001,7 @@ await scenario(20, 'delete for everyone, reactions, search, backup and restore, 
 
   // --- backup and restore
   await A.page.click('button[aria-label="Settings"]');
-  await A.page.click('.tab:has-text("Security")');
+  await A.page.click('.tab:has-text("Backup")');
   await A.page.fill('input[aria-label="Backup passphrase"]', 'correct horse battery');
   const [saved] = await Promise.all([A.page.waitForEvent('download', { timeout: 30000 }), A.page.click('button:has-text("Save a backup")')]);
   const backupPath = await saved.path();
@@ -1010,7 +1010,7 @@ await scenario(20, 'delete for everyone, reactions, search, backup and restore, 
   await A.page.keyboard.press('Escape');
   // wrong passphrase / wrong identity fail clearly
   await B.page.click('button[aria-label="Settings"]');
-  await B.page.click('.tab:has-text("Security")');
+  await B.page.click('.tab:has-text("Backup")');
   await B.page.fill('input[aria-label="Backup passphrase"]', 'correct horse battery');
   await B.page.setInputFiles('input[aria-label="Backup file"]', backupPath);
   await B.page.waitForSelector('.status-text.error:has-text("different identity")', { timeout: 20000 });
@@ -1029,7 +1029,7 @@ await scenario(20, 'delete for everyone, reactions, search, backup and restore, 
   await A.page.reload();
   await A.page.waitForSelector('.sidebar', { timeout: 20000 });
   await A.page.click('button[aria-label="Settings"]');
-  await A.page.click('.tab:has-text("Security")');
+  await A.page.click('.tab:has-text("Backup")');
   await A.page.fill('input[aria-label="Backup passphrase"]', 'correct horse battery');
   await A.page.setInputFiles('input[aria-label="Backup file"]', backupPath);
   await A.page.waitForSelector('.status-text:has-text("Restored")', { timeout: 30000 });

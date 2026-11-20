@@ -26,7 +26,7 @@ export function PhoneFrame({ src, alt, w, h }) {
  * list that auto-plays (each chapter has a progress line; hover, focus, a tap or leaving the screen pauses it). Tap the
  * stage to open the lightbox: a native <dialog> (focus trap, Esc, inert page behind it) with arrows, swipe, zoom to natural
  * size and focus returned to where you came from. Plain CSS, no library; honours prefers-reduced-motion.
- * Pattern references: Magic UI (device frames), React Bits (Stack, stepper), Untitled UI (lightbox), Jitter (progress lines).
+ * Pattern references: Magic UI (device frames), Untitled UI (lightbox), Jitter (progress lines).
  */
 export const SHOTS = [
   { src: 'group-chat-dark.webp', w: 1280, h: 800, phone: false, title: 'A group chat', note: 'Everyone in the group is connected directly. Messages, photos, files and voice notes, end-to-end encrypted.' },

@@ -11,10 +11,10 @@ Status meanings: **Ported, tested** = the Rust implementation exists and is chec
 | Ported, tested | 66 | 9828 |
 | Partly ported | 1 | 2215 |
 | Not yet ported | 0 | 0 |
-| Stays (UI) | 65 | 14081 |
+| Stays (UI) | 66 | 14101 |
 | Stays (platform adapter) | 57 | 11597 |
 | Replaced by a library | 4 | 333 |
-| **All mapped files** | **193** | **38054** |
+| **All mapped files** | **194** | **38074** |
 
 Ported does not mean retired: the TypeScript and Kotlin versions stay in production until the apps call the Rust engine (M7 desktop, M8 Android) and the compatibility gates pass (PRD section 16).
 
@@ -124,6 +124,7 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 | `apps/desktop/src/lib/p2p.ts` | 212 | `PeerTransportHandlers`, `PeerTransport` | WebRTC peer connection and BLE link on the desktop | Transport adapters (stay); link policy moves to engine | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/desktop/src/lib/peerLink.ts` | 445 | `LinkState`, `LinkContact`, `LinkEnv`, `DEAD_LINK_MS`, `PeerLink` | WebRTC peer connection and BLE link on the desktop | Transport adapters (stay); link policy moves to engine | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/desktop/src/lib/secureStore.ts` | 42 | `usingOsSecureStorage`, `secretGet`, `secretSet`, `secretDelete` | Secure storage and at-rest encryption helpers | SecureStore adapter (Tauri keyring) | Adapter | Stays (platform adapter) | Stays | n/a |
+| `apps/desktop/src/lib/selectedTab.test.ts` | 20 | (none) | Guards the look: later style layers must not repaint selected controls | Desktop UI | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/lib/settings.test.ts` | 34 | (none) | Presentation helpers, UI settings, themes, notifications bridge | UI / adapter (stays) | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/lib/settings.ts` | 123 | `ThemeMode`, `AppSettings`, `ACCENTS`, `parseSettings`, `loadSettings`, `saveSettings` +3 | Presentation helpers, UI settings, themes, notifications bridge | UI / adapter (stays) | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/lib/signaling/hub.ts` | 57 | `transportsFor`, `SignalingHub` | Nostr events (BIP-340), relay client, signaling hub | engine::signaling::{relay,nostr,hub} (state machines) + crypto::nostr; a socket adapter of a few lines remains | Engine/Adapter | Ported, tested | M7: replace with the socket adapter that feeds SignalingHub | relay client against the real relay (tests/real_relay.rs); fake relays for backoff, timeouts, dedupe, Nostr rules |

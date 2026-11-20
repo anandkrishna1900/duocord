@@ -4,6 +4,7 @@ import { applySettings, loadSettings } from './lib/settings';
 import './styles.css';
 import './look.css';
 import './polish.css';
+import './wow.css';
 import { installSpotlight } from './lib/spotlight';
 
 applySettings(loadSettings());

@@ -1,0 +1,179 @@
+/*
+ * The signature layer. Ideas: segmented sliding pill (Untitled UI tabs, Watermelon Continuous Tabs), an ambient
+ * aurora behind the conversation (React Bits Aurora, kept very quiet), a "duo link" mark for empty states (two
+ * friends, one private line), spring pop for unread badges (Jitter / Magic UI Number Ticker idea). Plain CSS; all of it
+ * stops under prefers-reduced-motion.
+ */
+
+/* Filter pills: All / Unread / Groups */
+.filter-pills {
+  --pad: 3px;
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  margin: 0 14px 6px;
+  padding: var(--pad);
+  border-radius: 999px;
+  background: var(--tonal);
+}
+.filter-pills-thumb {
+  position: absolute;
+  top: var(--pad);
+  bottom: var(--pad);
+  left: var(--pad);
+  width: calc((100% - 2 * var(--pad)) / 3);
+  border-radius: 999px;
+  background: var(--surface-strong);
+  box-shadow: 0 1px 0 var(--border-strong) inset, 0 4px 14px rgba(0, 0, 0, 0.18);
+  transform: translateX(calc(var(--i, 0) * 100%));
+  transition: transform 0.38s cubic-bezier(0.34, 1.4, 0.5, 1);
+}
+.filter-pill {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-weight: 650;
+  font-size: 13px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+.filter-pill.active {
+  color: var(--text);
+}
+.filter-pill:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.filter-pill-count {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--apricot);
+  color: var(--on-apricot);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 18px;
+  text-align: center;
+}
+.chat-list-none {
+  padding: 24px 16px;
+  text-align: center;
+}
+
+/* A quiet aurora behind the conversation: two slow plum and apricot lights. */
+.chat-panel {
+  position: relative;
+  isolation: isolate;
+}
+.chat-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.55;
+  background:
+    radial-gradient(520px 340px at 12% 8%, var(--accent-soft), transparent 70%),
+    radial-gradient(460px 300px at 92% 92%, color-mix(in srgb, var(--apricot) 14%, transparent), transparent 70%);
+}
+
+/* My messages: the plum has depth, theirs stay flat. */
+.bubble.own {
+  background: linear-gradient(160deg, color-mix(in srgb, var(--accent-fill) 88%, white), var(--accent-fill) 55%, color-mix(in srgb, var(--accent-fill) 82%, black));
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--accent-fill) 28%, transparent);
+}
+
+/* Unread badges pop in. */
+@keyframes wow-pop {
+  0% {
+    transform: scale(0.4);
+  }
+  60% {
+    transform: scale(1.18);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.unread-dot,
+.filter-pill-count {
+  animation: wow-pop 0.4s cubic-bezier(0.34, 1.4, 0.5, 1) both;
+}
+
+/* The duo link: two friends, one private line with a message travelling along it. */
+.duo-link {
+  display: grid;
+  place-items: center;
+  background: none;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+  width: auto;
+  height: auto;
+}
+.duo-dot-a {
+  fill: var(--accent-fill);
+}
+.duo-dot-b {
+  fill: var(--apricot);
+}
+.duo-line {
+  stroke: var(--border-strong);
+  stroke-dasharray: 3 6;
+}
+.duo-pulse {
+  fill: var(--text);
+  opacity: 0.9;
+}
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes wow-travel {
+    0% {
+      transform: translateX(0);
+      opacity: 0;
+    }
+    15%,
+    85% {
+      opacity: 1;
+    }
+    100% {
+      transform: translateX(72px);
+      opacity: 0;
+    }
+  }
+  @keyframes wow-breathe {
+    50% {
+      transform: scale(1.06);
+    }
+  }
+  .duo-pulse {
+    animation: wow-travel 2.6s ease-in-out infinite;
+  }
+  .duo-dot {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: wow-breathe 4s ease-in-out infinite;
+  }
+  .duo-dot-b {
+    animation-delay: -2s;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .filter-pills-thumb,
+  .filter-pill {
+    transition: none;
+  }
+  .unread-dot,
+  .filter-pill-count {
+    animation: none;
+  }
+}

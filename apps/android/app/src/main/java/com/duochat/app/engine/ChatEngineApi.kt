@@ -54,6 +54,12 @@ interface ChatEngineApi {
     /** On the device holding the account key: a code (shown as a QR code) for a new device. */
     suspend fun startDeviceLink(): Result<String>
 
+    /** On a new device: a code to show as a QR for the other device to scan; that device then shows six digits. */
+    suspend fun startScanLinkOffer(name: String): Result<String>
+
+    /** On a new device: the six digits the other device shows. True when they match. */
+    suspend fun submitLinkCode(digits: String): Result<Boolean>
+
     /** On the device holding the account key: the code scanned from the new device's QR (it then shows six digits). */
     suspend fun hostScannedLink(code: String): Result<Unit>
 

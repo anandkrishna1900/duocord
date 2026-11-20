@@ -288,10 +288,15 @@ fun LinkHostDialog(
 fun LinkJoinContent(
     state: ChatState?,
     onJoin: (code: String, name: String, onResult: (Result<Unit>) -> Unit) -> Unit,
+    onStartScanOffer: (name: String, onResult: (Result<String>) -> Unit) -> Unit,
+    onSubmitLinkCode: (digits: String, onResult: (Result<Boolean>) -> Unit) -> Unit,
     onCancel: () -> Unit,
     onLinked: () -> Unit,
     onBack: () -> Unit,
 ) {
+    var offer by remember { mutableStateOf<String?>(null) }
+    var digits by remember { mutableStateOf("") }
+    var manual by remember { mutableStateOf(false) }
     var code by remember { mutableStateOf("") }
     var name by remember { mutableStateOf(android.os.Build.MODEL ?: "Phone") }
     var joined by remember { mutableStateOf(false) }
@@ -299,11 +304,68 @@ fun LinkJoinContent(
     var error by remember { mutableStateOf<String?>(null) }
     val scan = rememberQrScanner("Scan the code on your other device") { code = it.trim() }
     val link = state?.deviceLink
-    LaunchedEffect(link?.stage) { if (joined && link?.stage == "done") onLinked() }
+    LaunchedEffect(link?.stage) { if ((joined || offer != null) && link?.stage == "done") onLinked() }
 
     Text("Link to a device you already use", style = MaterialTheme.typography.headlineSmall)
     Spacer(Modifier.height(12.dp))
     when {
+        offer != null -> {
+            val stage = link?.stage
+            when {
+                stage == "done" || stage == "failed" || stage == "cancelled" || stage == "expired" -> {
+                    Text(endText(link, host = false))
+                    Spacer(Modifier.height(16.dp))
+                    if (stage != "done") OutlinedButton(onClick = { offer = null; digits = ""; onCancel() }) { Text("Try again") }
+                }
+                stage == "matched" -> Text("Digits match. Tap Link on your other device to finish…")
+                stage == "enter-code" || stage == "wrong-code" -> {
+                    Text("Your other device now shows six digits. Type them here.")
+                    Spacer(Modifier.height(12.dp))
+                    DuoTextField(
+                        value = digits,
+                        onValueChange = { v ->
+                            val d = v.filter { it.isDigit() }.take(6)
+                            digits = d
+                            if (d.length == 6) onSubmitLinkCode(d) { r -> digits = ""; r.onFailure { error = it.message } }
+                        },
+                        label = { Text("Six digits") },
+                        singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    if (stage == "wrong-code") {
+                        Spacer(Modifier.height(8.dp))
+                        Text("Those digits are not right. Look at your other device and try again.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
+                    error?.let {
+                        Spacer(Modifier.height(8.dp))
+                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    TextButton(onClick = { offer = null; digits = ""; onCancel() }) { Text("Cancel") }
+                }
+                else -> {
+                    val bitmap = remember(offer) { qrBitmap(offer ?: "") }
+                    if (bitmap != null) {
+                        Image(
+                            bitmap.asImageBitmap(),
+                            contentDescription = "Code for your other device to scan",
+                            modifier = Modifier.size(220.dp).align(Alignment.CenterHorizontally),
+                        )
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Text("On your other device, open Settings › Devices › Link a new device and scan this code.")
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "It will show six digits to type here. The code works once, for ten minutes.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    TextButton(onClick = { offer = null; onCancel() }) { Text("Cancel") }
+                }
+            }
+        }
         joined && link != null && link.stage != "code" -> {
             Text(endText(link, host = false))
             Spacer(Modifier.height(16.dp))
@@ -329,20 +391,36 @@ fun LinkJoinContent(
         }
         else -> {
             Text(
-                "On your other device, open Settings › Devices › Link a new device. Then scan the code it shows.",
+                if (manual) "On your other device, open Settings › Devices › Link a new device, then choose \"Show a code instead\". Scan or type that code here."
+                else "Show a code here and scan it with your other device (Settings › Devices › Link a new device).",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(16.dp))
-            Button(onClick = scan, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Scan the code") }
-            Spacer(Modifier.height(12.dp))
-            DuoTextField(
-                value = code,
-                onValueChange = { code = it.trim() },
-                label = { Text("Or type the code") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            if (!manual) {
+                Button(
+                    enabled = !busy,
+                    onClick = {
+                        busy = true
+                        error = null
+                        onStartScanOffer(name) { r ->
+                            busy = false
+                            r.onSuccess { offer = it }.onFailure { error = it.message }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                ) { Text("Show code to scan") }
+            } else {
+                Button(onClick = scan, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Scan the code") }
+                Spacer(Modifier.height(12.dp))
+                DuoTextField(
+                    value = code,
+                    onValueChange = { code = it.trim() },
+                    label = { Text("Or type the code") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
             Spacer(Modifier.height(8.dp))
             DuoTextField(
                 value = name,
@@ -358,7 +436,8 @@ fun LinkJoinContent(
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = onBack) { Text("Back") }
-                Button(
+                TextButton(onClick = { manual = !manual }) { Text(if (manual) "Show a code instead" else "Scan their code instead") }
+                if (manual) Button(
                     enabled = !busy && code.length >= 10,
                     onClick = {
                         busy = true

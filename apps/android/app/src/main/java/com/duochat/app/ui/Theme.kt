@@ -80,28 +80,51 @@ private val shapes = Shapes(
 
 private fun mix(a: Color, b: Color, t: Float) = Color(mixColors(a.toArgb(), b.toArgb(), t))
 
-/** Every surface role from three colours (ground, card, text), so built-in palettes and the default share one recipe. */
-private fun scheme(dark: Boolean, bg: Color, card: Color, text: Color, accent: Color): ColorScheme {
-    val fill = Color(accentFill(accent.toArgb()))
-    // In the dark, the accent as text (links, text buttons) must be lighter than the fill to read on the ground:
-    // lightened until it reaches 4.5:1. Filled things that carry white text (your bubbles) use LocalOwnFill.
-    var readable = accent
+/** [fg] moved towards [toward] until it reads at 4.5:1 on every colour in [against]. */
+private fun ensureReadable(fg: Color, against: List<Color>, toward: Color): Color {
+    var c = fg
     var i = 0
-    while (dark && i < 20 && com.duochat.app.data.contrastRatio(readable.toArgb(), bg.toArgb()) < 4.5) {
-        readable = mix(readable, Color.White, 0.1f)
+    while (i < 25 && against.any { com.duochat.app.data.contrastRatio(c.toArgb(), it.toArgb()) < 4.5 }) {
+        c = mix(c, toward, 0.08f)
         i++
     }
+    return c
+}
+
+/** White or black, whichever reads better on [bg] (always at least 4.5:1). */
+private fun onColor(bg: Color): Color =
+    if (com.duochat.app.data.contrastRatio(Color.White.toArgb(), bg.toArgb()) >= com.duochat.app.data.contrastRatio(Color.Black.toArgb(), bg.toArgb())) Color.White else Color.Black
+
+/**
+ * Every surface role from three colours (ground, card, text), so built-in palettes and the default share one recipe.
+ * Every text colour is checked against every surface it can sit on (ThemesTest.every role pair reads at 4.5 to 1).
+ */
+internal fun scheme(dark: Boolean, bg: Color, card: Color, text: Color, accent: Color): ColorScheme {
+    val fill = Color(accentFill(accent.toArgb()))
     val base = if (dark) darkColorScheme() else lightColorScheme()
-    // Secondary text: as light as it can be while still reading at 4.5:1 on the ground and on tonal surfaces.
-    val muted = mix(text, bg, if (dark) 0.30f else 0.30f)
     val step = { t: Float -> mix(bg, text, t) }
+    val high = step(if (dark) 0.10f else 0.055f)
+    val highest = step(if (dark) 0.14f else 0.085f)
+    val surfaces = listOf(bg, card, high, highest)
+    // Secondary text: as light as it can be while still reading at 4.5:1 on the ground and on every tonal surface.
+    var t = 0.30f
+    var muted = mix(text, bg, t)
+    while (t > 0f && surfaces.any { com.duochat.app.data.contrastRatio(muted.toArgb(), it.toArgb()) < 4.5 }) {
+        t = (t - 0.02f).coerceAtLeast(0f)
+        muted = mix(text, bg, t)
+    }
+    // The accent as text and as a button fill: moved until it reads on every surface, with black or white on top.
+    val primary = if (dark) ensureReadable(accent, surfaces, Color.White) else ensureReadable(fill, surfaces, Color.Black)
+    val secondary = if (dark) mix(accent, Color.White, 0.35f) else fill
+    val errorContainer = if (dark) Color(0xFF3B1715) else Color(0xFFFDE7E5)
+    val error = ensureReadable(if (dark) Color(0xFFFF8A80) else Color(0xFFC62828), surfaces + errorContainer, if (dark) Color.White else Color.Black)
     return base.copy(
-        primary = if (dark) readable else fill,
-        onPrimary = if (dark) mix(accent, Color.Black, 0.7f) else Color.White,
+        primary = primary,
+        onPrimary = onColor(primary),
         primaryContainer = mix(bg, accent, if (dark) 0.22f else 0.14f),
         onPrimaryContainer = if (dark) mix(accent, Color.White, 0.55f) else mix(accent, Color.Black, 0.45f),
-        secondary = if (dark) mix(accent, Color.White, 0.35f) else fill,
-        onSecondary = Color.White,
+        secondary = secondary,
+        onSecondary = onColor(secondary),
         secondaryContainer = mix(bg, accent, if (dark) 0.16f else 0.10f),
         onSecondaryContainer = text,
         tertiary = Apricot,
@@ -112,7 +135,7 @@ private fun scheme(dark: Boolean, bg: Color, card: Color, text: Color, accent: C
         onBackground = text,
         surface = bg,
         onSurface = text,
-        surfaceVariant = step(if (dark) 0.10f else 0.055f),
+        surfaceVariant = high,
         onSurfaceVariant = muted,
         surfaceTint = Color.Transparent,
         surfaceBright = card,
@@ -120,14 +143,14 @@ private fun scheme(dark: Boolean, bg: Color, card: Color, text: Color, accent: C
         surfaceContainerLowest = card,
         surfaceContainerLow = mix(bg, card, 0.5f),
         surfaceContainer = card,
-        surfaceContainerHigh = step(if (dark) 0.10f else 0.055f),
-        surfaceContainerHighest = step(if (dark) 0.14f else 0.085f),
+        surfaceContainerHigh = high,
+        surfaceContainerHighest = highest,
         inverseSurface = text,
         inverseOnSurface = bg,
         outline = step(if (dark) 0.22f else 0.18f),
         outlineVariant = step(if (dark) 0.12f else 0.09f),
-        error = if (dark) Color(0xFFFF8A80) else Color(0xFFC62828),
-        errorContainer = if (dark) Color(0xFF3B1715) else Color(0xFFFDE7E5),
+        error = error,
+        errorContainer = errorContainer,
         onErrorContainer = if (dark) Color(0xFFFFD7D2) else Color(0xFF5F1410),
     )
 }

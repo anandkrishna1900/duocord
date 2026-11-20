@@ -11,10 +11,10 @@ Status meanings: **Ported, tested** = the Rust implementation exists and is chec
 | Ported, tested | 66 | 9859 |
 | Partly ported | 1 | 2307 |
 | Not yet ported | 0 | 0 |
-| Stays (UI) | 92 | 16831 |
+| Stays (UI) | 92 | 16917 |
 | Stays (platform adapter) | 60 | 12023 |
 | Replaced by a library | 4 | 333 |
-| **All mapped files** | **223** | **41353** |
+| **All mapped files** | **223** | **41439** |
 
 Ported does not mean retired: the TypeScript and Kotlin versions stay in production until the apps call the Rust engine (M7 desktop, M8 Android) and the compatibility gates pass (PRD section 16).
 
@@ -70,11 +70,11 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 | `apps/desktop/src/components/ChannelsDialog.tsx` | 112 | `ChannelsDialog` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/ChatLayout.tsx` | 803 | `ChatLayout` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/Composer.tsx` | 345 | `Composer` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
-| `apps/desktop/src/components/DeviceLinkDialog.tsx` | 170 | `DeviceLinkDialog` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
+| `apps/desktop/src/components/DeviceLinkDialog.tsx` | 177 | `DeviceLinkDialog` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/DeviceRow.tsx` | 117 | `DeviceRow` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/DropSendDialog.tsx` | 76 | `DropSendDialog` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/FilterPills.tsx` | 30 | `ChatFilter`, `FilterPills` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
-| `apps/desktop/src/components/GroupDialogs.tsx` | 325 | `NewGroupDialog`, `GroupDetailsDialog` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
+| `apps/desktop/src/components/GroupDialogs.tsx` | 340 | `NewGroupDialog`, `GroupDetailsDialog` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/Icons.tsx` | 292 | `IconProps`, `SendIcon`, `ChatIcon`, `ShieldIcon`, `LockIcon`, `SettingsIcon` +34 | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/Insights.tsx` | 270 | `SealedBadge`, `DeliveryHealth`, `DevicesStrip`, `WhatsNew`, `WhatsNewBanner`, `SupportTools` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/KillSwitchDialogs.tsx` | 553 | `NukeDialog`, `ClearChatDialog` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
@@ -155,8 +155,8 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 | `apps/desktop/src/lib/spotlight.ts` | 16 | `installSpotlight` | Presentation helpers, UI settings, themes, notifications bridge | UI / adapter (stays) | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/lib/storage.test.ts` | 17 | (none) | Small pure helpers for the screens: privacy checkup, pinned chats, the hosts the app contacts | Desktop UI | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/lib/storage.ts` | 41 | `ChatStorage`, `storageByChat` | Small pure helpers for the screens: privacy checkup, pinned chats, the hosts the app contacts | Desktop UI | UI | Stays (UI) | Stays | n/a |
-| `apps/desktop/src/lib/themes.test.ts` | 36 | (none) | Presentation helpers, UI settings, themes, notifications bridge | UI / adapter (stays) | UI | Stays (UI) | Stays | n/a |
-| `apps/desktop/src/lib/themes.ts` | 147 | `ThemeDef`, `THEMES`, `DEFAULT_PALETTE`, `classicTheme`, `APRICOT`, `themeById` +6 | Presentation helpers, UI settings, themes, notifications bridge | UI / adapter (stays) | UI | Stays (UI) | Stays | n/a |
+| `apps/desktop/src/lib/themes.test.ts` | 64 | (none) | Presentation helpers, UI settings, themes, notifications bridge | UI / adapter (stays) | UI | Stays (UI) | Stays | n/a |
+| `apps/desktop/src/lib/themes.ts` | 160 | `ThemeDef`, `THEMES`, `DEFAULT_PALETTE`, `classicTheme`, `APRICOT`, `themeById` +6 | Presentation helpers, UI settings, themes, notifications bridge | UI / adapter (stays) | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/lib/waveform.test.ts` | 22 | (none) | Voice-note waveform bars, receipt and nearby wording, quick-send and drop-to-send target lists | Desktop UI | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/lib/waveform.ts` | 43 | `bucketPeaks`, `playedBars`, `waveformFor` | Voice-note waveform bars, receipt and nearby wording, quick-send and drop-to-send target lists | Desktop UI | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/main.tsx` | 18 | (none) | App shell | UI | UI | Stays (UI) | Stays | n/a |
@@ -258,5 +258,5 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 | `apps/android/app/src/main/java/com/duochat/app/ui/QrUtils.kt` | 35 | `qrBitmap` | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/ui/SettingsDialog.kt` | 1098 | `SettingsDialog`, `SectionTitle`, `DetailRow`, `ToggleRow`, `ChoiceChip`, `parseColor` +2 | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/ui/StatusScreens.kt` | 125 | `LoadingScreen`, `FatalScreen` | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
-| `apps/android/app/src/main/java/com/duochat/app/ui/Theme.kt` | 218 | `figtree`, `style`, `mix`, `scheme`, `DuoChatTheme`, `parseColor` +2 | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
+| `apps/android/app/src/main/java/com/duochat/app/ui/Theme.kt` | 241 | `figtree`, `style`, `mix`, `ensureReadable`, `onColor`, `scheme` +4 | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/ui/WaveformDecoder.kt` | 80 | `WaveformDecoder` | Compose screens | UI | UI | Stays (UI) | Stays | n/a |

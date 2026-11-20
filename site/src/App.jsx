@@ -1,3 +1,4 @@
+import Gallery, { openShot } from './Gallery.jsx';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 // Components below are from React Bits (https://reactbits.dev, MIT + Commons Clause), copied into src/rb. See THIRD_PARTY.md.
 import DotGrid from './rb/DotGrid.jsx';
@@ -165,13 +166,15 @@ export default function App() {
                   {reduce ? 'End-to-end encrypted · source-available · not yet independently audited' : <ShinyText text="End-to-end encrypted · source-available · not yet independently audited" color="#8f8b82" shineColor="#ffffff" speed={3.5} />}
                 </p>
               </div>
-              <div className="hero-visual">
-                {reduce ? (
-                  <img className="shot" src={asset('group-chat-dark.webp')} alt="PrivCord on Windows: an encrypted group chat in the dark theme" width="1280" height="800" />
-                ) : (
-                  <div className="tilt-frame"><TiltedCard imageSrc={asset('group-chat-dark.webp')} altText="PrivCord on Windows: an encrypted group chat in the dark theme" containerWidth="100%" containerHeight="100%" imageWidth="100%" imageHeight="100%" rotateAmplitude={9} scaleOnHover={1.03} showTooltip={false} glare={0.25} glareColor="#ffffff" shadow={0.5} flipOnClick={false} radius={12} floating /></div>
+              <div className="hero-visual" onClick={(e) => { if (!e.target.closest('.phone-shot, .hero-enlarge')) openShot('group-chat-dark.webp', e.currentTarget); }}>
+                <img className="shot plain" src={asset('group-chat-dark.webp')} alt="PrivCord on Windows: an encrypted group chat in the dark theme" width="1280" height="800" />
+                {!reduce && (
+                  <div className="tilt-frame"><TiltedCard imageSrc={asset('group-chat-dark.webp')} altText="" containerWidth="100%" containerHeight="100%" imageWidth="100%" imageHeight="100%" rotateAmplitude={9} scaleOnHover={1.03} showTooltip={false} glare={0.25} glareColor="#ffffff" shadow={0.5} flipOnClick={false} radius={12} floating /></div>
                 )}
-                <img className="phone-shot" src={asset('mobile-group.webp')} alt="PrivCord on Android: a group chat" width="390" height="800" loading="lazy" />
+                <button type="button" className="phone-shot-btn" onClick={(e) => openShot('mobile-group.webp', e.currentTarget)} aria-label="Open the Android screenshot full size">
+                  <img className="phone-shot" src={asset('mobile-group.webp')} alt="PrivCord on Android: a group chat" width="390" height="800" loading="lazy" />
+                </button>
+                <button type="button" className="hero-enlarge" onClick={(e) => openShot('group-chat-dark.webp', e.currentTarget)}>⤢ Full size</button>
               </div>
             </div>
           </section>
@@ -237,20 +240,8 @@ export default function App() {
             </div>
           </section>
 
-          {/* ---------- screens ---------- */}
-          <section className="screens" aria-label="PrivCord screens">
-            <div className="wrap screens-row">
-              {[['add-friend.webp', "Add a friend: your invite QR code and a field for a friend's invite", '1280', '800', 'p1'], ['group-details.webp', 'Group details: the members of an encrypted group and who added them', '1280', '800', 'p2'], ['mobile-home.webp', 'PrivCord on Android: the chat list', '390', '800', 'p3']].map(([src, alt, w, h, cls]) => (
-                <div className={`screen ${cls}`} key={src}>
-                  {reduce ? <img className="shot" src={asset(src)} alt={alt} width={w} height={h} loading="lazy" /> : (
-                    <GlareHover borderRadius="12px" glareColor="#ffffff" glareOpacity={0.3} glareSize={34} variant="streak" mode="hover">
-                      <img className="shot" src={asset(src)} alt={alt} width={w} height={h} loading="lazy" />
-                    </GlareHover>
-                  )}
-                </div>
-              ))}
-            </div>
-          </section>
+          {/* ---------- screens: a rail of real screenshots and a lightbox ---------- */}
+          <Gallery asset={asset} />
 
           {/* ---------- compare (paper) ---------- */}
           <section id="compare" className="compare">

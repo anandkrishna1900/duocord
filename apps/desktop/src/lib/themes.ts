@@ -95,9 +95,10 @@ export function accentFill(accent: string): string {
 }
 
 /** The accent as text and lines on the background: lightened (dark themes) or darkened until it reads at 4.5:1. */
-export function accentText(accent: string, bg: string, dark: boolean): string {
+export function accentText(accent: string, bg: string | string[], dark: boolean): string {
+  const grounds = Array.isArray(bg) ? bg : [bg];
   let c = accent;
-  for (let i = 0; i < 20 && contrast(c, bg) < 4.5; i += 1) c = mix(c, dark ? '#ffffff' : '#000000', 0.1);
+  for (let i = 0; i < 25 && grounds.some((g) => contrast(c, g) < 4.5); i += 1) c = mix(c, dark ? '#ffffff' : '#000000', 0.1);
   return c;
 }
 
@@ -107,21 +108,33 @@ export function themeVars(t: ThemeDef): Record<string, string> {
   const elevated = mix(t.bg, t.surface, 0.5);
   // Surfaces step by tone, not shadow: "tonal" is the incoming bubble, fields and chips; "ink" is neutral controls.
   const tonal = mix(t.bg, t.text, t.dark ? 0.1 : 0.055);
+  const tonalStrong = mix(t.bg, t.text, t.dark ? 0.15 : 0.09);
+  const surfaceHover = mix(t.surface, t.text, 0.06);
+  const surfaceStrong = mix(t.surface, t.text, 0.12);
+  // Every colour text can sit on: secondary text and the accent as text must read on all of them (themes.test.ts).
+  const grounds = [t.bg, elevated, mix(t.bg, t.surface, 0.3), t.surface, surfaceHover, surfaceStrong, tonal, tonalStrong];
+  let mutedAmount = 0.3;
+  let muted = mix(t.text, t.bg, mutedAmount);
+  while (mutedAmount > 0 && grounds.some((g) => contrast(muted, g) < 4.5)) {
+    mutedAmount = Math.max(0, mutedAmount - 0.02);
+    muted = mix(t.text, t.bg, mutedAmount);
+  }
+  const danger = accentText(t.dark ? '#ff8a80' : '#b42318', grounds, t.dark);
   return {
     '--bg': t.bg,
     '--bg-elevated': elevated,
     '--sidebar': mix(t.bg, t.surface, 0.3),
     '--surface': t.surface,
-    '--surface-hover': mix(t.surface, t.text, 0.06),
-    '--surface-strong': mix(t.surface, t.text, 0.12),
+    '--surface-hover': surfaceHover,
+    '--surface-strong': surfaceStrong,
     '--text': t.text,
     '--text-soft': mix(t.text, t.bg, 0.16),
     // Secondary text: as light as it can be while still reading at 4.5:1 on the ground and on tonal surfaces.
-    '--muted': mix(t.text, t.bg, 0.3),
+    '--muted': muted,
     '--border': rgba(t.text, 0.1),
     '--border-strong': rgba(t.text, 0.2),
     // Text, links, dots and outlines use a readable accent; filled things (buttons, your bubbles) use --accent-fill.
-    '--accent': accentText(t.accent, t.bg, t.dark),
+    '--accent': accentText(t.accent, grounds, t.dark),
     '--accent-soft': rgba(t.accent, 0.18),
     '--accent-strong': mix(t.accent, '#000000', 0.14),
     '--accent-fill': fill,
@@ -129,7 +142,7 @@ export function themeVars(t: ThemeDef): Record<string, string> {
     '--bubble-own': fill,
     '--bubble-theirs': tonal,
     '--tonal': tonal,
-    '--tonal-strong': mix(t.bg, t.text, t.dark ? 0.15 : 0.09),
+    '--tonal-strong': tonalStrong,
     '--ink': t.text,
     '--on-ink': t.bg,
     '--apricot': APRICOT,
@@ -138,7 +151,7 @@ export function themeVars(t: ThemeDef): Record<string, string> {
     '--on-apricot-container': t.dark ? '#ffd2b3' : '#5a2a0c',
     '--accent-container': mix(t.bg, t.accent, t.dark ? 0.22 : 0.14),
     '--on-accent-container': t.dark ? mix(t.accent, '#ffffff', 0.55) : mix(t.accent, '#000000', 0.45),
-    '--danger': t.dark ? '#ff8a80' : '#b42318',
+    '--danger': danger,
     '--danger-soft': t.dark ? 'rgba(248, 113, 113, 0.14)' : 'rgba(220, 38, 38, 0.09)',
     '--warning': t.dark ? '#fbbf24' : '#b45309',
     '--success': t.dark ? '#34d399' : '#059669',

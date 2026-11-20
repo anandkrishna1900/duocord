@@ -1081,3 +1081,22 @@ fn storage_by_chat_counts_what_each_chat_holds_and_skips_what_was_deleted() {
     assert_eq!(rows[0].bytes, "hello".len() as u64);
     let _ = keep;
 }
+
+#[test]
+fn the_diagnostics_report_holds_counts_and_never_content_and_the_self_test_passes() {
+    let (mut a, mut b, au, bu) = pair();
+    connect(&mut a, &mut b, &au, &bu);
+    a.core.send_message(&bu, "a secret sentence", None).unwrap();
+    pump(&mut a, &mut b, &au, &bu);
+    let report = a
+        .core
+        .diagnostics(r#"{"platform":"test","version":"1.2.3"}"#);
+    assert!(report.contains("\"contacts\": 1"));
+    assert!(report.contains("\"platform\": \"test\""));
+    assert!(!report.contains("secret sentence"), "no message text");
+    assert!(!report.contains(bu.as_str()), "no contact ids");
+    assert!(!report.contains(au.as_str()), "no own id");
+    let results = a.core.self_test();
+    assert!(results.iter().all(|r| r.ok), "{results:?}");
+    assert!(results.len() >= 4);
+}

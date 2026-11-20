@@ -15,6 +15,7 @@ pub(super) const KV_PINS: &str = "pref.pins";
 pub(super) const KV_ARCHIVED: &str = "pref.archived";
 pub(super) const KV_MUTE_UNTIL: &str = "pref.mute";
 pub(super) const KV_QUIET: &str = "pref.quiet";
+pub(super) const KV_SECURE: &str = "pref.secure";
 /// Every key above; anything starting with this is a synced preference.
 pub(super) const PREFIX: &str = "pref.";
 
@@ -66,6 +67,8 @@ pub struct Prefs {
     /// Conversation id to the time (milliseconds) its notifications are off until; [`MUTE_FOREVER`] for no end.
     pub mute_until: BTreeMap<String, i64>,
     pub quiet: QuietHours,
+    /// Hide this account from screenshots, screen recording and the app switcher (each device applies it).
+    pub secure_screen: bool,
 }
 
 impl Prefs {
@@ -136,6 +139,9 @@ impl Core {
             next.quiet.from %= 1440;
             next.quiet.to %= 1440;
         }
+        if let Some(v) = get(self, KV_SECURE) {
+            next.secure_screen = v.as_bool().unwrap_or(false);
+        }
         self.prefs = next;
     }
 
@@ -186,6 +192,14 @@ impl Core {
         }
         self.save_pref(KV_MUTE_UNTIL, serde_json::json!(next))?;
         self.prefs.mute_until = next;
+        Ok(())
+    }
+
+    /// Hide the app from screenshots, screen recording and the app switcher, on every device of the account.
+    pub fn set_secure_screen(&mut self, on: bool) -> Result<(), ErrorCode> {
+        self.require_live()?;
+        self.save_pref(KV_SECURE, serde_json::json!(on))?;
+        self.prefs.secure_screen = on;
         Ok(())
     }
 

@@ -1419,6 +1419,28 @@ impl PrivcordEngine {
         }
     }
 
+    /// Hide the app from screenshots, screen recording and the app switcher, on all your devices.
+    pub fn set_secure_screen(&self, on: bool) -> Result<(), FfiError> {
+        self.misc(Op::SetSecureScreen(on))
+    }
+
+    /// A report to send when something is wrong: counts and settings only, never message text, names or keys.
+    /// `app_json` is what the app says about itself (version, platform...).
+    pub fn diagnostics_json(&self, app_json: String) -> Result<String, FfiError> {
+        match pollster::block_on(self.handle.op(Op::Diagnostics(app_json)))? {
+            Answer::Text(t) => Ok(t),
+            _ => Err(FfiError::InvalidArgument),
+        }
+    }
+
+    /// A quick check that the engine works on this device, as JSON: `[{name, ok, detail}]`.
+    pub fn self_test_json(&self) -> Result<String, FfiError> {
+        match pollster::block_on(self.handle.op(Op::SelfTest))? {
+            Answer::Text(t) => Ok(t),
+            _ => Err(FfiError::InvalidArgument),
+        }
+    }
+
     /// What each chat takes on this device, biggest first, as JSON: `[{id, messages, files, bytes, file_bytes, file_ids}]`.
     pub fn storage_by_chat_json(&self) -> Result<String, FfiError> {
         match pollster::block_on(self.handle.op(Op::StorageByChat))? {

@@ -1803,6 +1803,7 @@ fn pins_archive_mutes_and_quiet_hours_follow_the_person_to_every_device() {
         .set_mute_until("chat-d", now + 3_600_000)
         .unwrap();
     laptop.core.set_quiet_hours(true, 22 * 60, 7 * 60).unwrap();
+    laptop.core.set_secure_screen(true).unwrap();
     for _ in 0..3 {
         laptop.online(&mut relay);
         phone.online(&mut relay);
@@ -1812,6 +1813,7 @@ fn pins_archive_mutes_and_quiet_hours_follow_the_person_to_every_device() {
     assert_eq!(p.archived, vec!["chat-c"]);
     assert_eq!(p.mute_until.get("chat-d"), Some(&(now + 3_600_000)));
     assert!(p.quiet.enabled && p.quiet.from == 22 * 60 && p.quiet.to == 7 * 60);
+    assert!(p.secure_screen, "the screen-privacy choice follows too");
     // 1_700_000_000_000 ms is 22:13 UTC, inside the 22:00 to 07:00 window; a zone 10 hours behind makes it midday.
     assert!(!phone.core.should_notify("chat-x"), "quiet hours");
     phone.core.set_utc_offset(-613);

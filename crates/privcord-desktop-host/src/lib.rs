@@ -404,6 +404,14 @@ impl DesktopHost {
             "prefs" => {
                 Ok(serde_json::from_str(&e.prefs_json().map_err(failed)?).unwrap_or(Value::Null))
             }
+            "set_secure_screen" => unit(e.set_secure_screen(flag(args, "on")?)),
+            "diagnostics" => Ok(json!(e
+                .diagnostics_json(text(args, "app")?)
+                .map_err(failed)?)),
+            "self_test" => {
+                Ok(serde_json::from_str(&e.self_test_json().map_err(failed)?)
+                    .unwrap_or(Value::Null))
+            }
             "storage_by_chat" => Ok(serde_json::from_str(
                 &e.storage_by_chat_json().map_err(failed)?,
             )

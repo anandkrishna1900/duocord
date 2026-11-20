@@ -130,6 +130,250 @@ fn network_hosts(i: &HostsInput) -> Vec<Value> {
         .collect()
 }
 
+/// What protects a chat, in words, for the little lock under the chat's name. Honest about public channels.
+fn chat_security(kind: &str) -> Value {
+    match kind {
+        "channel" => json!({
+            "headline": "Public channel: not private",
+            "lines": [
+                "Anyone who knows the channel name can read it and post in it.",
+                "Posts are signed, so nobody can pretend to be you, but they are not secret.",
+            ],
+        }),
+        "group" => json!({
+            "headline": "End-to-end encrypted group",
+            "lines": [
+                "Each message is sealed on your device for each member; relays and servers see only padded, sealed data.",
+                "New keys are agreed with a post-quantum hybrid (ML-KEM-768 with P-256) when everyone is on a current version.",
+                "Group changes are signed by the people who made them.",
+            ],
+        }),
+        _ => json!({
+            "headline": "End-to-end encrypted",
+            "lines": [
+                "Only you and your friend can read these messages. Relays and servers see only padded, sealed data.",
+                "The key exchange is a post-quantum hybrid (ML-KEM-768 with P-256), and the keys change as you talk.",
+                "Compare the safety number with your friend once to be sure it is really them.",
+            ],
+        }),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct HealthInput {
+    /// "android" or "windows".
+    platform: String,
+    /// "online", "connecting", "offline" or "unconfigured" (no relay set up).
+    signaling: String,
+    notifications_enabled: bool,
+    /// The phone's permission to show notifications (null when the platform has no such switch).
+    notification_permission: Option<bool>,
+    /// Battery restrictions off for this app (null when not applicable).
+    battery_unrestricted: Option<bool>,
+    /// Allowed to start by itself / keep running in the background (null when not applicable).
+    background_allowed: Option<bool>,
+    quiet_hours_now: bool,
+    muted_chats: u32,
+}
+
+#[derive(Debug, Serialize)]
+struct HealthItem {
+    id: &'static str,
+    ok: bool,
+    title: &'static str,
+    hint: String,
+    /// What the app can offer to do: "notification_settings", "battery_settings", "background_settings",
+    /// "connection_settings" or "none".
+    fix: &'static str,
+}
+
+fn health(i: &HealthInput) -> Value {
+    let android = i.platform == "android";
+    let conn_ok = i.signaling == "online";
+    let conn_hint = match i.signaling.as_str() {
+        "online" => "Connected to the relays: friends can find you.",
+        "connecting" => {
+            "Still connecting to the relays. This can take a moment after the network changes."
+        }
+        "unconfigured" => {
+            "No relay is set up, so friends cannot find you unless you swapped QR codes in person."
+        }
+        _ => "Cannot reach the relays. Check the internet connection, then Settings > Connection.",
+    };
+    let mut items = vec![HealthItem {
+        id: "connection",
+        ok: conn_ok,
+        title: "Connected",
+        hint: conn_hint.to_owned(),
+        fix: if conn_ok {
+            "none"
+        } else {
+            "connection_settings"
+        },
+    }];
+    items.push(HealthItem {
+        id: "notifications",
+        ok: i.notifications_enabled && i.notification_permission != Some(false),
+        title: "Notifications allowed",
+        hint: if !i.notifications_enabled {
+            "Notifications are turned off in the app settings.".to_owned()
+        } else if i.notification_permission == Some(false) {
+            "The system is blocking notifications for this app. Allow them in the system settings."
+                .to_owned()
+        } else {
+            "New messages will show a notification.".to_owned()
+        },
+        fix: if i.notifications_enabled && i.notification_permission != Some(false) {
+            "none"
+        } else if i.notifications_enabled {
+            "notification_settings"
+        } else {
+            "none"
+        },
+    });
+    if let Some(unrestricted) = i.battery_unrestricted {
+        items.push(HealthItem {
+            id: "battery",
+            ok: unrestricted,
+            title: "Battery restriction off",
+            hint: if unrestricted {
+                "The system will not put the app to sleep, so messages arrive with the app closed.".to_owned()
+            } else {
+                "The system may put the app to sleep and hold messages back until you open it. Set battery use to Unrestricted.".to_owned()
+            },
+            fix: if unrestricted { "none" } else { "battery_settings" },
+        });
+    }
+    if let Some(allowed) = i.background_allowed {
+        items.push(HealthItem {
+            id: "background",
+            ok: allowed,
+            title: if android { "Allowed to run in the background" } else { "Keeps running when the window is closed" },
+            hint: if allowed {
+                "The app keeps listening in the background.".to_owned()
+            } else if android {
+                "Turn on Keep running in the background (Settings > Notifications) so messages arrive with the app closed.".to_owned()
+            } else {
+                "Turn on Keep running in the tray (Settings > Notifications) so messages arrive with the window closed.".to_owned()
+            },
+            fix: "background_settings",
+        });
+    }
+    items.push(HealthItem {
+        id: "quiet",
+        ok: !i.quiet_hours_now,
+        title: "Not in quiet hours",
+        hint: if i.quiet_hours_now {
+            "Quiet hours are on right now, so notifications are held back (messages still arrive)."
+                .to_owned()
+        } else {
+            "Quiet hours are not holding anything back.".to_owned()
+        },
+        fix: "none",
+    });
+    items.push(HealthItem {
+        id: "muted",
+        ok: i.muted_chats == 0,
+        title: "No muted chats",
+        hint: if i.muted_chats == 0 {
+            "No chat is muted.".to_owned()
+        } else {
+            format!(
+                "{} chat{} muted. Open it and turn notifications back on if you expected one.",
+                i.muted_chats,
+                if i.muted_chats == 1 { " is" } else { "s are" }
+            )
+        },
+        fix: "none",
+    });
+    // "Why am I not receiving?": the first thing that is wrong, in the order that matters most.
+    let order = [
+        "connection",
+        "battery",
+        "background",
+        "notifications",
+        "quiet",
+        "muted",
+    ];
+    let culprit = order
+        .iter()
+        .find_map(|id| items.iter().find(|it| it.id == *id && !it.ok));
+    let verdict = match culprit {
+        Some(it) => json!({ "ok": false, "id": it.id, "text": it.hint, "fix": it.fix }),
+        None => {
+            json!({ "ok": true, "id": "none", "text": "Everything that lets messages reach you looks right. If a friend says they sent something, ask them to check that they are online too.", "fix": "none" })
+        }
+    };
+    json!({ "items": items, "verdict": verdict })
+}
+
+#[derive(Debug, Deserialize)]
+struct DeviceBrief {
+    name: String,
+    last_seen: Option<i64>,
+    this_device: bool,
+    stale: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct DevicesInput {
+    devices: Vec<DeviceBrief>,
+    now_ms: i64,
+}
+
+fn ago(ms: i64) -> String {
+    let s = (ms / 1000).max(0);
+    match s {
+        0..=59 => "just now".to_owned(),
+        60..=3599 => format!("{} min ago", s / 60),
+        3600..=86_399 => format!("{} h ago", s / 3600),
+        _ => format!("{} days ago", s / 86_400),
+    }
+}
+
+/// "2 devices, synced a minute ago": one line for the Settings strip.
+fn devices_summary(i: &DevicesInput) -> Value {
+    let others: Vec<&DeviceBrief> = i.devices.iter().filter(|d| !d.this_device).collect();
+    let line = if others.is_empty() {
+        "Only this device so far.".to_owned()
+    } else {
+        let newest = others.iter().filter_map(|d| d.last_seen).max();
+        let stale = others.iter().filter(|d| d.stale).count();
+        let seen = match newest {
+            Some(t) => format!("synced {}", ago(i.now_ms - t)),
+            None => "not synced yet".to_owned(),
+        };
+        let mut line = format!("{} devices, {seen}", i.devices.len());
+        if stale > 0 {
+            line.push_str(&format!(". {stale} not seen for 90 days"));
+        }
+        line
+    };
+    json!({ "line": line, "others": others.iter().map(|d| json!({ "name": d.name, "seen": d.last_seen.map(|t| ago(i.now_ms - t)) })).collect::<Vec<_>>() })
+}
+
+/// What is new, per release: one list for every platform. Newest first.
+const WHATS_NEW: &[(&str, &[&str])] = &[(
+    "0.2.0",
+    &[
+        "Link a new device by scanning: the new device shows a code, your phone scans it, and you type six digits.",
+        "Pin chats, archive them, and mute one for an hour, a day or for good. They follow you to every device.",
+        "Undo a message right after sending it.",
+        "Quiet hours, send later with ready-made times, and a privacy checkup.",
+        "See which servers the app can contact, and why.",
+    ],
+)];
+
+fn whats_new(version: &str) -> Value {
+    let lines = WHATS_NEW
+        .iter()
+        .find(|(v, _)| *v == version)
+        .or_else(|| WHATS_NEW.first())
+        .map(|(v, l)| json!({ "version": v, "lines": l }))
+        .unwrap_or(Value::Null);
+    lines
+}
+
 /// One pure answer by name. Unknown names and bad input give an error, never a guess.
 pub fn insight(name: &str, input: &str) -> Result<String, String> {
     let bad = |e: serde_json::Error| format!("bad input: {e}");
@@ -141,6 +385,22 @@ pub fn insight(name: &str, input: &str) -> Result<String, String> {
         "hosts" => {
             let i: HostsInput = serde_json::from_str(input).map_err(bad)?;
             serde_json::to_string(&network_hosts(&i)).map_err(bad)
+        }
+        "chat_security" => {
+            let kind: String = serde_json::from_str(input).map_err(bad)?;
+            serde_json::to_string(&chat_security(&kind)).map_err(bad)
+        }
+        "health" => {
+            let i: HealthInput = serde_json::from_str(input).map_err(bad)?;
+            serde_json::to_string(&health(&i)).map_err(bad)
+        }
+        "devices_summary" => {
+            let i: DevicesInput = serde_json::from_str(input).map_err(bad)?;
+            serde_json::to_string(&devices_summary(&i)).map_err(bad)
+        }
+        "whats_new" => {
+            let v: String = serde_json::from_str(input).map_err(bad)?;
+            serde_json::to_string(&whats_new(&v)).map_err(bad)
         }
         _ => Err(format!("unknown insight `{name}`")),
     }
@@ -214,6 +474,109 @@ mod tests {
             rows.as_array().unwrap().last().unwrap()["host"],
             "turn.example.org:3478"
         );
+    }
+
+    fn health_input(over: Value) -> Value {
+        let mut base = json!({"platform": "android", "signaling": "online", "notifications_enabled": true, "notification_permission": true, "battery_unrestricted": true, "background_allowed": true, "quiet_hours_now": false, "muted_chats": 0});
+        for (k, v) in over.as_object().unwrap() {
+            base[k] = v.clone();
+        }
+        base
+    }
+
+    #[test]
+    fn the_verdict_names_the_first_thing_that_stops_messages() {
+        let ok = run("health", health_input(json!({})));
+        assert_eq!(ok["verdict"]["ok"], true);
+        let off = run(
+            "health",
+            health_input(json!({"signaling": "offline", "battery_unrestricted": false})),
+        );
+        assert_eq!(
+            off["verdict"]["id"], "connection",
+            "no connection beats battery"
+        );
+        let battery = run(
+            "health",
+            health_input(json!({"battery_unrestricted": false, "quiet_hours_now": true})),
+        );
+        assert_eq!(battery["verdict"]["id"], "battery");
+        assert_eq!(battery["verdict"]["fix"], "battery_settings");
+        let blocked = run(
+            "health",
+            health_input(json!({"notification_permission": false})),
+        );
+        assert_eq!(blocked["verdict"]["fix"], "notification_settings");
+        let quiet = run(
+            "health",
+            health_input(json!({"quiet_hours_now": true, "muted_chats": 2})),
+        );
+        assert_eq!(quiet["verdict"]["id"], "quiet");
+        // Windows has no battery or notification-permission switch: those rows are left out.
+        let win = run(
+            "health",
+            health_input(
+                json!({"platform": "windows", "battery_unrestricted": null, "notification_permission": null}),
+            ),
+        );
+        assert!(!win["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|i| i["id"] == "battery"));
+    }
+
+    #[test]
+    fn the_security_text_is_honest_about_public_channels() {
+        let c = run("chat_security", json!("channel"));
+        assert!(c["headline"].as_str().unwrap().contains("not private"));
+        assert!(run("chat_security", json!("direct"))["headline"]
+            .as_str()
+            .unwrap()
+            .contains("End-to-end"));
+        assert!(
+            run("chat_security", json!("group"))["lines"]
+                .as_array()
+                .unwrap()
+                .len()
+                >= 2
+        );
+    }
+
+    #[test]
+    fn the_devices_line_says_when_the_others_last_synced() {
+        let now = 1_000_000_000_000_i64;
+        let one = run(
+            "devices_summary",
+            json!({"devices": [{"name": "Phone", "last_seen": null, "this_device": true, "stale": false}], "now_ms": now}),
+        );
+        assert_eq!(one["line"], "Only this device so far.");
+        let two = run(
+            "devices_summary",
+            json!({"devices": [
+            {"name": "Phone", "last_seen": null, "this_device": true, "stale": false},
+            {"name": "Laptop", "last_seen": now - 3 * 60_000, "this_device": false, "stale": false}], "now_ms": now}),
+        );
+        assert_eq!(two["line"], "2 devices, synced 3 min ago");
+        let old = run(
+            "devices_summary",
+            json!({"devices": [
+            {"name": "Phone", "last_seen": null, "this_device": true, "stale": false},
+            {"name": "Old", "last_seen": now - 100 * 86_400_000, "this_device": false, "stale": true}], "now_ms": now}),
+        );
+        assert!(old["line"]
+            .as_str()
+            .unwrap()
+            .contains("1 not seen for 90 days"));
+    }
+
+    #[test]
+    fn whats_new_has_lines_and_falls_back_to_the_newest() {
+        assert!(!run("whats_new", json!("0.2.0"))["lines"]
+            .as_array()
+            .unwrap()
+            .is_empty());
+        assert_eq!(run("whats_new", json!("9.9.9"))["version"], "0.2.0");
     }
 
     #[test]

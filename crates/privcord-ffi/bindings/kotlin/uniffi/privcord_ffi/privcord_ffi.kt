@@ -1088,6 +1088,12 @@ internal open class UniffiVTableCallbackInterfaceTransportCallbacks(
 
 
 
+
+
+
+
+
+
 // A JNA Library to expose the extern-C FFI definitions.
 // This is an implementation detail which will be called internally by the public API.
 
@@ -1170,6 +1176,8 @@ internal interface UniffiLib : Library {
     ): RustBuffer.ByValue
     fun uniffi_privcord_ffi_fn_method_privcordengine_delete_message(`ptr`: Pointer,`messageId`: RustBuffer.ByValue,`everyone`: Byte,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    fun uniffi_privcord_ffi_fn_method_privcordengine_diagnostics_json(`ptr`: Pointer,`appJson`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     fun uniffi_privcord_ffi_fn_method_privcordengine_dismiss_legacy_group(`ptr`: Pointer,`oldId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_dismiss_request(`ptr`: Pointer,`uid`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1250,6 +1258,8 @@ internal interface UniffiLib : Library {
     ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_search(`ptr`: Pointer,`query`: RustBuffer.ByValue,`limit`: Int,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    fun uniffi_privcord_ffi_fn_method_privcordengine_self_test_json(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     fun uniffi_privcord_ffi_fn_method_privcordengine_send_channel_message(`ptr`: Pointer,`name`: RustBuffer.ByValue,`text`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_privcord_ffi_fn_method_privcordengine_send_file(`ptr`: Pointer,`peer`: RustBuffer.ByValue,`name`: RustBuffer.ByValue,`mime`: RustBuffer.ByValue,`data`: RustBuffer.ByValue,`replyTo`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1279,6 +1289,8 @@ internal interface UniffiLib : Library {
     fun uniffi_privcord_ffi_fn_method_privcordengine_set_muted(`ptr`: Pointer,`uid`: RustBuffer.ByValue,`muted`: Byte,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_set_quiet_hours(`ptr`: Pointer,`enabled`: Byte,`from`: Short,`to`: Short,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    fun uniffi_privcord_ffi_fn_method_privcordengine_set_secure_screen(`ptr`: Pointer,`on`: Byte,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_set_store_forward(`ptr`: Pointer,`value`: Byte,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
@@ -1506,6 +1518,8 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_delete_message(
     ): Short
+    fun uniffi_privcord_ffi_checksum_method_privcordengine_diagnostics_json(
+    ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_dismiss_legacy_group(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_dismiss_request(
@@ -1586,6 +1600,8 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_search(
     ): Short
+    fun uniffi_privcord_ffi_checksum_method_privcordengine_self_test_json(
+    ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_send_channel_message(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_send_file(
@@ -1615,6 +1631,8 @@ internal interface UniffiLib : Library {
     fun uniffi_privcord_ffi_checksum_method_privcordengine_set_muted(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_set_quiet_hours(
+    ): Short
+    fun uniffi_privcord_ffi_checksum_method_privcordengine_set_secure_screen(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_set_store_forward(
     ): Short
@@ -1749,6 +1767,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_delete_message() != 55350.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_diagnostics_json() != 2985.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_dismiss_legacy_group() != 40634.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1869,6 +1890,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_search() != 51141.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_self_test_json() != 3589.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_send_channel_message() != 32740.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1912,6 +1936,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_set_quiet_hours() != 11209.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_set_secure_screen() != 64382.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_set_store_forward() != 53043.toShort()) {
@@ -3356,6 +3383,12 @@ public interface PrivcordEngineInterface {
     fun `deleteMessage`(`messageId`: kotlin.String, `everyone`: kotlin.Boolean)
     
     /**
+     * A report to send when something is wrong: counts and settings only, never message text, names or keys.
+     * `app_json` is what the app says about itself (version, platform...).
+     */
+    fun `diagnosticsJson`(`appJson`: kotlin.String): kotlin.String
+    
+    /**
      * Stop offering a group from before protocol v2.
      */
     fun `dismissLegacyGroup`(`oldId`: kotlin.String)
@@ -3529,6 +3562,11 @@ public interface PrivcordEngineInterface {
     fun `search`(`query`: kotlin.String, `limit`: kotlin.UInt): List<SearchHitDto>
     
     /**
+     * A quick check that the engine works on this device, as JSON: `[{name, ok, detail}]`.
+     */
+    fun `selfTestJson`(): kotlin.String
+    
+    /**
      * Write to a joined channel (flooded over the Bluetooth mesh). Returns the message id.
      */
     fun `sendChannelMessage`(`name`: kotlin.String, `text`: kotlin.String): kotlin.String
@@ -3594,6 +3632,11 @@ public interface PrivcordEngineInterface {
      * No notifications between two times of day (minutes after midnight). The same on all your devices.
      */
     fun `setQuietHours`(`enabled`: kotlin.Boolean, `from`: kotlin.UShort, `to`: kotlin.UShort)
+    
+    /**
+     * Hide the app from screenshots, screen recording and the app switcher, on all your devices.
+     */
+    fun `setSecureScreen`(`on`: kotlin.Boolean)
     
     /**
      * Keep invites on the relay for 15 minutes as well as publishing them live.
@@ -3946,6 +3989,23 @@ open class PrivcordEngine: Disposable, AutoCloseable, PrivcordEngineInterface {
 }
     }
     
+    
+
+    
+    /**
+     * A report to send when something is wrong: counts and settings only, never message text, names or keys.
+     * `app_json` is what the app says about itself (version, platform...).
+     */
+    @Throws(FfiException::class)override fun `diagnosticsJson`(`appJson`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_diagnostics_json(
+        it, FfiConverterString.lower(`appJson`),_status)
+}
+    }
+    )
+    }
     
 
     
@@ -4537,6 +4597,22 @@ open class PrivcordEngine: Disposable, AutoCloseable, PrivcordEngineInterface {
 
     
     /**
+     * A quick check that the engine works on this device, as JSON: `[{name, ok, detail}]`.
+     */
+    @Throws(FfiException::class)override fun `selfTestJson`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_self_test_json(
+        it, _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
      * Write to a joined channel (flooded over the Bluetooth mesh). Returns the message id.
      */
     @Throws(FfiException::class)override fun `sendChannelMessage`(`name`: kotlin.String, `text`: kotlin.String): kotlin.String {
@@ -4752,6 +4828,21 @@ open class PrivcordEngine: Disposable, AutoCloseable, PrivcordEngineInterface {
     uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_set_quiet_hours(
         it, FfiConverterBoolean.lower(`enabled`),FfiConverterUShort.lower(`from`),FfiConverterUShort.lower(`to`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Hide the app from screenshots, screen recording and the app switcher, on all your devices.
+     */
+    @Throws(FfiException::class)override fun `setSecureScreen`(`on`: kotlin.Boolean)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_set_secure_screen(
+        it, FfiConverterBoolean.lower(`on`),_status)
 }
     }
     

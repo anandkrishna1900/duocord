@@ -61,6 +61,7 @@ use zeroize::Zeroizing;
 
 mod backup;
 mod devices;
+mod health;
 mod invites;
 mod keys;
 pub mod lan;

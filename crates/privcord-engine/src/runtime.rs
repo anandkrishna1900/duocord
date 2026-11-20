@@ -165,6 +165,11 @@ pub enum Op {
     QuickTimes,
     /// What each chat takes on this device, as JSON.
     StorageByChat,
+    SetSecureScreen(bool),
+    /// A report with counts only (no content), given what the app says about itself, as JSON.
+    Diagnostics(String),
+    /// A quick check that the engine works, as JSON.
+    SelfTest,
     RenameContact {
         uid: UserId,
         name: String,
@@ -398,6 +403,11 @@ fn pump(core: &mut Core, cmd: Command) -> bool {
                 )),
                 Op::ShouldNotify(id) => Ok(Answer::Text(
                     if core.should_notify(&id) { "1" } else { "0" }.into(),
+                )),
+                Op::SetSecureScreen(on) => core.set_secure_screen(on).map(|()| Answer::Done),
+                Op::Diagnostics(app) => Ok(Answer::Text(core.diagnostics(&app))),
+                Op::SelfTest => Ok(Answer::Text(
+                    serde_json::to_string(&core.self_test()).unwrap_or_default(),
                 )),
                 Op::StorageByChat => Ok(Answer::Text(
                     serde_json::to_string(&core.storage_by_chat()).unwrap_or_default(),

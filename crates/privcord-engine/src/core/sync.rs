@@ -1150,6 +1150,7 @@ impl Core {
             (super::prefs::KV_ARCHIVED, serde_json::json!(p.archived)),
             (super::prefs::KV_MUTE_UNTIL, serde_json::json!(p.mute_until)),
             (super::prefs::KV_QUIET, serde_json::json!(p.quiet)),
+            (super::prefs::KV_SECURE, serde_json::json!(p.secure_screen)),
         ] {
             ops.push(StorageOp::SetKv {
                 key: format!("{key}.v1"),

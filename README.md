@@ -1,20 +1,40 @@
-# PrivCord
+# PrivCord: private, end-to-end encrypted messenger with no account, no phone number and no server that reads your chats
 
-**Private messaging with no accounts and no server that can read your chats.** Add friends with a QR code,
-chat one-to-one or in groups, and PrivCord connects your devices directly, over the internet or over
-Bluetooth.
+[![CI](https://github.com/anandkrishna1900/duocord/actions/workflows/ci.yml/badge.svg)](https://github.com/anandkrishna1900/duocord/actions/workflows/ci.yml)
+![Platforms: Windows and Android](https://img.shields.io/badge/platforms-Windows%20%7C%20Android-blue)
+![Rust engine](https://img.shields.io/badge/engine-Rust-orange)
+![End-to-end encrypted](https://img.shields.io/badge/chats-end--to--end%20encrypted-brightgreen)
+![License: PC-NC](https://img.shields.io/badge/license-PC--NC%20(source--available)-lightgrey)
+
+**PrivCord is a secure, peer-to-peer messaging app for Windows and Android.** Chats are end-to-end encrypted and go
+**straight from device to device** over WebRTC or Bluetooth, so there is **no account to create, no phone number or
+email to hand over, and no company server that can read, store or sell your messages**. Add friends with a QR code
+or six words, chat one-to-one or in groups of up to 10, send files, join public channels, and keep chatting
+**with no internet at all** over a Bluetooth mesh. Use the same account on your phone and your PC with
+**multi-device sync** that never lets your account key leave your first device.
+
+If you are looking for a **private chat app without a phone number**, an **anonymous encrypted messenger**, a
+**decentralized, serverless-style alternative to Signal, WhatsApp, Telegram, Session or Discord**, or a
+**Bluetooth mesh messenger that works offline**, this is built for that. The core is a memory-safe **Rust** engine
+shared by both apps.
 
 <p align="center">
-  <img src="docs/screenshots/group-chat-dark.png" alt="PrivCord desktop: chat list and a group chat" width="760">
+  <img src="docs/screenshots/group-chat-dark.png" alt="PrivCord desktop: an encrypted group chat and the chat list, in the dark theme" width="760">
 </p>
+
+**Quick links:** [Download](#get-it) · [Features](#what-you-can-do) · [How it connects](#how-it-connects-and-what-it-needs) ·
+[Compare](#how-privcord-compares) · [FAQ](#frequently-asked-questions) · [Security and algorithms](#algorithms-and-constants) ·
+[For developers](#for-developers) · [License](#license-and-credit)
 
 ## What you can do
 
 - **Add a friend in seconds.** Show a QR code or six words; your friend scans the code or types the words, and you tap *Add* when they answer. No long strings to copy.
-- **Chat one-to-one** with end-to-end encryption. Messages go straight from device to device.
+- **Chat one-to-one** with end-to-end encryption, including a post-quantum hybrid handshake (ML-KEM-768 with P-256). Messages go straight from device to device.
+- **Use one account on several devices.** Link your phone, laptop or tablet with a QR code; chats, contacts and read state stay in step with no server in between, and the account key stays on the first device. Remove a lost device in 24 hours (or at once with your recovery phrase). See [multi-device sync](#multi-device-sync-one-account-on-your-phone-and-your-pc).
 - **Reply** to any message. The quote shows for everyone, in chats and groups.
 - **Send files up to 8 MB.** Photos and videos show a preview you can open; every file can be saved.
   They go straight to the other device, free, with no upload to anyone's server.
+- **Send later.** Write a message now and schedule it for a time you pick; reply to a message from its notification (Android).
 - **Join public channels** like #general (no account, anyone who types the same name is in the same room). Messages are signed, so nobody can speak as someone else, but anyone who knows the name can read them.
 - **Reach people with no internet (Android).** An optional Bluetooth mesh passes messages along through nearby phones, up to 7 hops. Experimental: simulated, never run on real radios.
 - **Make it yours.** 16 built-in color themes (Midnight, AMOLED black, Nord, Dracula, Solarized, Blossom pink, Rose, Paper, Sky, Mint and more) plus the classic light/dark look, on both Windows and Android. Settings > Appearance.
@@ -27,15 +47,48 @@ Bluetooth.
   on, you can still pair by swapping invites.
 - **Keep working when things go wrong.** Messages you send while someone is offline wait and are sent
   when you reconnect. Connections recover on their own.
-- **Use Bluetooth with no internet** (needs a phone on one side; see the status table below).
+- **Back up your chats.** Passphrase-locked backups, with weekly automatic backups to a folder you choose on Android and Windows.
 - **Own your identity.** A 12-word recovery phrase is your account. Write it down: the same words
   restore your identity on a new device.
 - **Wipe everything** from Settings > Security if you ever need to.
 
 <p align="center">
-  <img src="docs/screenshots/add-friend.png" alt="Add a friend: your invite and paste a friend's invite" width="48%">
-  <img src="docs/screenshots/group-details.png" alt="Group details: members and who added them" width="48%">
+  <img src="docs/screenshots/add-friend.png" alt="Add a friend in PrivCord: your invite QR code and a field to paste a friend's invite" width="48%">
+  <img src="docs/screenshots/group-details.png" alt="PrivCord group details: the members of an encrypted group and who added them" width="48%">
 </p>
+
+## Multi-device sync: one account on your phone and your PC
+
+PrivCord keeps your chats in step across your own devices **without a central server** and **without ever copying your
+account key off the first device**.
+
+- **Link a device** by scanning a QR code on the new device and comparing 6 digits on both screens. The new device gets
+  its own keys; the account's signed device list says who belongs.
+- **Sync** runs through an end-to-end encrypted mailbox on relays that only see padded, sealed blobs, directly between
+  your devices over Wi-Fi on the local network, or over Bluetooth. Messages, reactions, read state, contacts, groups
+  and files all follow you; old history is condensed into snapshots so new devices catch up fast.
+- **Friends see one person.** Friends are told your device list and reach each of your devices; a friend on an older
+  app still reaches you.
+- **Lost a phone?** Remove it from any device: it takes effect after 24 hours (any device can cancel it), or at once
+  with your recovery phrase. The sync key is replaced, the friend's keys for that device are dropped, and the
+  removed device is told to erase itself.
+
+The full design is in [docs/design/syncengine.md](docs/design/syncengine.md).
+
+## How PrivCord compares
+
+| | PrivCord | Signal | Session | Briar |
+|---|---|---|---|---|
+| Phone number or email needed | **No** | Phone number | No | No |
+| Messages go through company servers | **No** (device to device; optional relays see only sealed blobs) | Yes (Signal's servers relay them) | Yes (a decentralized network of nodes relays them) | No (Tor, Wi-Fi or Bluetooth) |
+| Works with no internet over Bluetooth | **Yes** (Android mesh) | No | No | Yes |
+| One account on several devices | **Yes** (account key stays on the first device) | Yes (linked devices) | Limited | Limited |
+| Windows and Android apps | **Yes** | Yes (and more) | Yes (and more) | Yes |
+| Independently audited | **No, not yet** | Yes | Yes | Yes |
+
+This is a short, good-faith summary that can go out of date; check each project for its current state. PrivCord is a
+young project by one maintainer: if you need a battle-tested, audited messenger today, use one of the audited ones,
+and read [Known limitations](docs/KNOWN_LIMITATIONS.md) and the [status table](#status-what-is-tested-and-what-is-not).
 
 ## How it connects (and what it needs)
 
@@ -68,6 +121,41 @@ download the artifacts:
 Android debug builds are signed with one fixed debug key (`apps/android/keystore/debug.keystore`, committed on
 purpose, protects nothing), so a newer build updates an older one in place. Building from source:
 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md), [docs/rust/ANDROID.md](docs/rust/ANDROID.md).
+
+## Frequently asked questions
+
+**Does PrivCord need a phone number, email or account?** No. Your identity is a 12-word recovery phrase that you hold.
+There is nothing to sign up for.
+
+**Is PrivCord end-to-end encrypted?** Yes. Messages are encrypted on your device and only the friend they are meant for
+can open them. Every link is authenticated against the keys you pinned when you added the friend, and the key exchange
+uses a post-quantum hybrid (ML-KEM-768 with P-256). The algorithms are listed in full under
+[Algorithms and constants](#algorithms-and-constants).
+
+**Is it really serverless?** Not completely, and it says so: to find a friend across the internet it uses optional
+signaling relays (public Nostr relays or your own), STUN, and, on strict networks, TURN. None of them can read your
+messages. See [How it connects](#how-it-connects-and-what-it-needs) and run your own with [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
+**Can I use it without internet?** Yes on Android: an optional Bluetooth mesh carries sealed messages through nearby
+phones, up to 7 hops. It is experimental and has only been tested in simulation, not on real radios.
+
+**Does it work on iPhone, macOS or Linux?** Not yet. Today there are an Android app and a Windows desktop app.
+
+**Can I use my account on my phone and my computer?** Yes: see [multi-device sync](#multi-device-sync-one-account-on-your-phone-and-your-pc).
+
+**What if I lose my phone?** Remove the device from another device of yours (it takes effect in 24 hours, or at once with
+your recovery phrase), and restore your account on a new device with the 12 words.
+
+**Is PrivCord open source?** The full source is here and free for personal, educational and research use. The license
+(PC-NC) does not allow commercial use without written permission, so it is *source-available* rather than OSI open
+source. See [License and credit](#license-and-credit).
+
+**Has it been audited?** Not by an independent firm yet. The protocol is covered by tests, shared test vectors and
+fuzzing in CI, and the security policy is in [SECURITY.md](SECURITY.md).
+
+**Which technologies does it use?** A Rust engine (domain rules, cryptography, storage, state machine) with a Kotlin and
+Jetpack Compose app on Android and a Tauri 2 and React app on Windows; WebRTC data channels, Bluetooth LE, Nostr relays,
+SQLite, AES-256-GCM, ECDSA and ECDH on P-256, and ML-KEM-768.
 
 ## Architecture
 
@@ -221,7 +309,7 @@ The browser build uses a development store that is **not encrypted at rest** and
 Not available: push notifications, files over Bluetooth, and the mesh on Windows
 ([docs/CHANNELS_AND_MESH.md](docs/CHANNELS_AND_MESH.md), [docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md)).
 In the Android Rust build, file progress shows while receiving only, friends' blockers are not explained, and manual
-connection codes (`RUST1:`) only work between two Rust builds. The desktop app does not use the Rust engine yet.
+connection codes (`RUST1:`) only work between two Rust builds.
 
 ## License and credit
 

@@ -2,7 +2,6 @@ import Gallery, { openShot, WindowFrame, PhoneFrame } from './Gallery.jsx';
 import { Icon, P, FEATURES, STEPS, FAQ, COMPARE } from './data.jsx';
 import { FeaturesPage, HowPage, ScreensPage, ComparePage, FaqPage, DownloadPage, AboutPage } from './Pages.jsx';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
-// Components below are from React Bits (https://reactbits.dev, MIT + Commons Clause), copied into src/rb. See THIRD_PARTY.md.
 import DotGrid from './rb/DotGrid.jsx';
 import SplitText from './rb/SplitText.jsx';
 import ShinyText from './rb/ShinyText.jsx';

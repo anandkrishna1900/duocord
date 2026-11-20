@@ -349,8 +349,9 @@ export function DownloadPage({ Go, repo, reduce, dlRef, dlOn }) {
 // Edit these lines to change what the About page says.
 const ABOUT = {
   people: [
-    ['X: @AnandKrishnaK1', 'https://x.com/AnandKrishnaK1'],
+    ['GitHub: raiden6767', 'https://github.com/raiden6767'],
     ['GitHub: anandks2006', 'https://github.com/anandks2006'],
+    ['X: @AnandKrishnaK1', 'https://x.com/AnandKrishnaK1'],
   ],
 };
 

@@ -104,13 +104,11 @@
   animation: polish-in 0.22s ease-out both;
 }
 
-/* Settings tabs: the active one is a soft pill. */
+/* Settings tabs: a pill. The selected colours (ink on paper) belong to look.css; do not repaint the background here,
+ * or the label (on-ink) lands on the wrong colour and disappears. */
 .tab {
   border-radius: 999px;
   transition: background 0.2s ease, color 0.2s ease;
-}
-.tab.active {
-  background: var(--accent-soft);
 }
 
 @media (prefers-reduced-motion: no-preference) {

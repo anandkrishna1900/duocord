@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PrivCord: private encrypted messenger with no phone number or account</title>
+<meta name="description" content="PrivCord is a peer-to-peer, end-to-end encrypted messenger for Windows and Android. No account, no phone number, no server that reads your chats. Add friends with a QR code or six words; chat over Bluetooth with no internet.">
+<link rel="canonical" href="__SITE_URL__/">
+<meta name="theme-color" content="#131112">
+<link rel="icon" type="image/png" href="assets/favicon-32.png">
+<link rel="apple-touch-icon" href="assets/icon.png">
+<link rel="preload" href="assets/figtree.ttf" as="font" type="font/ttf" crossorigin>
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="PrivCord">
+<meta property="og:title" content="PrivCord: private encrypted messenger, no phone number, no account">
+<meta property="og:description" content="Chats go straight from device to device. No account, no phone number, no server that reads your messages. For Windows and Android.">
+<meta property="og:url" content="__SITE_URL__/">
+<meta property="og:image" content="__SITE_URL__/assets/social-preview.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="PrivCord: private encrypted messenger">
+<meta name="twitter:description" content="No account, no phone number, no server that reads your chats. Windows and Android.">
+<meta name="twitter:image" content="__SITE_URL__/assets/social-preview.png">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "name": "PrivCord",
+      "applicationCategory": "CommunicationApplication",
+      "operatingSystem": "Windows, Android",
+      "description": "Peer-to-peer, end-to-end encrypted messenger with no account, no phone number and no server that reads your chats.",
+      "url": "__SITE_URL__/",
+      "image": "__SITE_URL__/assets/social-preview.png",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+      "codeRepository": "https://github.com/__REPO__"
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        { "@type": "Question", "name": "Does PrivCord need a phone number, email or account?",
+          "acceptedAnswer": { "@type": "Answer", "text": "No. Your identity is a 12-word recovery phrase that you hold. There is nothing to sign up for." } },
+        { "@type": "Question", "name": "Is PrivCord end-to-end encrypted?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Yes. Messages are encrypted on your device and only the friend they are meant for can open them. The key exchange uses a post-quantum hybrid (ML-KEM-768 with P-256)." } },
+        { "@type": "Question", "name": "Can I use PrivCord without internet?",
+          "acceptedAnswer": { "@type": "Answer", "text": "On Android, an optional Bluetooth mesh passes sealed messages through nearby phones. It is experimental and has only been tested in simulation, not on real radios." } },
+        { "@type": "Question", "name": "Is PrivCord open source?",
+          "acceptedAnswer": { "@type": "Answer", "text": "The full source is public and free for personal, educational and research use. The PC-NC license does not allow commercial use without permission, so it is source-available rather than OSI open source." } },
+        { "@type": "Question", "name": "Has PrivCord been independently audited?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Not yet. The protocol is covered by tests, shared test vectors and fuzzing in CI. If you need a battle-tested, audited messenger today, use one of the audited ones." } }
+      ]
+    }
+  ]
+}
+</script>
+
+<style>
+@font-face { font-family: 'Figtree'; src: url('assets/figtree.ttf') format('truetype'); font-weight: 300 900; font-display: swap; }
+:root {
+  --bg: #131112; --bg2: #181517; --surface: #1c191b; --surface2: #262224; --text: #f1ecea; --soft: #c5bfbd; --muted: #a8a2a0;
+  --line: rgba(241,236,234,.1); --line2: rgba(241,236,234,.2);
+  --plum: #7a3e73; --plum-soft: rgba(122,62,115,.28); --apricot: #f2a65a; --on-apricot: #2b1608;
+  --g1: #c07ab6; --g2: #f2a65a; --r: 20px; color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root { --bg: #faf6f4; --bg2: #f3eceb; --surface: #fff; --surface2: #efe7e5; --text: #231d1f; --soft: #4d4447; --muted: #6a6064;
+    --line: rgba(35,29,31,.1); --line2: rgba(35,29,31,.2); --plum: #7a3e73; --plum-soft: rgba(122,62,115,.16); --g1: #8a3f80; --g2: #c2661a; color-scheme: light; }
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.6 'Figtree', 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+a { color: inherit; }
+img { max-width: 100%; height: auto; display: block; }
+.wrap { width: min(1120px, 100% - 40px); margin-inline: auto; }
+.skip { position: absolute; left: -999px; } .skip:focus { left: 12px; top: 12px; background: var(--apricot); color: var(--on-apricot); padding: 8px 14px; border-radius: 10px; z-index: 99; }
+:focus-visible { outline: 2px solid var(--apricot); outline-offset: 3px; border-radius: 8px; }
+
+/* header */
+header.top { position: sticky; top: 0; z-index: 20; backdrop-filter: blur(14px); background: color-mix(in srgb, var(--bg) 78%, transparent); border-bottom: 1px solid var(--line); }
+header.top .wrap { display: flex; align-items: center; gap: 22px; height: 64px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 19px; letter-spacing: -.02em; text-decoration: none; }
+.brand img { width: 30px; height: 30px; border-radius: 8px; }
+nav.links { margin-left: auto; display: flex; gap: 22px; font-size: 15px; font-weight: 600; color: var(--soft); }
+nav.links a { text-decoration: none; } nav.links a:hover { color: var(--text); }
+@media (max-width: 720px) { nav.links a:not(.cta-link) { display: none; } }
+
+/* buttons */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 24px; border-radius: 14px; font-weight: 700; text-decoration: none; border: 1px solid transparent; transition: transform .15s, background .2s, border-color .2s; position: relative; overflow: hidden; isolation: isolate; }
+.btn:active { transform: translateY(1px); }
+.btn.primary { background: var(--plum); color: #fff; box-shadow: 0 10px 30px var(--plum-soft); }
+.btn.primary::after { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(105deg, transparent 35%, rgba(255,255,255,.3) 50%, transparent 65%); transform: translateX(-120%); }
+.btn.primary:hover::after { transform: translateX(120%); transition: transform .7s ease; }
+.btn.ghost { border-color: var(--line2); background: transparent; } .btn.ghost:hover { background: var(--surface2); }
+.btn.small { min-height: 40px; padding: 0 16px; font-size: 15px; }
+
+/* hero */
+.hero { position: relative; padding: 84px 0 56px; text-align: center; overflow: clip; }
+.hero::before { content: ''; position: absolute; inset: -20% -10% auto; height: 80%; z-index: -1; pointer-events: none;
+  background: radial-gradient(600px 360px at 18% 20%, var(--plum-soft), transparent 70%), radial-gradient(520px 320px at 85% 10%, color-mix(in srgb, var(--apricot) 18%, transparent), transparent 70%); }
+.eyebrow { display: inline-flex; gap: 8px; align-items: center; padding: 6px 14px; border: 1px solid var(--line2); border-radius: 999px; font-size: 14px; font-weight: 650; color: var(--soft); background: var(--surface); }
+.eyebrow i { width: 8px; height: 8px; border-radius: 50%; background: var(--apricot); }
+h1 { font-size: clamp(2.5rem, 6.4vw, 4.6rem); line-height: 1.04; letter-spacing: -.035em; font-weight: 850; margin: 22px auto 18px; max-width: 16ch; text-wrap: balance; }
+h1 em { font-style: normal; background: linear-gradient(100deg, var(--g1), var(--g2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.lead { font-size: clamp(1.05rem, 2vw, 1.3rem); color: var(--soft); max-width: 60ch; margin: 0 auto 30px; text-wrap: pretty; }
+.cta { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+.note { margin-top: 14px; font-size: 14px; color: var(--muted); }
+
+/* duo link mark */
+.duo { margin: 40px auto 0; width: min(420px, 80%); }
+.duo svg { width: 100%; height: auto; overflow: visible; }
+.duo .a { fill: var(--plum); } .duo .b { fill: var(--apricot); } .duo .l { stroke: var(--line2); stroke-dasharray: 3 7; }
+.duo .p { fill: var(--text); }
+@media (prefers-reduced-motion: no-preference) {
+  .duo .p { animation: travel 3s ease-in-out infinite; }
+  .duo .d { transform-box: fill-box; transform-origin: center; animation: breathe 4.5s ease-in-out infinite; } .duo .b { animation-delay: -2.2s; }
+  @keyframes travel { 0% { transform: translateX(0); opacity: 0; } 15%, 85% { opacity: 1; } 100% { transform: translateX(220px); opacity: 0; } }
+  @keyframes breathe { 50% { transform: scale(1.07); } }
+  .rise { animation: rise .7s cubic-bezier(.2,.7,.2,1) both; } .rise.d2 { animation-delay: .1s; } .rise.d3 { animation-delay: .2s; } .rise.d4 { animation-delay: .3s; }
+  @keyframes rise { from { opacity: 0; transform: translateY(14px); filter: blur(6px); } }
+}
+
+/* screenshots */
+.shots { position: relative; margin: 54px auto 0; display: flex; justify-content: center; align-items: flex-end; gap: 28px; }
+.shot { border-radius: var(--r); border: 1px solid var(--line2); background: var(--surface); box-shadow: 0 30px 80px rgba(0,0,0,.35); overflow: hidden; }
+.shot.desk { width: min(760px, 100%); } .shot.phone { width: min(230px, 28%); border-radius: 28px; margin-bottom: -16px; }
+@media (max-width: 720px) { .shot.phone { display: none; } }
+
+/* trust strip */
+.strip { padding: 22px 0; border-block: 1px solid var(--line); background: var(--bg2); }
+.strip ul { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 14px 34px; justify-content: center; font-weight: 650; color: var(--soft); font-size: 15px; }
+.strip li::before { content: '✓'; color: var(--apricot); margin-right: 8px; font-weight: 800; }
+
+/* sections */
+section { padding: 88px 0; }
+h2 { font-size: clamp(1.8rem, 4vw, 2.8rem); letter-spacing: -.03em; line-height: 1.1; margin: 0 0 14px; font-weight: 800; text-wrap: balance; }
+.sub { color: var(--soft); max-width: 62ch; margin: 0 0 40px; }
+.center { text-align: center; } .center .sub { margin-inline: auto; }
+
+/* bento */
+.bento { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; }
+.card { position: relative; isolation: isolate; border: 1px solid var(--line); background: var(--surface); border-radius: var(--r); padding: 26px; overflow: hidden; transition: border-color .25s, transform .25s; }
+.card::before { content: ''; position: absolute; inset: 0; z-index: -1; opacity: 0; transition: opacity .3s; background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 50%), var(--plum-soft), transparent 70%); }
+.card:hover { border-color: var(--line2); } .card:hover::before { opacity: 1; }
+.card h3 { margin: 12px 0 6px; font-size: 1.2rem; letter-spacing: -.015em; }
+.card p { margin: 0; color: var(--soft); font-size: 16px; }
+.card .ic { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; background: var(--surface2); font-size: 20px; }
+.c2 { grid-column: span 2; } .c3 { grid-column: span 3; } .c4 { grid-column: span 4; }
+@media (max-width: 900px) { .c2, .c3, .c4 { grid-column: span 6; } }
+@media (min-width: 901px) and (max-width: 1100px) { .c2 { grid-column: span 3; } }
+.tag { display: inline-block; margin-left: 8px; padding: 2px 9px; border-radius: 999px; background: var(--surface2); border: 1px solid var(--line2); font-size: 12px; font-weight: 700; color: var(--muted); vertical-align: middle; }
+
+/* steps */
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; counter-reset: s; }
+@media (max-width: 800px) { .steps { grid-template-columns: 1fr; } }
+.step { counter-increment: s; border: 1px solid var(--line); border-radius: var(--r); padding: 26px; background: var(--surface); }
+.step::before { content: counter(s); display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: var(--apricot); color: var(--on-apricot); font-weight: 850; margin-bottom: 14px; }
+.step h3 { margin: 0 0 6px; } .step p { margin: 0; color: var(--soft); }
+
+/* compare */
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 15.5px; }
+th, td { padding: 14px 18px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 750; background: var(--bg2); } th:nth-child(2), td:nth-child(2) { background: var(--plum-soft); font-weight: 650; }
+tr:last-child td { border-bottom: 0; }
+.fine { font-size: 14px; color: var(--muted); margin-top: 14px; max-width: 80ch; }
+
+/* faq */
+.faq { max-width: 820px; margin-inline: auto; display: grid; gap: 12px; }
+details { border: 1px solid var(--line); border-radius: 16px; background: var(--surface); padding: 4px 22px; transition: border-color .2s; }
+details[open] { border-color: var(--line2); }
+summary { cursor: pointer; list-style: none; padding: 16px 0; font-weight: 700; display: flex; justify-content: space-between; gap: 16px; }
+summary::-webkit-details-marker { display: none; } summary::after { content: '+'; color: var(--apricot); font-size: 22px; line-height: 1; transition: transform .25s; }
+details[open] summary::after { transform: rotate(45deg); }
+details p { margin: 0 0 18px; color: var(--soft); }
+
+/* download */
+.dl { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; max-width: 860px; margin: 0 auto; }
+@media (max-width: 720px) { .dl { grid-template-columns: 1fr; } }
+.dl .card { text-align: left; } .dl .btn { margin-top: 18px; }
+.warn { max-width: 860px; margin: 22px auto 0; padding: 16px 20px; border: 1px dashed var(--line2); border-radius: 16px; color: var(--soft); font-size: 15px; }
+.warn strong { color: var(--text); }
+
+footer { padding: 40px 0 60px; border-top: 1px solid var(--line); color: var(--muted); font-size: 15px; }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 14px 28px; justify-content: space-between; }
+footer nav { display: flex; gap: 20px; flex-wrap: wrap; } footer a { text-decoration: none; } footer a:hover { color: var(--text); }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#top"><img src="assets/icon.png" alt="" width="30" height="30">PrivCord</a>
+    <nav class="links" aria-label="Main">
+      <a href="#features">Features</a>
+      <a href="#how">How it works</a>
+      <a href="#compare">Compare</a>
+      <a href="#faq">FAQ</a>
+      <a class="cta-link btn primary small" href="#download">Download</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero" id="top">
+    <div class="wrap">
+      <span class="eyebrow rise"><i></i> Windows and Android · end-to-end encrypted</span>
+      <h1 class="rise d2">Chat privately. <em>No number, no account, no server</em> reading along.</h1>
+      <p class="lead rise d3">PrivCord is a peer-to-peer messenger. Chats go straight from your device to your friend's over an encrypted link, you add people with a QR code or six words, and it can even keep going over Bluetooth with no internet.</p>
+      <div class="cta rise d4">
+        <a class="btn primary" href="#download">Download for Windows or Android</a>
+        <a class="btn ghost" href="https://github.com/__REPO__">View the source</a>
+      </div>
+      <p class="note rise d4">Free · no sign-up · source-available · not yet independently audited</p>
+
+      <div class="duo" aria-hidden="true">
+        <svg viewBox="0 0 320 80" fill="none"><path class="l" d="M64 40 H256" stroke-width="2" stroke-linecap="round"/><circle class="a d" cx="44" cy="40" r="22"/><circle class="b d" cx="276" cy="40" r="22"/><circle class="p" cx="64" cy="40" r="4.5"/></svg>
+      </div>
+
+      <div class="shots">
+        <img class="shot phone" src="assets/mobile-home.webp" alt="PrivCord on Android: the chat list" width="390" height="800" loading="lazy">
+        <img class="shot desk" src="assets/group-chat-dark.webp" alt="PrivCord on Windows: an encrypted group chat in the dark theme" width="1280" height="800" fetchpriority="high">
+        <img class="shot phone" src="assets/mobile-group.webp" alt="PrivCord on Android: a group chat" width="390" height="800" loading="lazy">
+      </div>
+    </div>
+  </section>
+
+  <div class="strip"><div class="wrap"><ul>
+    <li>No phone number or email</li><li>No account to create</li><li>Messages never stored on a company server</li><li>Post-quantum key exchange</li><li>Memory-safe Rust engine</li>
+  </ul></div></div>
+
+  <section id="features">
+    <div class="wrap">
+      <div class="center"><h2>Everything a chat app needs, nothing that watches you</h2>
+      <p class="sub">Built for people who want private conversations without handing over an identity.</p></div>
+      <div class="bento">
+        <article class="card c4"><div class="ic">🔒</div><h3>Direct, end-to-end encrypted chats</h3><p>Messages are encrypted on your device and go straight to your friend's over WebRTC. The handshake mixes ML-KEM-768 with P-256, so it is built to hold up against future quantum computers too. Optional relays only ever see sealed blobs.</p></article>
+        <article class="card c2"><div class="ic">📷</div><h3>Add a friend in seconds</h3><p>Show a QR code or read out six words. No long strings to copy.</p></article>
+        <article class="card c2"><div class="ic">👥</div><h3>Groups of up to 10</h3><p>Add Ben, Ben adds Cat, and you and Cat connect automatically.</p></article>
+        <article class="card c2"><div class="ic">💻</div><h3>One account, many devices</h3><p>Link your phone and PC with a QR code. The account key never leaves your first device.</p></article>
+        <article class="card c2"><div class="ic">📎</div><h3>Files, photos, voice notes</h3><p>Up to 8 MB, sent straight to the other device with no upload to anyone's server.</p></article>
+        <article class="card c3"><div class="ic">📡</div><h3>Keeps going with no internet <span class="tag">Android · experimental</span></h3><p>An optional Bluetooth mesh passes sealed messages through nearby phones, up to 7 hops. So far tested in simulation, not on real radios.</p></article>
+        <article class="card c3"><div class="ic">🔑</div><h3>You hold the keys</h3><p>A 12-word recovery phrase is your account. Lock the app with Windows Hello or your fingerprint, make passphrase-locked backups, and wipe everything in one tap.</p></article>
+        <article class="card c2"><div class="ic">🕒</div><h3>Send later</h3><p>Write now, schedule it for the time you pick.</p></article>
+        <article class="card c2"><div class="ic">🎨</div><h3>16 themes</h3><p>Midnight, AMOLED, Nord, Dracula, Blossom and more, on both apps.</p></article>
+        <article class="card c2"><div class="ic">🌐</div><h3>Public channels</h3><p>Join rooms like #general with no account. Messages are signed, but anyone who knows the name can read them.</p></article>
+      </div>
+    </div>
+  </section>
+
+  <section id="how" style="background: var(--bg2); border-block: 1px solid var(--line);">
+    <div class="wrap">
+      <div class="center"><h2>Up and running in three steps</h2><p class="sub">No sign-up form. Your identity is made on your device.</p></div>
+      <div class="steps">
+        <div class="step"><h3>Install and write down 12 words</h3><p>That recovery phrase is your account. It is never stored anywhere else, so keep it safe: the same words restore you on a new device.</p></div>
+        <div class="step"><h3>Add a friend</h3><p>Show your QR code or six words. They scan or type them, you tap Add. Both of you now have each other's keys pinned.</p></div>
+        <div class="step"><h3>Chat</h3><p>Messages go device to device. If your friend is offline, they wait and send when you reconnect.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="compare">
+    <div class="wrap">
+      <div class="center"><h2>How PrivCord compares</h2><p class="sub">A short, good-faith summary. It can go out of date, so check each project for its current state.</p></div>
+      <div class="tablewrap"><table>
+        <thead><tr><th></th><th>PrivCord</th><th>Signal</th><th>Session</th><th>Briar</th></tr></thead>
+        <tbody>
+          <tr><td>Phone number or email needed</td><td>No</td><td>Phone number</td><td>No</td><td>No</td></tr>
+          <tr><td>Messages go through company servers</td><td>No (device to device; optional relays see only sealed blobs)</td><td>Yes</td><td>Yes (a decentralized node network)</td><td>No (Tor, Wi-Fi or Bluetooth)</td></tr>
+          <tr><td>Works over Bluetooth with no internet</td><td>Yes (Android mesh, experimental)</td><td>No</td><td>No</td><td>Yes</td></tr>
+          <tr><td>One account on several devices</td><td>Yes</td><td>Yes</td><td>Limited</td><td>Limited</td></tr>
+          <tr><td>Independently audited</td><td>No, not yet</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+        </tbody>
+      </table></div>
+      <p class="fine">PrivCord is a young project by one maintainer. If you need a battle-tested, audited messenger today, use one of the audited ones.</p>
+    </div>
+  </section>
+
+  <section id="faq" style="background: var(--bg2); border-block: 1px solid var(--line);">
+    <div class="wrap">
+      <div class="center"><h2>Questions people ask</h2></div>
+      <div class="faq">
+        <details><summary>Does PrivCord need a phone number, email or account?</summary><p>No. Your identity is a 12-word recovery phrase that you hold. There is nothing to sign up for.</p></details>
+        <details><summary>Is PrivCord end-to-end encrypted?</summary><p>Yes. Messages are encrypted on your device and only the friend they are meant for can open them. Every link is authenticated against the keys you pinned when you added the friend, and the key exchange uses a post-quantum hybrid (ML-KEM-768 with P-256).</p></details>
+        <details><summary>Is it really serverless?</summary><p>Not completely, and it says so. To find a friend across the internet it uses optional signaling relays (public Nostr relays or your own), STUN, and on strict networks TURN. None of them can read your messages, though they can see connection metadata such as your IP address. You can run your own, or use none on a local network or over Bluetooth.</p></details>
+        <details><summary>Can I use it without internet?</summary><p>On Android, an optional Bluetooth mesh carries sealed messages through nearby phones, and linked devices on the same Wi-Fi sync directly. The mesh is experimental and has only been tested in simulation, not on real radios.</p></details>
+        <details><summary>Which platforms are supported?</summary><p>Windows and Android today. There is no iPhone, macOS or Linux app yet.</p></details>
+        <details><summary>What if I lose my phone?</summary><p>Remove the device from another device of yours: it takes effect in 24 hours (any device can cancel it), or at once with your recovery phrase. Then restore your account on a new device with the 12 words.</p></details>
+        <details><summary>Is PrivCord open source?</summary><p>The full source is public and free for personal, educational and research use. The PC-NC license does not allow commercial use without written permission, so it is source-available rather than OSI open source.</p></details>
+        <details><summary>Has it been independently audited?</summary><p>Not yet. The protocol is covered by tests, shared test vectors and fuzzing in CI, and the security policy is in the repository. Please read the known limitations before relying on it.</p></details>
+        <details><summary>Is PrivCord a Signal, Session or Briar alternative?</summary><p>It covers similar ground (private, encrypted chat) with a different design: no phone number, device-to-device links instead of a central server, and an offline Bluetooth mesh.</p></details>
+      </div>
+    </div>
+  </section>
+
+  <section id="download">
+    <div class="wrap">
+      <div class="center"><h2>Get PrivCord</h2><p class="sub">Free. Pick your platform.</p></div>
+      <div class="dl">
+        <article class="card"><div class="ic">🪟</div><h3>Windows</h3><p>Installer for Windows 10 and 11. The latest build is attached to the newest release.</p><a class="btn primary" href="https://github.com/__REPO__/releases/latest">Download the installer</a></article>
+        <article class="card"><div class="ic">🤖</div><h3>Android</h3><p>Install the arm64 APK (almost every phone); the armeabi-v7a one is for old 32-bit phones.</p><a class="btn primary" href="https://github.com/__REPO__/releases/latest">Download the APK</a></article>
+      </div>
+      <p class="warn"><strong>Heads up:</strong> the Windows installer is not code-signed yet, so Windows SmartScreen will warn you: choose <em>More info</em>, then <em>Run anyway</em>. On Android you need to allow installing apps from this source. Windows will also ask to allow the firewall the first time, which lets PrivCord find friends on your local network.</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div>© 2026 PrivCord · <a href="https://github.com/__REPO__/blob/main/LICENSE">PC-NC licence (source-available)</a> · Font: Figtree (OFL)</div>
+    <nav aria-label="Footer">
+      <a href="https://github.com/__REPO__">GitHub</a>
+      <a href="https://github.com/__REPO__/blob/main/SECURITY.md">Security</a>
+      <a href="https://github.com/__REPO__/blob/main/docs/KNOWN_LIMITATIONS.md">Known limitations</a>
+      <a href="https://github.com/__REPO__/issues">Report an issue</a>
+    </nav>
+  </div>
+</footer>
+
+<script>
+// A soft light follows the pointer over the cards (no-op when reduced motion is requested).
+if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  addEventListener('pointermove', function (e) {
+    var c = e.target.closest && e.target.closest('.card');
+    if (!c) return;
+    var r = c.getBoundingClientRect();
+    c.style.setProperty('--mx', (e.clientX - r.left) + 'px');
+    c.style.setProperty('--my', (e.clientY - r.top) + 'px');
+  }, { passive: true });
+}
+</script>
+</body>
+</html>

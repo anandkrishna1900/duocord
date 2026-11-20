@@ -357,21 +357,52 @@ impl Core {
     /// The chat list: newest message and unread count per conversation, and who is still owed each message of ours.
     pub(super) fn summaries(&self) -> (Vec<ConversationSummary>, Vec<DeliveryDetail>) {
         let own = self.uid.as_ref();
-        let mut by_conv: BTreeMap<ConversationId, (Option<&StoredMessage>, usize)> =
-            BTreeMap::new();
+        // One pass over the history. Chats are found by a borrowed key (nothing is cloned per message), and consecutive
+        // messages of the same chat skip the lookup altogether.
+        struct Tally<'a> {
+            conversation: &'a ConversationId,
+            best: Option<&'a StoredMessage>,
+            unread: usize,
+        }
+        let mut tallies: Vec<Tally<'_>> = Vec::new();
+        let mut index: BTreeMap<&ConversationId, usize> = BTreeMap::new();
+        let mut last: Option<usize> = None;
         for m in self.messages.values() {
-            let entry = by_conv.entry(m.conversation.clone()).or_default();
+            let slot = match last.filter(|&i| {
+                tallies
+                    .get(i)
+                    .is_some_and(|t| t.conversation == &m.conversation)
+            }) {
+                Some(i) => i,
+                None => *index.entry(&m.conversation).or_insert_with(|| {
+                    tallies.push(Tally {
+                        conversation: &m.conversation,
+                        best: None,
+                        unread: 0,
+                    });
+                    tallies.len() - 1
+                }),
+            };
+            last = Some(slot);
+            let Some(entry) = tallies.get_mut(slot) else {
+                continue;
+            };
             if Some(&m.message.sender_id) != own && m.message.read_at.is_none() {
-                entry.1 += 1;
+                entry.unread += 1;
             }
-            let newer = entry.0.is_none_or(|best| {
+            let newer = entry.best.is_none_or(|best| {
                 privcord_domain::ordering::compare_messages(&best.message, &m.message)
                     == std::cmp::Ordering::Less
             });
             if newer {
-                entry.0 = Some(m);
+                entry.best = Some(m);
             }
         }
+        let by_conv: Vec<(ConversationId, (Option<&StoredMessage>, usize))> = index
+            .values()
+            .filter_map(|&i| tallies.get(i))
+            .map(|t| (t.conversation.clone(), (t.best, t.unread)))
+            .collect();
         let summaries = by_conv
             .into_iter()
             .map(|(conversation, (best, unread))| ConversationSummary {

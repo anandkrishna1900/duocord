@@ -496,6 +496,6 @@ fn a_new_encrypted_database_starts_empty_and_reopens() {
 /// A fresh random key for each test database.
 fn random_key() -> [u8; 32] {
     let mut key = [1u8; 32];
-    getrandom::getrandom(&mut key).unwrap();
+    getrandom::fill(&mut key).unwrap();
     key
 }

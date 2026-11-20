@@ -17,14 +17,14 @@
   "dependencies": {
     "@duochat/protocol": "*",
     "@noble/curves": "2.4.0",
-    "@tauri-apps/api": "^2.5.0",
+    "@tauri-apps/api": "^2.12.5",
     "@tauri-apps/plugin-notification": "^2.8.1",
     "qrcode-generator": "^2.0.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.5.0",
+    "@tauri-apps/cli": "^2.12.5",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@types/ws": "^8.18.2",

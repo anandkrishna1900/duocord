@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChatState, UiMessage } from '../lib/engine';
 import type { ChatEngineApi } from '../lib/engineApi';
 import type { AppSettings } from '../lib/settings';
+import { togglePin, withPinsFirst } from '../lib/pins';
 import { LOCAL_ID } from '../lib/identity';
 import { formatTime } from '../lib/format';
 import { MAX_FILE_BYTES, formatBytes } from '@duochat/protocol';
@@ -19,7 +20,7 @@ import { GroupDetailsDialog, NewGroupDialog } from './GroupDialogs';
 import { PersonDialog } from './PersonDialog';
 import { RequestDialog } from './RequestDialog';
 import { ChannelsDialog } from './ChannelsDialog';
-import { AlertIcon, ArrowLeftIcon, LoaderIcon, RefreshIcon, SettingsIcon, ShieldIcon, UserIcon, XIcon } from './Icons';
+import { AlertIcon, ArrowLeftIcon, LoaderIcon, PinIcon, RefreshIcon, SettingsIcon, ShieldIcon, UserIcon, XIcon } from './Icons';
 
 interface Row {
   id: string;
@@ -74,6 +75,19 @@ export function ChatLayout({
   const [manualUid, setManualUid] = useState('');
   const [verifyUid, setVerifyUid] = useState<string | null>(null);
   const [replying, setReplying] = useState<UiMessage | null>(null);
+  /** The message just sent, for a few seconds: "Undo" takes it back from everyone. */
+  const [undo, setUndo] = useState<{ conv: string; text: string } | null>(null);
+  useEffect(() => {
+    if (!undo) return;
+    const t = window.setTimeout(() => setUndo(null), 6000);
+    return () => window.clearTimeout(t);
+  }, [undo]);
+  const undoSend = () => {
+    if (!undo || !state) return;
+    const mine = [...(state.messages[undo.conv] ?? [])].reverse().find((m) => m.own && m.text === undo.text);
+    if (mine) engine?.deleteMessage(mine.messageId, true);
+    setUndo(null);
+  };
   const [query, setQuery] = useState('');
   const [focusId, setFocusId] = useState<string | null>(null);
   const [legacyError, setError] = useState<string | null>(null);
@@ -177,8 +191,8 @@ export function ChatLayout({
         online: g.connected > 0,
       })),
     ];
-    return list.sort((a, b) => b.at - a.at || a.name.localeCompare(b.name));
-  }, [state]);
+    return withPinsFirst(list.sort((a, b) => b.at - a.at || a.name.localeCompare(b.name)), settings.pinned);
+  }, [state, settings.pinned]);
 
   const hits = useMemo(() => (engine && query.trim().length >= 2 ? engine.search(query) : []), [engine, query, state?.messages]);
 
@@ -315,11 +329,16 @@ export function ChatLayout({
                 type="button"
                 className={`chat-row ${row.id === selected ? 'active' : ''}`}
                 onClick={() => open(row.id)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  updateSettings({ pinned: togglePin(settings.pinned, row.id) });
+                }}
               >
                 <Avatar name={row.name} size={46} online={row.online} group={row.isGroup} />
                 <span className="chat-row-main">
                   <span className="chat-row-top">
                     <strong>{row.name}</strong>
+                    {settings.pinned.includes(row.id) ? <PinIcon size={13} className="chat-row-pin" aria-label="Pinned" /> : null}
                     {row.at ? <span className="muted small">{formatTime(row.at)}</span> : null}
                   </span>
                   <span className="chat-row-bottom">
@@ -374,6 +393,16 @@ export function ChatLayout({
                 </button>
                 {menuOpen ? (
                   <div className="menu" role="menu">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        updateSettings({ pinned: togglePin(settings.pinned, selected!) });
+                      }}
+                    >
+                      {settings.pinned.includes(selected!) ? 'Unpin from top' : 'Pin to top'}
+                    </button>
                     <button
                       type="button"
                       role="menuitem"
@@ -474,6 +503,15 @@ export function ChatLayout({
             {readOnly ? (
               <div className="composer-note">{group!.status === 'removed' ? 'You were removed from this group.' : 'You left this group.'}</div>
             ) : (
+              <>
+              {undo && undo.conv === selected ? (
+                <div className="undo-bar" role="status">
+                  <span>Sent.</span>
+                  <button type="button" onClick={undoSend}>
+                    Undo
+                  </button>
+                </div>
+              ) : null}
               <Composer
                 key={selected}
                 disabled={state.phase !== 'ready'}
@@ -486,7 +524,10 @@ export function ChatLayout({
                 onCancelReply={() => setReplying(null)}
                 onSend={async (text) => {
                   const r = (await engine?.send(selected!, text, replying?.messageId)) ?? { ok: false as const, error: 'Not ready.' };
-                  if (r.ok) setReplying(null);
+                  if (r.ok) {
+                    setReplying(null);
+                    setUndo({ conv: selected!, text });
+                  }
                   return r;
                 }}
                 onSendFile={async (file) => {
@@ -497,6 +538,7 @@ export function ChatLayout({
                   return r;
                 }}
               />
+              </>
             )}
           </>
         ) : (

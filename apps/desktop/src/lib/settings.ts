@@ -18,6 +18,8 @@ export interface AppSettings {
   groupOnly: boolean;
   /** Panic wipe: pressing Ctrl+Shift+Backspace three times quickly erases everything on this device, with no questions. */
   panicWipe: boolean;
+  /** Chats pinned to the top of the list on this device (at most 3, in the order pinned). */
+  pinned: string[];
 }
 
 export const ACCENTS = [
@@ -39,6 +41,7 @@ const DEFAULTS: AppSettings = {
   displayName: '',
   groupOnly: false,
   panicWipe: false,
+  pinned: [],
 };
 
 export function parseSettings(raw: string | null): AppSettings {
@@ -65,6 +68,7 @@ export function parseSettings(raw: string | null): AppSettings {
       palette: typeof parsed.palette === 'string' && (parsed.palette === DEFAULT_PALETTE || themeById(parsed.palette)) ? parsed.palette : DEFAULT_PALETTE,
       groupOnly: typeof parsed.groupOnly === 'boolean' ? parsed.groupOnly : DEFAULTS.groupOnly,
       panicWipe: typeof parsed.panicWipe === 'boolean' ? parsed.panicWipe : DEFAULTS.panicWipe,
+      pinned: Array.isArray(parsed.pinned) ? parsed.pinned.filter((x): x is string => typeof x === 'string').slice(-3) : [],
       displayName:
         typeof parsed.displayName === 'string'
           ? parsed.displayName.trim().slice(0, 40)

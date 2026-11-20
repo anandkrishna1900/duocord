@@ -12,6 +12,8 @@ import { NetworkSettings } from './NetworkSettings';
 import { DeviceLinkDialog } from './DeviceLinkDialog';
 import { DeviceRow } from './DeviceRow';
 import { AutoBackupControl } from './AutoBackupControl';
+import { LAST_BACKUP_KEY, PrivacyCheckup } from './PrivacyCheckup';
+import { NetworkTransparency } from './NetworkTransparency';
 import { formatBytes } from '../lib/format';
 import { AlertIcon, CheckIcon, KeyIcon, TrashIcon } from './Icons';
 
@@ -124,6 +126,11 @@ function BackupControl({ engine }: { engine: ChatEngineApi | null }) {
       a.click();
       a.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      try {
+        localStorage.setItem(LAST_BACKUP_KEY, String(Date.now()));
+      } catch {
+        /* no storage */
+      }
       setMessage({ text: 'Backup saved. Keep the file and the passphrase safe: you need both, and nobody can recover the passphrase.', error: false });
     } catch (caught) {
       setMessage({ text: caught instanceof Error ? caught.message : 'Could not make the backup.', error: true });
@@ -494,6 +501,7 @@ export function SettingsDialog({
               Messages go straight from device to device. A device keeps at most {30} live connections, which
               is plenty for groups of a few dozen.
             </p>
+            <NetworkTransparency />
             <details className="advanced">
               <summary>Advanced</summary>
               <NetworkSettings engine={engine} state={state} />
@@ -503,6 +511,7 @@ export function SettingsDialog({
 
         {section === 'security' ? (
           <section className="settings-section">
+            <PrivacyCheckup settings={settings} state={state} go={setSection} />
             <AppLockControl />
             <Toggle
               label="Stay group-only with people I meet in groups"

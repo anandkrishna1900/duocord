@@ -16,6 +16,7 @@ pub mod ble;
 pub mod canonical;
 pub mod card;
 pub mod channel;
+pub mod devices;
 pub mod e2ee;
 pub mod error;
 pub mod group;
@@ -23,6 +24,7 @@ pub mod group_coordinator;
 pub mod identity;
 pub mod invite;
 pub mod kdf;
+pub mod media;
 pub mod nostr;
 pub mod peer_auth;
 pub mod pq;
@@ -32,6 +34,8 @@ pub mod rng;
 pub mod safety;
 pub mod seal;
 pub mod secure_channel;
+pub mod selfbox;
+pub mod synclog;
 #[cfg(any(test, feature = "test-support"))]
 pub mod vectors;
 

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent } from 'react';
 import { MAX_TEXT_LENGTH, countCodePoints } from '@duochat/protocol';
-import { MicIcon, PaperclipIcon, SendIcon, XIcon } from './Icons';
+import { ClockIcon, MicIcon, PaperclipIcon, SendIcon, XIcon } from './Icons';
+import type { ScheduledMessage } from '../lib/engine';
 
 export function Composer({
   onSend,
@@ -10,7 +11,15 @@ export function Composer({
   onCancelReply,
   onSendFile,
   isChannel = false,
+  onSchedule,
+  scheduled = [],
+  onCancelScheduled,
 }: {
+  /** Send later (friends and groups; not channels). */
+  onSchedule?: (text: string, at: number) => Promise<{ ok: true } | { ok: false; error: string }>;
+  /** Messages waiting in this conversation. */
+  scheduled?: ScheduledMessage[];
+  onCancelScheduled?: (id: string) => void;
   /** Public channels carry text only. */
   isChannel?: boolean;
   onSend: (text: string) => Promise<{ ok: true } | { ok: false; error: string }>;
@@ -33,6 +42,8 @@ export function Composer({
   const [sending, setSending] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sendingRef = useRef(false);
+  const [picking, setPicking] = useState(false);
+  const [when, setWhen] = useState('');
 
   const length = countCodePoints(text);
   const overLimit = length > MAX_TEXT_LENGTH;
@@ -51,6 +62,20 @@ export function Composer({
       setText('');
       setError(null);
       requestAnimationFrame(() => textareaRef.current?.focus());
+    } else {
+      setError(result.error);
+    }
+  }
+
+  async function schedule() {
+    const at = new Date(when).getTime();
+    if (!onSchedule || !text.trim() || overLimit || !Number.isFinite(at)) return;
+    const result = await onSchedule(text, at);
+    if (result.ok) {
+      setText('');
+      setError(null);
+      setPicking(false);
+      setWhen('');
     } else {
       setError(result.error);
     }
@@ -169,6 +194,42 @@ export function Composer({
           </button>
         </div>
       ) : null}
+      {scheduled.length > 0 ? (
+        <ul className="scheduled-list" aria-label="Scheduled messages">
+          {scheduled.map((m) => (
+            <li key={m.id}>
+              <span className="small">
+                <ClockIcon size={13} /> {new Date(m.at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                {' · '}
+                {m.text.length > 40 ? `${m.text.slice(0, 40)}…` : m.text}
+              </span>
+              <button type="button" className="button ghost small" onClick={() => onCancelScheduled?.(m.id)}>
+                Cancel
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {picking ? (
+        <div className="schedule-picker">
+          <label className="small" htmlFor="schedule-when">
+            Send at
+          </label>
+          <input id="schedule-when" type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} />
+          <button
+            type="button"
+            className="button primary small"
+            disabled={!when || !text.trim() || overLimit}
+            onClick={() => void schedule()}
+          >
+            Schedule
+          </button>
+          <button type="button" className="button ghost small" onClick={() => setPicking(false)}>
+            Cancel
+          </button>
+          <span className="muted small">Sent from this device at that time (when it is running).</span>
+        </div>
+      ) : null}
       {error ? (
         <div className="composer-error" role="alert">
           {error}
@@ -243,6 +304,18 @@ export function Composer({
             </span>
           ) : null}
 
+          {onSchedule && !isChannel ? (
+            <button
+              type="button"
+              className="icon-button attach-button"
+              onClick={() => setPicking((p) => !p)}
+              disabled={disabled || !text.trim()}
+              aria-label="Send later"
+              title="Send later"
+            >
+              <ClockIcon size={18} />
+            </button>
+          ) : null}
           <button
             type="button"
             className="send-button"

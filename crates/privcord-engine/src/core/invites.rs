@@ -157,7 +157,6 @@ impl Core {
     /// Publish our card under fresh words and listen for people who answer. Returns the words and when they expire.
     pub fn create_invite(&mut self) -> Result<(String, i64), ErrorCode> {
         self.require_live()?;
-        self.identity()?;
         let now = self.now();
         if let Some(a) = &self.invites.active {
             if a.expires_at > now + 30_000 {
@@ -214,14 +213,24 @@ impl Core {
     }
 
     fn publish_invite(&mut self) -> Result<(), ErrorCode> {
+        if self.invites.active.is_none() {
+            return Ok(());
+        }
+        let card = self.own_contact_card(self.display_name.as_deref())?;
+        let author = Self::author_of(
+            self.uid.as_ref(),
+            self.identity.as_ref(),
+            self.sync.as_ref(),
+            self.device_list.as_ref(),
+        )?;
         let Some(a) = &self.invites.active else {
             return Ok(());
         };
         let blob = seal_invite(
             &a.rv,
             InviteKind::Card,
-            self.identity.as_ref().ok_or(ErrorCode::NoIdentity)?,
-            self.display_name.as_deref(),
+            &author,
+            &card,
             &mut *self.ports.entropy,
         )?;
         self.put_everywhere(&a.rv.mailbox, &blob)
@@ -240,7 +249,6 @@ impl Core {
     /// `InviteFound` or `InviteLookupFailed` (15 seconds at most).
     pub fn preview_invite(&mut self, text: &str) -> Result<Option<InvitePreview>, ErrorCode> {
         self.require_live()?;
-        self.identity()?;
         let Some(words) = parse_invite_words(text) else {
             let contact = ContactCard::decode(text).ok_or(ErrorCode::InvalidInvite)?;
             return self.preview_of(&contact).map(Some);
@@ -277,7 +285,6 @@ impl Core {
     /// card, so they can accept us on their side.
     pub fn accept_invite(&mut self, text: &str) -> Result<UserId, ErrorCode> {
         self.require_live()?;
-        self.identity()?;
         let (contact, answer_with) = match parse_invite_words(text) {
             Some(words) => {
                 let key = words.join(" ");
@@ -328,7 +335,7 @@ impl Core {
             .map(|(u, _)| u.clone())
             .collect();
         for uid in due {
-            let linked = self.peers.get(&uid).is_some_and(super::Peer::ready);
+            let linked = self.person_ready(&uid);
             let expired = self.invites.hellos.get(&uid).is_none_or(|h| h.until <= now);
             if linked || expired || !self.contacts.contains_key(&uid) {
                 self.invites.hellos.remove(&uid);
@@ -355,11 +362,12 @@ impl Core {
         let (Some(own_uid), Some(identity)) = (self.uid.clone(), self.identity.as_ref()) else {
             return;
         };
-        let Some((contact, payload)) =
+        let Some((contact, opened)) =
             privcord_crypto::seal::open_from_stranger(blob, &own_uid, identity)
         else {
             return;
         };
+        let payload = opened.payload;
         if payload.get("t").and_then(serde_json::Value::as_str) != Some("hello")
             || contact.uid == own_uid
         {
@@ -405,11 +413,18 @@ impl Core {
     }
 
     fn send_reply(&mut self, rv: &Rendezvous) -> Result<(), ErrorCode> {
+        let card = self.own_contact_card(self.display_name.as_deref())?;
+        let author = Self::author_of(
+            self.uid.as_ref(),
+            self.identity.as_ref(),
+            self.sync.as_ref(),
+            self.device_list.as_ref(),
+        )?;
         let blob = seal_invite(
             rv,
             InviteKind::Reply,
-            self.identity.as_ref().ok_or(ErrorCode::NoIdentity)?,
-            self.display_name.as_deref(),
+            &author,
+            &card,
             &mut *self.ports.entropy,
         )?;
         self.put_everywhere(&rv.mailbox, &blob)
@@ -469,10 +484,26 @@ impl Core {
         {
             return;
         }
+        // Linking a device: the new device has no account yet, so this comes first.
+        if self.is_link_mailbox(mailbox) {
+            self.link_blob(&blob);
+            return;
+        }
+        // Another device of this account (a linked device has no account key, so this comes before what needs it).
+        if self.is_self_mailbox(mailbox) {
+            self.sync_blob(mailbox, &blob);
+            return;
+        }
+        // A piece of a file coming from another device of this account.
+        if self.is_media_mailbox(mailbox) {
+            self.media_blob(mailbox, &blob);
+            return;
+        }
         let Ok(value) = serde_json::to_value(&blob) else {
             return;
         };
-        let Some(own) = self.identity.as_ref().map(|i| i.sign_public()) else {
+        // The account's public key (for safety numbers): every device of the account has it.
+        let Some(own) = self.account.as_ref().map(|(sign, _)| sign.clone()) else {
             return;
         };
         // A message in a public channel we joined, carried by the signaling service.
@@ -519,11 +550,7 @@ impl Core {
             return;
         }
         // Something sealed for us, on our own mailbox.
-        if self
-            .uid
-            .as_ref()
-            .is_some_and(|u| privcord_crypto::seal::mailbox_for(u.as_str()) == mailbox)
-        {
+        if self.own_mailboxes().iter().any(|m| m == mailbox) {
             self.handle_own_blob(blob);
             return;
         }
@@ -659,9 +686,18 @@ impl Core {
             ))),
             StorageOp::DeleteContact(uid.clone()),
         ])?;
-        self.link_down(uid);
-        self.ports.transport.close(uid);
-        self.peers.remove(uid);
+        self.forget_contact_devices(uid);
+        let addrs: Vec<UserId> = self
+            .peers
+            .keys()
+            .filter(|a| &Self::person_of(a) == uid)
+            .cloned()
+            .collect();
+        for a in addrs {
+            self.link_down(&a);
+            self.ports.transport.close(&a);
+            self.peers.remove(&a);
+        }
         self.contacts.remove(uid);
         self.messages
             .retain(|_, m| m.conversation != ConversationId::Direct(uid.clone()));

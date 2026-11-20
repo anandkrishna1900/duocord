@@ -186,6 +186,12 @@ impl Wipe<'_> {
                     self.core.identity = None;
                     self.core.uid = None;
                     self.core.groups = None;
+                    // The account as a whole: its public keys, this device's place in it, its sync state.
+                    self.core.account = None;
+                    self.core.device_id = None;
+                    self.core.device_list = None;
+                    self.core.sync = None;
+                    self.core.link = None;
                 }
                 r
             }
@@ -208,8 +214,15 @@ impl Wipe<'_> {
         };
         match id {
             "conv.transfers.cancel" => {
-                if let Some(p) = self.peer_of().and_then(|u| self.core.peers.get_mut(&u)) {
-                    p.files.clear();
+                if let Some(u) = self.peer_of() {
+                    for (_, p) in self
+                        .core
+                        .peers
+                        .iter_mut()
+                        .filter(|(a, _)| Core::person_of(a) == u)
+                    {
+                        p.files.clear();
+                    }
                 }
                 Ok((StepStatus::Erased, None))
             }
@@ -222,11 +235,20 @@ impl Wipe<'_> {
             }
             "conv.session.erase" => match self.peer_of() {
                 Some(u) => {
-                    self.core.link_down(&u);
-                    self.core.ports.transport.close(&u);
-                    if let Some(p) = self.core.peers.get_mut(&u) {
-                        p.liveness = LivenessMonitor::new(0);
-                        p.group_only = None;
+                    let addrs: Vec<UserId> = self
+                        .core
+                        .peers
+                        .keys()
+                        .filter(|a| Core::person_of(a) == u)
+                        .cloned()
+                        .collect();
+                    for a in addrs {
+                        self.core.link_down(&a);
+                        self.core.ports.transport.close(&a);
+                        if let Some(p) = self.core.peers.get_mut(&a) {
+                            p.liveness = LivenessMonitor::new(0);
+                            p.group_only = None;
+                        }
                     }
                     Ok((StepStatus::Erased, None))
                 }

@@ -3608,3 +3608,113 @@ input[type='checkbox'] {
 }
 .legacy-group p { margin: 0; }
 .legacy-group-actions { display: flex; gap: 8px; }
+
+/* Linking a device */
+.link-offer,
+.link-compare,
+.link-join {
+  display: grid;
+  gap: 12px;
+}
+.link-offer .qr {
+  max-width: 220px;
+  margin: 0 auto;
+}
+.link-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  word-break: break-all;
+  user-select: all;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-strong);
+}
+.link-digits {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-align: center;
+  margin: 4px 0;
+}
+.device-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.device-list li {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-strong);
+}
+.device-row-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+.device-row-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+}
+.device-remove {
+  display: grid;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.device-remove p {
+  margin: 0;
+}
+.auto-backup {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.auto-backup p {
+  margin: 0;
+}
+.scheduled-list {
+  list-style: none;
+  margin: 0 0 6px;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.scheduled-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--surface-strong);
+}
+.schedule-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.usage-list {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.usage-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}

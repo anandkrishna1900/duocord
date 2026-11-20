@@ -14,7 +14,7 @@ import {
   validateFileSize,
   type NetworkConfig,
 } from '@duochat/protocol';
-import type { ChatState, SearchHit } from '../engine';
+import type { ChatState, DeviceLinkState, SearchHit } from '../engine';
 import type { ChatEngineApi, SendResult } from '../engineApi';
 import { HostedEngine, type EngineBridge } from '../engineBridge';
 import { uidMatchesKeys, type DeviceIdentity } from '../identity';
@@ -40,7 +40,7 @@ export interface HostedDeps {
   /** The identity the app holds. If the engine reports a different one, starting stops with a clear message. */
   expectedUid?: string;
   /** Tests replace the WebRTC links and relay sockets. */
-  runtimeOverrides?: Partial<Pick<RuntimeOptions, 'createTransport' | 'createHub' | 'createBle' | 'now'>>;
+  runtimeOverrides?: Partial<Pick<RuntimeOptions, 'createTransport' | 'createHub' | 'createBle' | 'now' | 'nativeSignaling'>>;
 }
 
 /** The credential-store key the shell keeps the engine's identity under (see `engine_host.rs`). */
@@ -99,6 +99,7 @@ export class HostedChatEngine implements ChatEngineApi {
   private stopped = false;
   private phase: ChatState['phase'] = 'starting';
   private notice: string | null = null;
+  private deviceLink: DeviceLinkState | null = null;
   private error: string | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private refreshing = false;
@@ -133,7 +134,7 @@ export class HostedChatEngine implements ChatEngineApi {
         signaling: 'idle', storageBackend: 'sqlite', queued: 0, error: this.error, notice: this.notice,
       };
     }
-    return shapeState(s, {
+    const shaped = shapeState(s, {
       ownName: this.deps.ownName(),
       signaling: r?.signalingStatus() ?? 'idle',
       signalingConfigured: net.signaling.length > 0,
@@ -147,6 +148,7 @@ export class HostedChatEngine implements ChatEngineApi {
       error: this.error,
       notice: this.notice,
     });
+    return { ...shaped, deviceLink: this.deviceLink };
   }
 
   private emit(): void {
@@ -233,6 +235,8 @@ export class HostedChatEngine implements ChatEngineApi {
       const name = this.deps.ownName();
       if (name) await this.engine.call('set_display_name', { name }).catch(() => undefined);
       await this.engine.call('set_store_forward', { value: this.deps.network().storeForward || this.deps.network().torMode === true }).catch(() => undefined);
+      // Private mode: files between your devices do not go over Tor (they wait for a direct local path).
+      await this.engine.call('set_bulk_allowed', { allowed: this.deps.network().torMode !== true }).catch(() => undefined);
       this.card = (await this.engine.call<string>('own_card', { name: name || null }).catch(() => '')) ?? '';
       await this.refresh();
       const own = this.snapshot?.own_uid ?? null;
@@ -254,11 +258,16 @@ export class HostedChatEngine implements ChatEngineApi {
   }
 
   stop(): void {
+    void this.stopAndWait();
+  }
+
+  /** Stop, and resolve once the shell's engine is gone (a new one started after this gets a fresh engine). */
+  stopAndWait(): Promise<void> {
     this.stopped = true;
     if (this.timer) clearTimeout(this.timer);
     this.off?.();
     this.runtime?.stop();
-    void this.engine.stop().catch(() => undefined);
+    return this.engine.stop().catch(() => undefined);
   }
 
   setVisible(visible: boolean): void {
@@ -284,6 +293,13 @@ export class HostedChatEngine implements ChatEngineApi {
           already: e.InviteFound.already === true,
         });
         this.lookup = null;
+      } else if (e.DeviceLink) {
+        const d = e.DeviceLink;
+        this.deviceLink = {
+          stage: String(d.stage) as DeviceLinkState['stage'],
+          ...(typeof d.code === 'string' ? { code: d.code } : {}),
+          ...(typeof d.name === 'string' ? { name: d.name } : {}),
+        };
       } else if (e.MessageAdded && e.MessageAdded.own === false) {
         void this.incoming(String(e.MessageAdded.conversation), String(e.MessageAdded.message_id));
       }
@@ -308,6 +324,81 @@ export class HostedChatEngine implements ChatEngineApi {
     const channel = this.state.channels.find((c) => c.id === conversation);
     const title = person ?? (group ? `${message.senderName} in ${group.name}` : channel ? `${message.senderName} in #${channel.name}` : message.senderName);
     this.deps.onNotify(message, title);
+  }
+
+  /* ------------------------------------------------------------------ devices of the account */
+
+  /** On the device holding the account key: a code for the new device to scan or type. */
+  async startDeviceLink(): Promise<string> {
+    this.deviceLink = null;
+    try {
+      const code = await this.engine.call<string>('start_device_link');
+      this.scheduleRefresh();
+      return code;
+    } catch (e) {
+      throw new Error(friendly(e));
+    }
+  }
+
+  /** On the new device: join with the code from the other device. */
+  async joinDeviceLink(code: string, name: string): Promise<void> {
+    this.deviceLink = null;
+    try {
+      await this.engine.call('join_device_link', { code: code.trim(), name: name.trim() || 'Computer' });
+    } catch (e) {
+      throw new Error(friendly(e));
+    }
+  }
+
+  /** On the device holding the account key: the 6 digits match (or not). */
+  async confirmDeviceLink(accept: boolean): Promise<void> {
+    try {
+      await this.engine.call('confirm_device_link', { accept });
+      this.scheduleRefresh();
+    } catch (e) {
+      throw new Error(friendly(e));
+    }
+  }
+
+  cancelDeviceLink(): void {
+    this.deviceLink = null;
+    void this.engine.call('cancel_device_link').catch(() => undefined);
+    this.scheduleRefresh();
+  }
+
+  async scheduleMessage(convId: string, text: string, at: number): Promise<SendResult> {
+    try {
+      await this.engine.call('schedule_message', { target: convId, group: this.kindOf(convId) === 'group', text, at });
+      this.scheduleRefresh();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: friendly(e) };
+    }
+  }
+
+  async cancelScheduled(id: string): Promise<void> {
+    await this.deviceCall('cancel_scheduled', { id });
+  }
+
+  async requestDeviceRemoval(deviceId: string): Promise<void> {
+    await this.deviceCall('request_device_removal', { device: deviceId });
+  }
+
+  async cancelDeviceRemoval(deviceId: string): Promise<void> {
+    await this.deviceCall('cancel_device_removal', { device: deviceId });
+  }
+
+  async removeDeviceNow(deviceId: string, phrase: string): Promise<void> {
+    await this.deviceCall('remove_device_now', { device: deviceId, phrase, passphrase: '' });
+  }
+
+  private async deviceCall(command: string, args: Record<string, unknown>): Promise<void> {
+    try {
+      await this.engine.call(command, args);
+      this.scheduleRefresh();
+    } catch (e) {
+      throw new Error(friendly(e));
+    }
   }
 
   /* ------------------------------------------------------------------ identity and friends */

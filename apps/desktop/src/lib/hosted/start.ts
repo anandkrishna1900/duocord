@@ -9,9 +9,10 @@ import { config } from '../../config';
 import { HostedChatEngine } from './hostedEngine';
 import { seedEngineIdentity } from './legacyIdentity';
 
-export async function startHostedEngine(identity: DeviceIdentity): Promise<HostedChatEngine> {
+/** `identity` is null on a device with no recovery phrase: one linked to an account on another device (or about to be). */
+export async function startHostedEngine(identity: DeviceIdentity | null): Promise<HostedChatEngine> {
   // The engine keeps its own copy of the identity (in the credential store). Give it ours the first time.
-  await seedEngineIdentity(identity);
+  if (identity) await seedEngineIdentity(identity);
   await loadTorMode();
   const bridge = await tauriEngineBridge();
   return new HostedChatEngine({
@@ -22,8 +23,14 @@ export async function startHostedEngine(identity: DeviceIdentity): Promise<Hoste
     onNotify: (message, title) => void notifyIncoming(message, title),
     persistStoreForward: () => saveNetworkConfig({ ...loadNetworkConfig(), storeForward: true }),
     deleteSecret: secretDelete,
-    expectedUid: identity.uid,
-    identity,
+    ...(identity ? { expectedUid: identity.uid, identity } : {}),
     context: config.conversationId,
+    // The shell's relay sockets (they keep running with the window closed).
+    runtimeOverrides: {
+      nativeSignaling: async () => {
+        const { invoke } = await import('@tauri-apps/api/core');
+        return (await invoke<boolean>('engine_signal_online')) === true;
+      },
+    },
   });
 }

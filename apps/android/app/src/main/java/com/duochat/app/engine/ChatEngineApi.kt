@@ -50,6 +50,23 @@ interface ChatEngineApi {
     /** Stop offering a group from before the protocol update. */
     suspend fun dismissLegacyGroup(oldId: String): Result<Unit>
     suspend fun renameGroup(groupId: String, name: String): Result<Unit>
+
+    /** On the device holding the account key: a code (shown as a QR code) for a new device. */
+    suspend fun startDeviceLink(): Result<String>
+
+    /** On a new device: join the account with the code from the other device. */
+    suspend fun joinDeviceLink(code: String, name: String): Result<Unit>
+
+    /** On the device holding the account key: the 6 digits match (or not). */
+    suspend fun confirmDeviceLink(accept: Boolean): Result<Unit>
+    fun cancelDeviceLink()
+
+    /** Scheduled send: a message to go out at [at] (milliseconds); kept on this phone, sent by it. */
+    suspend fun scheduleMessage(conversationId: String, text: String, at: Long): Result<Unit>
+    suspend fun cancelScheduled(id: String): Result<Unit>
+
+    /** Removing another device of the account (see [com.duochat.app.data.DeviceRemoval]). */
+    suspend fun deviceRemoval(action: com.duochat.app.data.DeviceRemoval): Result<Unit>
     suspend fun send(conversationId: String, rawText: String, replyToId: String? = null): Result<Unit>
     suspend fun sendFile(conversationId: String, rawName: String, mime: String, bytes: ByteArray, replyToId: String? = null): Result<Unit>
     suspend fun getFile(messageId: String): Pair<FileMeta, ByteArray>?

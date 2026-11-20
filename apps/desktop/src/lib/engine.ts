@@ -215,7 +215,49 @@ export interface LegacyGroup {
   missing: number;
 }
 
+/** A message waiting for its time (kept on this device, sent by it). */
+export interface ScheduledMessage {
+  id: string;
+  /** The conversation: a friend's uid or a group's id. */
+  target: string;
+  group: boolean;
+  text: string;
+  at: number;
+}
+
+/** One device of the account (hosted engine only). */
+export interface DeviceInfo {
+  id: string;
+  name: string;
+  addedAt: number;
+  thisDevice: boolean;
+  /** When it last wrote anything this device has, if ever. */
+  lastSeen?: number;
+  /** Not heard from for 90 days: "Remove or reconnect". */
+  stale?: boolean;
+  /** A removal was asked for: when it takes effect, unless taken back. */
+  removalAt?: number;
+}
+
+/** Linking a device, while it happens: the 6 digits to compare ("code"), then how it ended. */
+export interface DeviceLinkState {
+  stage: 'code' | 'done' | 'failed' | 'cancelled' | 'expired';
+  code?: string;
+  /** On the device holding the account key: the new device's name. */
+  name?: string;
+}
+
 export interface ChatState {
+  /** The account's devices, and whether this one holds the account key (hosted engine only). */
+  devices?: DeviceInfo[];
+  holdsAccountKey?: boolean;
+  /** Items from other devices that could not be recovered (the device was gone before they left it). */
+  syncLost?: number;
+  /** What this device holds (the usage screen). */
+  usage?: { messages: number; files: number; fileBytes: number; contacts: number; syncEntries: number };
+  /** Messages written for later on this device, soonest first. */
+  scheduled?: ScheduledMessage[];
+  deviceLink?: DeviceLinkState | null;
   channels: ChannelView[];
   answer: InviteAnswer | null;
   /** Our current six-word invite, if one is being shown. */

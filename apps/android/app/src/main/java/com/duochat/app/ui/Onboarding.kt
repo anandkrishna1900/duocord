@@ -48,14 +48,20 @@ import androidx.compose.ui.unit.dp
 import com.duochat.app.security.Bip39
 
 /** [depth] orders the steps, so moving between them slides the right way. */
-private enum class Step(val depth: Int) { INTRO(0), SHOW(1), CONFIRM(2), RESTORE(1) }
+private enum class Step(val depth: Int) { INTRO(0), SHOW(1), CONFIRM(2), RESTORE(1), LINK(1) }
 
 /**
  * First run: the 12-word recovery phrase is mandatory. There is no skip: the chat does not open until an
  * identity exists, either from a new phrase (shown once, two words re-entered) or from an existing one.
  */
 @Composable
-fun OnboardingScreen(onCreate: (phrase: String, passphrase: String, onResult: (Result<Unit>) -> Unit) -> Unit) {
+fun OnboardingScreen(
+    onCreate: (phrase: String, passphrase: String, onResult: (Result<Unit>) -> Unit) -> Unit,
+    state: com.duochat.app.data.ChatState? = null,
+    onJoinDevice: (code: String, name: String, onResult: (Result<Unit>) -> Unit) -> Unit = { _, _, r -> r(Result.failure(IllegalStateException("Not available."))) },
+    onCancelDeviceLink: () -> Unit = {},
+    onDeviceLinked: () -> Unit = {},
+) {
     var step by remember { mutableStateOf(Step.INTRO) }
     var phrase by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
@@ -118,7 +124,19 @@ fun OnboardingScreen(onCreate: (phrase: String, passphrase: String, onResult: (R
                         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                         onClick = { step = Step.RESTORE },
                     ) { Text("I already have a phrase", color = MaterialTheme.colorScheme.onSurface) }
+                    TextButton(
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                        onClick = { step = Step.LINK },
+                    ) { Text("Link to a device I already use", color = MaterialTheme.colorScheme.onSurface) }
                 }
+
+                Step.LINK -> LinkJoinContent(
+                    state = state,
+                    onJoin = onJoinDevice,
+                    onCancel = onCancelDeviceLink,
+                    onLinked = onDeviceLinked,
+                    onBack = { onCancelDeviceLink(); step = Step.INTRO },
+                )
 
                 Step.SHOW -> ShowPhrase(phrase, onBack = { step = Step.INTRO }, onNext = { step = Step.CONFIRM })
 

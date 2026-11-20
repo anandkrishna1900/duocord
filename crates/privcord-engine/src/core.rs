@@ -26,7 +26,10 @@ use privcord_crypto::{
     secure_channel::{Data, Hello, SecureChannel},
     CryptoError,
 };
-use privcord_domain::{blob::SealedBlob, signaling::PutKind};
+use privcord_domain::{
+    blob::{PublicJwk, SealedBlob},
+    signaling::PutKind,
+};
 use privcord_domain::{
     channel::normalize_channel_name,
     files::{file_chunks, AssembleResult, BeginOutcome, FileAssembler, FileChunk, FileOffer},
@@ -57,14 +60,23 @@ use std::{
 use zeroize::Zeroizing;
 
 mod backup;
+mod devices;
 mod invites;
 mod keys;
+pub mod lan;
 mod legacy_groups;
+mod linking;
+mod media;
 mod privacy;
+mod removal;
+mod scheduled;
 mod signaling;
+mod snapshots;
 mod social;
+mod sync;
 
 pub use backup::RestoreSummary;
+pub use scheduled::Scheduled;
 pub use social::SearchHit;
 
 pub use invites::InvitePreview;
@@ -87,7 +99,7 @@ const DIAL_GRACE_MS: i64 = 8_000;
 const RECONNECT_ON_SEND_AFTER_MS: i64 = 30_000;
 const KV_DEVICE_ID: &str = "device_id";
 const KV_GROUP_ONLY: &str = "settings.group_only";
-const KV_GROUPS: &str = "groups.v1";
+pub(super) const KV_GROUPS: &str = "groups.v1";
 const KV_CHANNELS: &str = "channels.v1";
 const KV_CHANNEL_PEOPLE: &str = "channel.people.v1";
 /// Channel authors whose names we remember at most.
@@ -164,6 +176,8 @@ struct Peer {
     pq: Option<Box<PqChannel>>,
     /// The handshake above must be done by this time, or the link is dropped and made again.
     pq_deadline: i64,
+    /// Which of our addresses this link is with (how they reached us); `None` means our default (`own_address`).
+    as_me: Option<UserId>,
 }
 
 impl Peer {
@@ -185,6 +199,7 @@ impl Peer {
             pq_deadline: 0,
             offer_in: None,
             offer_in_at: 0,
+            as_me: None,
         }
     }
     /// Ready to carry messages: the link is authenticated AND its post-quantum channel is up.
@@ -226,6 +241,20 @@ pub struct Core {
     /// Protocol v2 keys for sealed blobs (ours and our contacts').
     keys: keys::KeyState,
     legacy_groups: Vec<crate::api::LegacyGroupView>,
+    /// This install's device id and the account's device list (`core/devices.rs`).
+    device_id: Option<String>,
+    device_list: Option<privcord_crypto::devices::DeviceList>,
+    /// The sync log and self-mailbox (`core/sync.rs`), once there is an identity.
+    sync: Option<sync::SyncState>,
+    /// Linking a device by QR code, while it happens (`core/linking.rs`).
+    link: Option<linking::LinkState>,
+    /// Files moving between the account's devices (`core/media.rs`).
+    media: media::MediaState,
+    /// The account's public keys (sign, agree). Every device of the account has them; only a device holding the account
+    /// key also has `identity`.
+    account: Option<(PublicJwk, PublicJwk)>,
+    /// The storage port as wrapped by the sync recorder.
+    recorder: Arc<sync::Recorder>,
     sealed: signaling::SealedState,
     /// Channel mailboxes we are listening on (the adapter opens the sockets).
     channel_subscribed: HashSet<String>,
@@ -241,6 +270,11 @@ pub struct Core {
     muted: BTreeSet<UserId>,
     /// True only while a message that came through the signaling service is being handled.
     relay_inbound: bool,
+    /// Tests only: behave like an app from before device lists (accepts only account signatures, says nothing of
+    /// devices), to check that such friends are still reached.
+    old_version: bool,
+    /// The account's list (signed by the account) removed this install: it erases itself on the next tick.
+    removed_from_account: bool,
     /// The name on our invite cards.
     display_name: Option<String>,
 }
@@ -266,7 +300,10 @@ impl Core {
     }
 
     /// Like `new`, with the conversation context used by the legacy handshake (the apps' `conversationId` setting).
-    pub fn new_with_context(ports: Ports, context: &str) -> Result<Self, ErrorCode> {
+    pub fn new_with_context(mut ports: Ports, context: &str) -> Result<Self, ErrorCode> {
+        // Every change stored from here on passes the sync recorder (core/sync.rs).
+        let recorder = Arc::new(sync::Recorder::new(ports.storage.clone()));
+        ports.storage = recorder.clone();
         let mut core = Self {
             ports,
             identity: None,
@@ -285,6 +322,13 @@ impl Core {
             invites: invites::InviteState::default(),
             keys: keys::KeyState::default(),
             legacy_groups: Vec::new(),
+            device_id: None,
+            device_list: None,
+            sync: None,
+            link: None,
+            media: media::MediaState::default(),
+            account: None,
+            recorder,
             sealed: signaling::SealedState::default(),
             channel_subscribed: HashSet::new(),
             channel_people: BTreeMap::new(),
@@ -293,6 +337,8 @@ impl Core {
             deleted: std::collections::HashSet::new(),
             muted: BTreeSet::new(),
             relay_inbound: false,
+            old_version: false,
+            removed_from_account: false,
             display_name: None,
         };
         if let Some(secrets) = core.ports.secure.load_identity()? {
@@ -310,7 +356,12 @@ impl Core {
             }
             let identity = Identity::from_stored(&stored)?;
             core.uid = Some(identity.uid()?);
+            core.account = Some((identity.sign_public(), identity.dh_public()));
             core.identity = Some(identity);
+        } else if let Some((sign, dh)) = core.linked_account() {
+            // A device linked to an account whose key is on another device.
+            core.uid = Some(privcord_crypto::identity::uid_from_keys(&sign, &dh)?);
+            core.account = Some((sign, dh));
         }
         core.reload_from_storage()?;
         core.hub.publish(EngineEvent::Ready);
@@ -389,6 +440,7 @@ impl Core {
             .storage
             .kv(KV_GROUP_ONLY)?
             .is_some_and(|v| v == b"1");
+        self.ensure_devices()?;
         self.ensure_groups()?;
         if let Some(bytes) = self.ports.storage.kv(KV_CHANNELS)? {
             if let Ok(names) = serde_json::from_slice::<Vec<String>>(&bytes) {
@@ -447,6 +499,7 @@ impl Core {
         }
         self.ports.secure.save_identity(&both)?;
         self.uid = Some(identity.uid()?);
+        self.account = Some((identity.sign_public(), identity.dh_public()));
         self.identity = Some(identity);
         // Data already stored (an imported or restored database) may be under this identity's v1 id: move it, and
         // read it again now that cards can be checked against our own id.
@@ -462,7 +515,7 @@ impl Core {
     /// A new identity from a fresh 12-word phrase. The phrase is returned once; the engine does not keep it.
     pub fn create_identity(&mut self) -> Result<Zeroizing<String>, ErrorCode> {
         self.require_live()?;
-        if self.identity.is_some() {
+        if self.account.is_some() {
             return Err(ErrorCode::IdentityExists);
         }
         let phrase = privcord_crypto::identity::generate_recovery_phrase(&mut *self.ports.entropy)?;
@@ -474,23 +527,43 @@ impl Core {
     /// Restore the identity a phrase always produces.
     pub fn recover_identity(&mut self, phrase: &str, passphrase: &str) -> Result<(), ErrorCode> {
         self.require_live()?;
-        if self.identity.is_some() {
+        if self.account.is_some() {
             return Err(ErrorCode::IdentityExists);
         }
         let identity = Identity::from_phrase(phrase, passphrase).map_err(|e| match e {
             CryptoError::InvalidPhrase => ErrorCode::InvalidPhrase,
             other => other.into(),
         })?;
-        self.adopt(identity)
+        self.adopt(identity)?;
+        // This install joins an account that may already have a device: it says hello to it (core/sync.rs).
+        self.mark_joined();
+        Ok(())
     }
 
     fn identity(&self) -> Result<&Identity, ErrorCode> {
-        self.identity.as_ref().ok_or(ErrorCode::NoIdentity)
+        self.identity.as_ref().ok_or(if self.account.is_some() {
+            ErrorCode::NeedsAccountKey
+        } else {
+            ErrorCode::NoIdentity
+        })
+    }
+
+    /// Whether this device holds the account key (a device linked by QR code does not).
+    pub fn holds_account_key(&self) -> bool {
+        self.identity.is_some()
     }
 
     /// The `DUOID1:` text to hand to a friend.
     pub fn own_card(&self, name: Option<&str>) -> Result<String, ErrorCode> {
-        Ok(ContactCard::of(self.identity()?, name)?.encode()?)
+        Ok(self.own_contact_card(name)?.encode()?)
+    }
+
+    /// The account's card as stored on a linked device: its text, and the card itself (checked against our uid).
+    pub(super) fn stored_account_card(&self) -> Option<(String, ContactCard)> {
+        let text =
+            String::from_utf8(self.ports.storage.kv(devices::KV_ACCOUNT_CARD).ok()??).ok()?;
+        let contact = ContactCard::decode(&text).filter(|c| Some(&c.uid) == self.uid.as_ref())?;
+        Some((text, contact.card))
     }
 
     /* ---------------------------------------------------------------- contacts */
@@ -577,15 +650,20 @@ impl Core {
     /// The 32-byte secret shared with a contact. Bluetooth uses it only to pick which advertisements to accept; it is
     /// never sent anywhere.
     pub fn ble_secret(&self, uid: &UserId) -> Result<Vec<u8>, ErrorCode> {
-        let c = self.contacts.get(uid).ok_or(ErrorCode::UnknownContact)?;
-        let shared = self.identity()?.agree(&c.contact.card.dh)?;
-        Ok(shared.to_vec())
+        // Per address: the key we use with them on this route and the key of theirs that address names (their account,
+        // or one of their devices), so each pair of devices finds only each other.
+        let (_, dh) = self.keys_of_address(uid).ok_or(ErrorCode::UnknownContact)?;
+        let own = self.as_me(uid).ok_or(ErrorCode::NoIdentity)?;
+        let key = self
+            .key_for_address(&own)
+            .ok_or(ErrorCode::NeedsAccountKey)?;
+        Ok(key.agree(&dh)?.to_vec())
     }
 
     pub fn safety_number(&self, uid: &UserId) -> Result<String, ErrorCode> {
         let c = self.contacts.get(uid).ok_or(ErrorCode::UnknownContact)?;
         Ok(derive_safety_number(
-            &self.identity()?.sign_public(),
+            &self.account.as_ref().ok_or(ErrorCode::NoIdentity)?.0,
             &c.contact.card.sign,
         )?)
     }
@@ -614,7 +692,10 @@ impl Core {
             can_start_direct(
                 c.stored.trust,
                 self.group_only,
-                self.peers.get(uid).and_then(|p| p.group_only),
+                self.peers
+                    .iter()
+                    .filter(|(a, _)| &Self::person_of(a) == uid)
+                    .find_map(|(_, p)| p.group_only),
             )
         })
     }
@@ -655,14 +736,19 @@ impl Core {
         security: LinkSecurity,
     ) -> Result<(), ErrorCode> {
         self.require_live()?;
-        let own = self.uid.clone().ok_or(ErrorCode::NoIdentity)?;
-        let card = self
-            .contacts
-            .get(peer)
-            .ok_or(ErrorCode::UnknownContact)?
-            .contact
-            .card
-            .clone();
+        let (sign, dh) = self
+            .keys_of_address(peer)
+            .ok_or(ErrorCode::UnknownContact)?;
+        let own = self.as_me(peer).ok_or(ErrorCode::NoIdentity)?;
+        let key = self
+            .key_for_address(&own)
+            .and_then(devices::copy_key)
+            .ok_or(ErrorCode::NoIdentity)?;
+        // The other side checks a device by its own keys: its uid there is the one those keys give.
+        let expected_uid = match Self::device_of(peer) {
+            Some(_) => privcord_crypto::identity::uid_from_keys(&sign, &dh)?.to_string(),
+            None => peer.to_string(),
+        };
         // A new link replaces any older state for this person.
         if self
             .peers
@@ -676,20 +762,19 @@ impl Core {
                 let channel = SecureChannel::new(
                     own.as_str(),
                     peer.as_str(),
-                    card.sign.clone(),
+                    sign.clone(),
                     &mut *self.ports.entropy,
                 )?;
-                let hello = channel.hello(self.identity()?)?.to_value();
+                let hello = channel.hello(&key)?.to_value();
                 let device = self.device_id()?;
                 let expected = Expected {
-                    uid: peer.to_string(),
-                    sign: card.sign,
-                    dh: card.dh,
+                    uid: expected_uid,
+                    sign,
+                    dh,
                 };
-                let id = self.identity.as_ref().ok_or(ErrorCode::NoIdentity)?;
                 let auth = PeerAuth::new(
                     &self.context,
-                    id,
+                    &key,
                     &device,
                     expected,
                     &mut *self.ports.entropy,
@@ -707,28 +792,27 @@ impl Core {
                 let channel = SecureChannel::new(
                     own.as_str(),
                     peer.as_str(),
-                    card.sign,
+                    sign,
                     &mut *self.ports.entropy,
                 )?;
-                let hello = channel.hello(self.identity()?)?.to_value();
+                let hello = channel.hello(&key)?.to_value();
                 (Session::Secure(Box::new(channel)), hello)
             }
             LinkSecurity::TransportEncrypted => {
                 let device = self.device_id()?;
                 let expected = Expected {
-                    uid: peer.to_string(),
-                    sign: card.sign,
-                    dh: card.dh,
+                    uid: expected_uid,
+                    sign,
+                    dh,
                 };
-                let id = self.identity.as_ref().ok_or(ErrorCode::NoIdentity)?;
                 let auth = PeerAuth::new(
                     &self.context,
-                    id,
+                    &key,
                     &device,
                     expected,
                     &mut *self.ports.entropy,
                 )?;
-                let hello = auth.hello(id)?;
+                let hello = auth.hello(&key)?;
                 (Session::Legacy(Box::new(auth)), hello)
             }
         };
@@ -736,6 +820,7 @@ impl Core {
             let p = self.peers.entry(peer.clone()).or_insert_with(Peer::offline);
             p.session = Some(session);
             p.path = path;
+            p.as_me = Some(own);
         }
         self.step(peer, ConnectionEvent::Dial);
         // The handshake travels in the clear by design: it is signed, and carries only keys and a nonce.
@@ -806,7 +891,7 @@ impl Core {
 
     /// One frame arrived from a peer. Anything malformed, too big, unauthenticated or replayed is dropped.
     pub fn frame_received(&mut self, peer: &UserId, text: &str) {
-        if self.shut_down || text.len() > MAX_FRAME_BYTES || !self.contacts.contains_key(peer) {
+        if self.shut_down || text.len() > MAX_FRAME_BYTES || !self.known_address(peer) {
             return;
         }
         let Ok(value) = serde_json::from_str::<Value>(text) else {
@@ -932,10 +1017,13 @@ impl Core {
 
     /// The link is authenticated: start the post-quantum handshake inside it.
     fn start_pq(&mut self, peer: &UserId) {
-        let (Some(own), Some(identity)) = (self.uid.clone(), self.identity.as_ref()) else {
+        let Some(own) = self.as_me(peer) else {
             return;
         };
-        let Some(sign) = self.contacts.get(peer).map(|c| c.contact.card.sign.clone()) else {
+        let (Some(key), Some((sign, _))) = (
+            self.key_for_address(&own).and_then(devices::copy_key),
+            self.keys_of_address(peer),
+        ) else {
             return;
         };
         let Ok(channel) =
@@ -944,7 +1032,7 @@ impl Core {
             self.pq_failed(peer);
             return;
         };
-        let hello = channel.hello(identity).to_value();
+        let hello = channel.hello(&key).to_value();
         let deadline = self.now() + PQ_SETUP_MS;
         if let Some(p) = self.peers.get_mut(peer) {
             p.pq = Some(Box::new(channel));
@@ -970,6 +1058,12 @@ impl Core {
         }
         self.step(peer, ConnectionEvent::Established(path));
         self.keys_on_link(peer);
+        if self.is_own_person(peer) {
+            // Another device of ours: only sync and files travel here.
+            self.link_sync_hello(peer);
+            return;
+        }
+        self.tell_devices_on_link(peer);
         self.send_privacy(peer);
         self.send_group_hello(peer);
         self.sync_social(peer);
@@ -1049,20 +1143,20 @@ impl Core {
             Session::Secure(channel) => Hello::from_value(value)
                 .map(|hello| channel.accept(&hello).map(|()| Vec::new()).map_err(|_| ())),
             Session::Legacy(auth) => {
-                let Some(own) = self.identity.as_ref() else {
+                let Some(own) = self.link_key(peer) else {
                     return;
                 };
-                match auth.on_frame(own, value) {
+                match auth.on_frame(&own, value) {
                     Ok(Some(out)) => Some(Ok(out)),
                     Ok(None) => None,
                     Err(_) => Some(Err(())),
                 }
             }
             Session::Layered(l) => {
-                let Some(own) = self.identity.as_ref() else {
+                let Some(own) = self.link_key(peer) else {
                     return;
                 };
-                Self::layered_step(l, own, value)
+                Self::layered_step(l, &own, value)
             }
         };
         let ready = match &session {
@@ -1092,7 +1186,7 @@ impl Core {
     }
 
     /// Send one frame to a peer: inside the post-quantum channel, which must be up (protocol v2 sends nothing plain).
-    fn send_secure(&mut self, peer: &UserId, frame: &Value) -> bool {
+    pub(super) fn send_secure(&mut self, peer: &UserId, frame: &Value) -> bool {
         let wrapped = match self.peers.get_mut(peer).and_then(|p| p.pq.as_mut()) {
             Some(c) if c.ready() => match c.encrypt(frame) {
                 Ok(d) => d.to_value(),
@@ -1128,27 +1222,51 @@ impl Core {
     }
 
     fn send_privacy(&mut self, peer: &UserId) {
-        let frame =
+        let mut frame =
             json!({ "v": PROTOCOL_VERSION, "kind": "privacy", "groupOnly": self.group_only });
+        self.mark_devices(&mut frame);
         self.send_secure(peer, &frame);
     }
 
     /* ---------------------------------------------------------------- inbound frames */
 
     fn dispatch(&mut self, peer: &UserId, frame: &Value) {
+        if self.is_own_person(peer) {
+            // From another device of ours: the sync log and files, and the link's own upkeep. Nothing else (a device of
+            // ours is not a friend writing to us).
+            match frame.get("kind").and_then(Value::as_str) {
+                Some("keys") => self.on_keys_frame(peer, frame),
+                Some("sync") => self.on_sync_frame(peer, frame),
+                Some("media_want") => self.on_media_want(peer, frame),
+                Some("media_piece") => self.on_media_piece(frame),
+                Some("ping") => {
+                    let at = frame.get("at").cloned().unwrap_or(Value::Null);
+                    self.send_secure(
+                        peer,
+                        &json!({ "v": PROTOCOL_VERSION, "kind": "pong", "at": at }),
+                    );
+                }
+                _ => {}
+            }
+            return;
+        }
         match frame.get("kind").and_then(Value::as_str) {
             Some("message") => self.on_message(peer, frame),
             Some("ack") => self.on_ack(peer, frame),
             Some("keys") => self.on_keys_frame(peer, frame),
             Some("declined") => self.on_declined(peer, frame),
-            Some("group_push" | "group_events" | "group_have") => self.on_group_frame(peer, frame),
+            Some("group_push" | "group_events" | "group_have") => {
+                self.on_group_frame(&Self::person_of(peer), frame)
+            }
             Some("gmsg") => self.on_group_message(peer, frame),
             Some("relay_blob") => self.on_relay_blob(peer, frame),
-            Some("delete") => self.on_delete_frame(peer, frame),
-            Some("react") => self.on_react_frame(peer, frame),
+            Some("delete") => self.on_delete_frame(&Self::person_of(peer), frame),
+            Some("react") => self.on_react_frame(&Self::person_of(peer), frame),
             Some("file_offer") => self.on_file_offer(peer, frame),
             Some("file_chunk") => self.on_file_chunk(peer, frame),
+            Some("devices") => self.on_device_notice(peer, frame),
             Some("privacy") => {
+                self.note_devices(peer, frame);
                 if let Some(g) = frame.get("groupOnly").and_then(Value::as_bool) {
                     if let Some(p) = self.peers.get_mut(peer) {
                         p.group_only = Some(g);
@@ -1167,17 +1285,18 @@ impl Core {
     }
 
     fn on_message(&mut self, peer: &UserId, frame: &Value) {
+        let who = &Self::person_of(peer);
         let Some(mut message) = ChatMessage::from_peer_frame(frame) else {
             return;
         };
         // The link is authenticated as `peer`; a message that claims another sender, or carries an id that is not
         // theirs, is forged.
-        if &message.sender_id != peer || !id_is_from(&message.message_id, peer) {
+        if &message.sender_id != who || !id_is_from(&message.message_id, who) {
             return;
         }
         let trust = self
             .contacts
-            .get(peer)
+            .get(who)
             .map_or(ContactTrust::Introduced, |c| c.stored.trust);
         if !accepts_direct(trust, self.group_only) {
             self.send_secure(
@@ -1198,7 +1317,7 @@ impl Core {
         }
         message.delivery_state = DeliveryState::Delivered;
         message.transport = self.inbound_transport();
-        let conversation = ConversationId::Direct(peer.clone());
+        let conversation = ConversationId::Direct(who.clone());
         let row = StoredMessage {
             conversation: conversation.clone(),
             message: message.clone(),
@@ -1220,7 +1339,7 @@ impl Core {
         });
         self.ports.notifier.notify(Notification::MessageReceived {
             conversation,
-            sender: peer.clone(),
+            sender: who.clone(),
             preview: message.text.chars().take(80).collect(),
         });
         let id = message.message_id;
@@ -1244,6 +1363,7 @@ impl Core {
     }
 
     fn on_ack(&mut self, peer: &UserId, frame: &Value) {
+        let who = &Self::person_of(peer);
         let Some(id) = frame
             .get("messageId")
             .and_then(Value::as_str)
@@ -1257,7 +1377,7 @@ impl Core {
             _ => return,
         };
         // Only the person we sent it to may acknowledge it.
-        let ours = self.is_ours_to(&id, peer);
+        let ours = self.is_ours_to(&id, who);
         if !ours {
             return;
         }
@@ -1272,7 +1392,7 @@ impl Core {
         ) && self
             .outbox
             .iter()
-            .any(|o| o.message_id == id && &o.recipient != peer);
+            .any(|o| o.message_id == id && &o.recipient != who);
         if others_pending && matches!(next, DeliveryState::Delivered | DeliveryState::Read) {
             next = current;
         }
@@ -1285,14 +1405,14 @@ impl Core {
             },
             StorageOp::RemoveOutbox {
                 message_id: id.clone(),
-                recipient: peer.clone(),
+                recipient: who.clone(),
             },
         ];
         if self.ports.storage.apply(&ops).is_err() {
             return;
         }
         self.outbox
-            .retain(|o| !(o.message_id == id && &o.recipient == peer));
+            .retain(|o| !(o.message_id == id && &o.recipient == who));
         if let Some(m) = self.messages.get_mut(&id) {
             m.message.delivery_state = next;
             m.message.read_at = read_at.or(m.message.read_at);
@@ -1306,10 +1426,11 @@ impl Core {
     }
 
     fn on_declined(&mut self, peer: &UserId, frame: &Value) {
+        let who = &Self::person_of(peer);
         let Some((id, reason)) = parse_declined_frame(frame) else {
             return;
         };
-        let ours = self.is_ours_to(&id, peer);
+        let ours = self.is_ours_to(&id, who);
         if !ours {
             return;
         }
@@ -1320,7 +1441,7 @@ impl Core {
             if let Some(entry) = self
                 .outbox
                 .iter_mut()
-                .find(|o| o.message_id == id && &o.recipient == peer)
+                .find(|o| o.message_id == id && &o.recipient == who)
             {
                 entry.next_try_ms = next_try;
                 let saved = entry.clone();
@@ -1335,7 +1456,7 @@ impl Core {
         let others_pending = self
             .outbox
             .iter()
-            .any(|o| o.message_id == id && &o.recipient != peer);
+            .any(|o| o.message_id == id && &o.recipient != who);
         let current = self.messages.get(&id).map(|m| m.message.delivery_state);
         // In a group one person refusing does not make the message a failure for everybody else: it only fails when
         // nobody else has it and nobody else is still to get it.
@@ -1344,7 +1465,7 @@ impl Core {
                 && matches!(current, Some(DeliveryState::Queued | DeliveryState::Sent)));
         let mut ops = vec![StorageOp::RemoveOutbox {
             message_id: id.clone(),
-            recipient: peer.clone(),
+            recipient: who.clone(),
         }];
         if fail {
             ops.push(StorageOp::SetDelivery {
@@ -1357,7 +1478,7 @@ impl Core {
             return;
         }
         self.outbox
-            .retain(|o| !(o.message_id == id && &o.recipient == peer));
+            .retain(|o| !(o.message_id == id && &o.recipient == who));
         if fail {
             if let Some(m) = self.messages.get_mut(&id) {
                 m.message.delivery_state = DeliveryState::Failed;
@@ -1436,7 +1557,7 @@ impl Core {
             message_id: id.clone(),
             own: true,
         });
-        self.flush(peer);
+        self.flush_person(peer);
         Ok(id)
     }
 
@@ -1484,6 +1605,7 @@ impl Core {
     }
 
     fn flush(&mut self, peer: &UserId) {
+        let who = Self::person_of(peer);
         if !self.peers.get(peer).is_some_and(Peer::ready) {
             return;
         }
@@ -1491,7 +1613,7 @@ impl Core {
         let due: Vec<OutboxEntry> = self
             .outbox
             .iter()
-            .filter(|o| &o.recipient == peer && o.next_try_ms <= now)
+            .filter(|o| o.recipient == who && o.next_try_ms <= now)
             .cloned()
             .collect();
         for entry in due {
@@ -1580,7 +1702,9 @@ impl Core {
                 m.message.delivery_state = DeliveryState::Read;
                 m.message.read_at = Some(now);
             }
-            self.send_secure(peer, &json!({ "v": PROTOCOL_VERSION, "kind": "ack", "messageId": id, "state": "READ", "at": now }));
+            for addr in self.ready_addresses(peer) {
+                self.send_secure(&addr, &json!({ "v": PROTOCOL_VERSION, "kind": "ack", "messageId": id, "state": "READ", "at": now }));
+            }
         }
         Ok(())
     }
@@ -1606,7 +1730,7 @@ impl Core {
     /// announced it is online), so a link does not wait out a delay that was earned while it could not have worked.
     pub fn reset_dial_backoff(&mut self, peer: Option<&UserId>) {
         for (uid, p) in &mut self.peers {
-            if p.ready() || peer.is_some_and(|only| only != uid) {
+            if p.ready() || peer.is_some_and(|only| only != uid && only != &Self::person_of(uid)) {
                 continue;
             }
             p.attempts = 0;
@@ -1659,6 +1783,18 @@ impl Core {
         self.pending_group.expire(now);
         self.request_dials(now);
         self.tick_invites();
+        // Before the store-and-forward pass: a message's sync copy goes up no later than the message does.
+        self.tick_sync();
+        self.tick_removals();
+        self.tick_scheduled();
+        if self.uid.is_none() {
+            // This install was removed from the account and erased itself.
+            return;
+        }
+        self.tick_link();
+        self.tick_device_notices();
+        self.tick_key_handover();
+        self.tick_media();
         self.tick_sealed();
         self.tick_group_mesh();
         self.tick_channels();
@@ -1667,9 +1803,15 @@ impl Core {
     /// Ask for a dial to each person whose link is down and whose backoff has passed (5 s doubling to 2 minutes, a few
     /// at a time, never past the open-link cap).
     fn request_dials(&mut self, now: i64) {
-        let links: Vec<LinkInfo> = self
+        let mut addresses: Vec<UserId> = self
             .contacts
             .keys()
+            .flat_map(|uid| self.addresses_of(uid))
+            .collect();
+        // Our own other devices too: they sync directly when they can reach each other (step 7).
+        addresses.extend(self.own_other_devices());
+        let links: Vec<LinkInfo> = addresses
+            .iter()
             .map(|uid| {
                 let p = self.peers.get(uid);
                 LinkInfo {
@@ -1698,8 +1840,10 @@ impl Core {
             let p = self.peers.entry(peer.clone()).or_insert_with(Peer::offline);
             p.last_attempt_at = now;
             p.attempts = p.attempts.saturating_add(1);
+            // Compared as the two ends name each other, so two devices of one account agree too.
+            let me = self.as_me(&peer).unwrap_or_else(|| own.clone());
             self.hub.publish(EngineEvent::DialRequested {
-                initiator: is_initiator(own.as_str(), uid.as_str()),
+                initiator: is_initiator(me.as_str(), uid.as_str()),
                 peer,
             });
         }
@@ -1712,10 +1856,17 @@ impl Core {
         if self.groups.is_some() {
             return Ok(());
         }
-        let (Some(id), Some(uid)) = (self.identity.as_ref(), self.uid.as_ref()) else {
+        let Some(uid) = self.uid.clone() else {
             return Ok(());
         };
-        let mut coordinator = GroupCoordinator::new(uid.as_str(), ContactCard::of(id, None)?);
+        let own_card = match self.identity.as_ref() {
+            Some(id) => ContactCard::of(id, None)?,
+            None => match self.stored_account_card() {
+                Some((_, card)) => card,
+                None => return Ok(()),
+            },
+        };
+        let mut coordinator = GroupCoordinator::new(uid.as_str(), own_card);
         if let Some(bytes) = self.ports.storage.kv(KV_GROUPS)? {
             if let Ok(saved) = serde_json::from_slice::<BTreeMap<String, Vec<Value>>>(&bytes) {
                 coordinator.load(&saved);
@@ -1784,8 +1935,8 @@ impl Core {
         }
         for out in &result.outgoing {
             if let Ok(to) = UserId::new(out.to.as_str()) {
-                if self.peers.get(&to).is_some_and(Peer::ready) {
-                    self.send_secure(&to, &out.frame.to_value());
+                for addr in self.ready_addresses(&to) {
+                    self.send_secure(&addr, &out.frame.to_value());
                 }
             }
         }
@@ -1852,7 +2003,7 @@ impl Core {
         let frames = self
             .groups
             .as_ref()
-            .map(|g| g.on_link_open(peer.as_str()))
+            .map(|g| g.on_link_open(Self::person_of(peer).as_str()))
             .unwrap_or_default();
         for f in frames {
             self.send_secure(peer, &f.frame.to_value());
@@ -1885,11 +2036,17 @@ impl Core {
             .map(|u| self.card_of(u))
             .collect::<Result<Vec<_>, _>>()?;
         let now = self.now();
-        let (Some(groups), Some(id)) = (self.groups.as_mut(), self.identity.as_ref()) else {
+        let author = Self::group_author(
+            self.uid.as_ref(),
+            self.identity.as_ref(),
+            self.sync.as_ref(),
+            self.device_list.as_ref(),
+        )?;
+        let Some(groups) = self.groups.as_mut() else {
             return Err(ErrorCode::NoIdentity);
         };
         let (group_id, result) = groups
-            .create_group(id, name, &cards, now)
+            .create_group(&author, name, &cards, now)
             .map_err(|e| Self::group_error(&e))?;
         self.finish_group_result(result)?;
         Ok(group_id)
@@ -1899,11 +2056,17 @@ impl Core {
         self.require_live()?;
         let card = self.card_of(uid)?;
         let now = self.now();
-        let (Some(groups), Some(id)) = (self.groups.as_mut(), self.identity.as_ref()) else {
+        let author = Self::group_author(
+            self.uid.as_ref(),
+            self.identity.as_ref(),
+            self.sync.as_ref(),
+            self.device_list.as_ref(),
+        )?;
+        let Some(groups) = self.groups.as_mut() else {
             return Err(ErrorCode::NoIdentity);
         };
         let result = groups
-            .add_member(id, group_id, &card, now)
+            .add_member(&author, group_id, &card, now)
             .map_err(|e| Self::group_error(&e))?;
         self.finish_group_result(result)
     }
@@ -1911,11 +2074,17 @@ impl Core {
     pub fn remove_group_member(&mut self, group_id: &str, uid: &UserId) -> Result<(), ErrorCode> {
         self.require_live()?;
         let now = self.now();
-        let (Some(groups), Some(id)) = (self.groups.as_mut(), self.identity.as_ref()) else {
+        let author = Self::group_author(
+            self.uid.as_ref(),
+            self.identity.as_ref(),
+            self.sync.as_ref(),
+            self.device_list.as_ref(),
+        )?;
+        let Some(groups) = self.groups.as_mut() else {
             return Err(ErrorCode::NoIdentity);
         };
         let result = groups
-            .remove_member(id, group_id, uid.as_str(), now)
+            .remove_member(&author, group_id, uid.as_str(), now)
             .map_err(|e| Self::group_error(&e))?;
         self.finish_group_result(result)
     }
@@ -1923,11 +2092,17 @@ impl Core {
     pub fn leave_group(&mut self, group_id: &str) -> Result<(), ErrorCode> {
         self.require_live()?;
         let now = self.now();
-        let (Some(groups), Some(id)) = (self.groups.as_mut(), self.identity.as_ref()) else {
+        let author = Self::group_author(
+            self.uid.as_ref(),
+            self.identity.as_ref(),
+            self.sync.as_ref(),
+            self.device_list.as_ref(),
+        )?;
+        let Some(groups) = self.groups.as_mut() else {
             return Err(ErrorCode::NoIdentity);
         };
         let result = groups
-            .leave(id, group_id, now)
+            .leave(&author, group_id, now)
             .map_err(|e| Self::group_error(&e))?;
         self.finish_group_result(result)
     }
@@ -1935,11 +2110,17 @@ impl Core {
     pub fn rename_group(&mut self, group_id: &str, name: &str) -> Result<(), ErrorCode> {
         self.require_live()?;
         let now = self.now();
-        let (Some(groups), Some(id)) = (self.groups.as_mut(), self.identity.as_ref()) else {
+        let author = Self::group_author(
+            self.uid.as_ref(),
+            self.identity.as_ref(),
+            self.sync.as_ref(),
+            self.device_list.as_ref(),
+        )?;
+        let Some(groups) = self.groups.as_mut() else {
             return Err(ErrorCode::NoIdentity);
         };
         let result = groups
-            .rename(id, group_id, name, now)
+            .rename(&author, group_id, name, now)
             .map_err(|e| Self::group_error(&e))?;
         self.finish_group_result(result)
     }
@@ -2010,7 +2191,7 @@ impl Core {
             own: true,
         });
         for r in &recipients {
-            self.flush(r);
+            self.flush_person(r);
         }
         self.connect_now(&recipients);
         Ok(id)
@@ -2025,15 +2206,17 @@ impl Core {
         let now = self.now();
         let mut any = false;
         for uid in people {
-            let recent = self.peers.get(uid).is_some_and(|p| {
-                p.attempts > 0 && now - p.last_attempt_at < RECONNECT_ON_SEND_AFTER_MS
-            });
-            if self.contacts.contains_key(uid)
-                && !self.peers.get(uid).is_some_and(Peer::ready)
-                && !recent
-            {
-                self.reset_dial_backoff(Some(uid));
-                any = true;
+            if !self.contacts.contains_key(uid) || self.person_ready(uid) {
+                continue;
+            }
+            for addr in self.addresses_of(uid) {
+                let recent = self.peers.get(&addr).is_some_and(|p| {
+                    p.attempts > 0 && now - p.last_attempt_at < RECONNECT_ON_SEND_AFTER_MS
+                });
+                if !recent {
+                    self.reset_dial_backoff(Some(&addr));
+                    any = true;
+                }
             }
         }
         if any {
@@ -2096,26 +2279,27 @@ impl Core {
             status: DeliveryState::Queued,
         });
         for r in &recipients {
-            self.flush(r);
+            self.flush_person(r);
         }
         Ok(())
     }
 
     fn on_group_message(&mut self, peer: &UserId, value: &Value) {
+        let who = &Self::person_of(peer);
         let Some(GroupFrame::Message(m)) = GroupFrame::parse(value) else {
             return;
         };
         let Some(groups) = self.groups.as_ref() else {
             return;
         };
-        match groups.check_message(peer.as_str(), &m.group_id) {
+        match groups.check_message(who.as_str(), &m.group_id) {
             MessageVerdict::Ok => {}
             MessageVerdict::UnknownGroup => {
                 // The group's history may be a moment behind the message: hold it. A full buffer drops it, and with no
                 // acknowledgement the sender sends it again.
                 let now = self.now();
                 self.pending_group
-                    .hold(&m.group_id, peer.as_str(), value.clone(), now);
+                    .hold(&m.group_id, who.as_str(), value.clone(), now);
                 return;
             }
             MessageVerdict::NotMember => return,
@@ -2123,7 +2307,7 @@ impl Core {
         let Ok(gid) = GroupId::new(m.group_id.as_str()) else {
             return;
         };
-        if !id_is_from(&m.message_id, peer) {
+        if !id_is_from(&m.message_id, who) {
             return;
         }
         let ack = |core: &mut Self, id: &MessageId| {
@@ -2137,7 +2321,7 @@ impl Core {
         let message = ChatMessage {
             message_id: m.message_id.clone(),
             client_message_id: m.message_id.clone(),
-            sender_id: peer.clone(),
+            sender_id: who.clone(),
             text: m.text,
             client_created_at: m.client_created_at,
             kind: privcord_domain::message::MessageKind::Text,
@@ -2167,7 +2351,7 @@ impl Core {
         });
         self.ports.notifier.notify(Notification::MessageReceived {
             conversation,
-            sender: peer.clone(),
+            sender: who.clone(),
             preview: message.text.chars().take(80).collect(),
         });
         ack(self, &message.message_id);
@@ -2246,7 +2430,7 @@ impl Core {
             own: true,
         });
         for r in &recipients {
-            self.flush(r);
+            self.flush_person(r);
         }
         self.connect_now(&recipients);
         Ok(id)
@@ -2319,11 +2503,12 @@ impl Core {
     }
 
     fn on_file_offer(&mut self, peer: &UserId, frame: &Value) {
+        let who = &Self::person_of(peer);
         let Some(offer) = FileOffer::from_frame(frame) else {
             return;
         };
         let id = offer.message_id.clone();
-        if !id_is_from(&id, peer) {
+        if !id_is_from(&id, who) {
             return;
         }
         let (group, name, size) = (offer.group_id.clone(), offer.name.clone(), offer.size);
@@ -2331,7 +2516,7 @@ impl Core {
             None => {
                 let trust = self
                     .contacts
-                    .get(peer)
+                    .get(who)
                     .map_or(ContactTrust::Introduced, |c| c.stored.trust);
                 if !accepts_direct(trust, self.group_only) {
                     self.decline(peer, &id, DeclineReason::DirectNotAccepted);
@@ -2342,7 +2527,7 @@ impl Core {
                 let ok = self
                     .groups
                     .as_ref()
-                    .is_some_and(|c| c.check_message(peer.as_str(), g) == MessageVerdict::Ok);
+                    .is_some_and(|c| c.check_message(who.as_str(), g) == MessageVerdict::Ok);
                 if !ok {
                     return;
                 }
@@ -2362,7 +2547,7 @@ impl Core {
         match outcome {
             BeginOutcome::Ok => {
                 let conversation = match group {
-                    None => Some(ConversationId::Direct(peer.clone())),
+                    None => Some(ConversationId::Direct(who.clone())),
                     Some(g) => GroupId::new(g.as_str()).ok().map(ConversationId::Group),
                 };
                 if let Some(conversation) = conversation {
@@ -2430,8 +2615,9 @@ impl Core {
     }
 
     fn store_received_file(&mut self, peer: &UserId, offer: FileOffer, bytes: Vec<u8>) {
+        let who = &Self::person_of(peer);
         let conversation = match &offer.group_id {
-            None => ConversationId::Direct(peer.clone()),
+            None => ConversationId::Direct(who.clone()),
             Some(g) => match GroupId::new(g.as_str()) {
                 Ok(g) => ConversationId::Group(g),
                 Err(_) => return,
@@ -2440,7 +2626,7 @@ impl Core {
         let message = ChatMessage {
             message_id: offer.message_id.clone(),
             client_message_id: offer.message_id.clone(),
-            sender_id: peer.clone(),
+            sender_id: who.clone(),
             text: offer.name.clone(),
             client_created_at: offer.client_created_at,
             kind: MessageKind::File,
@@ -2474,7 +2660,7 @@ impl Core {
         });
         self.ports.notifier.notify(Notification::MessageReceived {
             conversation,
-            sender: peer.clone(),
+            sender: who.clone(),
             preview: privcord_domain::files::file_preview_text(&offer.name),
         });
         let at = self.now();
@@ -2571,23 +2757,22 @@ impl Core {
         let own = self.uid.clone().ok_or(ErrorCode::NoIdentity)?;
         let name = normalize_channel_name(raw).ok_or(ErrorCode::BadChannel)?;
         let now = self.now();
-        let (Some(keys), Some(identity)) = (self.channels.get(&name), self.identity.as_ref())
-        else {
+        let card = self.own_contact_card(self.display_name.as_deref())?;
+        let author = Self::author_of(
+            self.uid.as_ref(),
+            self.identity.as_ref(),
+            self.sync.as_ref(),
+            self.device_list.as_ref(),
+        )?;
+        let Some(keys) = self.channels.get(&name) else {
             return Err(ErrorCode::NotJoined);
         };
         let mailbox = keys.mailbox.clone();
-        let blob = seal_channel_message(
-            keys,
-            identity,
-            self.display_name.as_deref(),
-            text,
-            now,
-            &mut *self.ports.entropy,
-        )
-        .map_err(|e| match e {
-            CryptoError::EmptyMessage => ErrorCode::EmptyMessage,
-            other => ErrorCode::from(other),
-        })?;
+        let blob = seal_channel_message(keys, &author, &card, text, now, &mut *self.ports.entropy)
+            .map_err(|e| match e {
+                CryptoError::EmptyMessage => ErrorCode::EmptyMessage,
+                other => ErrorCode::from(other),
+            })?;
         let id = MessageId::new(privcord_domain::mesh::packet_id(&blob))
             .map_err(|_| ErrorCode::Crypto)?;
         let text: String = privcord_domain::text::js_trim(text)
@@ -2761,7 +2946,9 @@ impl Core {
     /* ---------------------------------------------------------------- state */
 
     pub fn snapshot(&self) -> Snapshot {
-        let own = self.identity.as_ref();
+        let removals = self.pending_removals();
+        // Safety numbers cover the account key, which every device of the account knows.
+        let own = self.account.as_ref().map(|(sign, _)| sign);
         let contacts = self
             .contacts
             .values()
@@ -2783,12 +2970,9 @@ impl Core {
                 trust: c.stored.trust,
                 checked: c.stored.checked,
                 safety_number: own
-                    .and_then(|i| derive_safety_number(&i.sign_public(), &c.contact.card.sign).ok())
+                    .and_then(|s| derive_safety_number(s, &c.contact.card.sign).ok())
                     .unwrap_or_default(),
-                connection: self
-                    .peers
-                    .get(&c.stored.uid)
-                    .map_or(ConnectionState::Offline, |p| p.state),
+                connection: self.person_state(&c.stored.uid),
                 can_message: self.may_start_direct(&c.stored.uid),
             })
             .collect();
@@ -2823,10 +3007,7 @@ impl Core {
                         .filter(|u| Some(u.as_str()) != self.uid.as_ref().map(UserId::as_str))
                         .filter(|u| {
                             UserId::new(u.as_str()).is_ok_and(|u| {
-                                matches!(
-                                    self.peers.get(&u).map(|p| p.state),
-                                    Some(ConnectionState::Connected { .. })
-                                )
+                                matches!(self.person_state(&u), ConnectionState::Connected { .. })
                             })
                         })
                         .count(),
@@ -2843,7 +3024,7 @@ impl Core {
         });
         let (invite, requests, answer, lookup_pending) = self.invite_views();
         let (summaries, deliveries) = self.summaries();
-        let files = self
+        let files: Vec<(MessageId, privcord_ports::FileInfo)> = self
             .messages
             .values()
             .filter(|m| m.message.kind == MessageKind::File)
@@ -2857,6 +3038,13 @@ impl Core {
                     .map(|i| (id.clone(), i))
             })
             .collect();
+        let usage = crate::api::UsageView {
+            messages: self.messages.len() as u64,
+            files: files.len() as u64,
+            file_bytes: files.iter().map(|(_, f)| f.size).sum(),
+            contacts: self.contacts.len() as u64,
+            sync_entries: self.sync_log_len() as u64,
+        };
         Snapshot {
             seq: self.hub.seq(),
             own_uid: self.uid.clone(),
@@ -2881,6 +3069,35 @@ impl Core {
                 .collect(),
             files,
             legacy_groups: self.legacy_groups.clone(),
+            devices: self
+                .device_list
+                .as_ref()
+                .map(|l| {
+                    l.active()
+                        .map(|d| {
+                            let last_seen = self.device_last_seen(&d.id);
+                            let now = self.now();
+                            crate::api::DeviceView {
+                                id: d.id.clone(),
+                                name: d.name.clone(),
+                                added_at: d.added_at,
+                                this_device: self.device_id.as_deref() == Some(d.id.as_str()),
+                                last_seen,
+                                stale: now - last_seen.unwrap_or(d.added_at)
+                                    >= removal::STALE_AFTER_MS,
+                                removal_at: removals
+                                    .iter()
+                                    .find(|(r, _)| r == &d.id)
+                                    .map(|(_, at)| at + removal::REMOVE_AFTER_MS),
+                            }
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+            holds_account_key: self.identity.is_some(),
+            sync_lost: self.sync_lost(),
+            scheduled: self.scheduled(),
+            usage,
         }
     }
 

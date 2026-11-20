@@ -1042,6 +1042,32 @@ internal open class UniffiVTableCallbackInterfaceTransportCallbacks(
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // A JNA Library to expose the extern-C FFI definitions.
 // This is an implementation detail which will be called internally by the public API.
 
@@ -1106,7 +1132,15 @@ internal interface UniffiLib : Library {
     ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_ble_secret(`ptr`: Pointer,`peer`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    fun uniffi_privcord_ffi_fn_method_privcordengine_cancel_device_link(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    fun uniffi_privcord_ffi_fn_method_privcordengine_cancel_device_removal(`ptr`: Pointer,`device`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    fun uniffi_privcord_ffi_fn_method_privcordengine_cancel_scheduled(`ptr`: Pointer,`id`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_clear_answer(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    fun uniffi_privcord_ffi_fn_method_privcordengine_confirm_device_link(`ptr`: Pointer,`accept`: Byte,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_create_group(`ptr`: Pointer,`name`: RustBuffer.ByValue,`members`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -1127,6 +1161,12 @@ internal interface UniffiLib : Library {
     fun uniffi_privcord_ffi_fn_method_privcordengine_import_backup(`ptr`: Pointer,`text`: RustBuffer.ByValue,`passphrase`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_privcord_ffi_fn_method_privcordengine_join_channel(`ptr`: Pointer,`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    fun uniffi_privcord_ffi_fn_method_privcordengine_join_device_link(`ptr`: Pointer,`code`: RustBuffer.ByValue,`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    fun uniffi_privcord_ffi_fn_method_privcordengine_lan_beacon(`ptr`: Pointer,`port`: Short,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    fun uniffi_privcord_ffi_fn_method_privcordengine_lan_beacon_seen(`ptr`: Pointer,`beacon`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_privcord_ffi_fn_method_privcordengine_last_wipe_report(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -1164,17 +1204,23 @@ internal interface UniffiLib : Library {
     ): RustBuffer.ByValue
     fun uniffi_privcord_ffi_fn_method_privcordengine_remove_contact(`ptr`: Pointer,`uid`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    fun uniffi_privcord_ffi_fn_method_privcordengine_remove_device_now(`ptr`: Pointer,`device`: RustBuffer.ByValue,`phrase`: RustBuffer.ByValue,`passphrase`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_remove_group_member(`ptr`: Pointer,`group`: RustBuffer.ByValue,`uid`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_rename_contact(`ptr`: Pointer,`uid`: RustBuffer.ByValue,`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_rename_group(`ptr`: Pointer,`group`: RustBuffer.ByValue,`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    fun uniffi_privcord_ffi_fn_method_privcordengine_request_device_removal(`ptr`: Pointer,`device`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_reset_dial_backoff(`ptr`: Pointer,`peer`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_retry_answer(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_retry_message(`ptr`: Pointer,`messageId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    fun uniffi_privcord_ffi_fn_method_privcordengine_schedule_message(`ptr`: Pointer,`target`: RustBuffer.ByValue,`group`: Byte,`text`: RustBuffer.ByValue,`at`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_search(`ptr`: Pointer,`query`: RustBuffer.ByValue,`limit`: Int,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -1189,6 +1235,8 @@ internal interface UniffiLib : Library {
     fun uniffi_privcord_ffi_fn_method_privcordengine_send_message(`ptr`: Pointer,`peer`: RustBuffer.ByValue,`text`: RustBuffer.ByValue,`replyTo`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_privcord_ffi_fn_method_privcordengine_send_signal(`ptr`: Pointer,`peer`: RustBuffer.ByValue,`kind`: RustBuffer.ByValue,`sdp`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    fun uniffi_privcord_ffi_fn_method_privcordengine_set_bulk_allowed(`ptr`: Pointer,`allowed`: Byte,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_set_checked(`ptr`: Pointer,`uid`: RustBuffer.ByValue,`checked`: Byte,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
@@ -1207,6 +1255,8 @@ internal interface UniffiLib : Library {
     fun uniffi_privcord_ffi_fn_method_privcordengine_signal_blob(`ptr`: Pointer,`mailbox`: RustBuffer.ByValue,`blob`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_snapshot(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    fun uniffi_privcord_ffi_fn_method_privcordengine_start_device_link(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_privcord_ffi_fn_method_privcordengine_stop_invite(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
@@ -1250,6 +1300,8 @@ internal interface UniffiLib : Library {
     ): Unit
     fun uniffi_privcord_ffi_fn_method_transportcallbacks_signal_put(`ptr`: Pointer,`mailbox`: RustBuffer.ByValue,`blob`: RustBuffer.ByValue,`kind`: RustBuffer.ByValue,`ttlSec`: Int,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
+    fun uniffi_privcord_ffi_fn_func_background_plan(`state`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     fun uniffi_privcord_ffi_fn_func_core_version(uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_privcord_ffi_fn_func_import_legacy_android(`oldDbPath`: RustBuffer.ByValue,`decryptor`: Pointer,`newDbPath`: RustBuffer.ByValue,`ownUid`: RustBuffer.ByValue,`files`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
@@ -1370,6 +1422,8 @@ internal interface UniffiLib : Library {
     ): Unit
     fun ffi_privcord_ffi_rust_future_complete_void(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    fun uniffi_privcord_ffi_checksum_func_background_plan(
+    ): Short
     fun uniffi_privcord_ffi_checksum_func_core_version(
     ): Short
     fun uniffi_privcord_ffi_checksum_func_import_legacy_android(
@@ -1394,7 +1448,15 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_ble_secret(
     ): Short
+    fun uniffi_privcord_ffi_checksum_method_privcordengine_cancel_device_link(
+    ): Short
+    fun uniffi_privcord_ffi_checksum_method_privcordengine_cancel_device_removal(
+    ): Short
+    fun uniffi_privcord_ffi_checksum_method_privcordengine_cancel_scheduled(
+    ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_clear_answer(
+    ): Short
+    fun uniffi_privcord_ffi_checksum_method_privcordengine_confirm_device_link(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_create_group(
     ): Short
@@ -1415,6 +1477,12 @@ internal interface UniffiLib : Library {
     fun uniffi_privcord_ffi_checksum_method_privcordengine_import_backup(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_join_channel(
+    ): Short
+    fun uniffi_privcord_ffi_checksum_method_privcordengine_join_device_link(
+    ): Short
+    fun uniffi_privcord_ffi_checksum_method_privcordengine_lan_beacon(
+    ): Short
+    fun uniffi_privcord_ffi_checksum_method_privcordengine_lan_beacon_seen(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_last_wipe_report(
     ): Short
@@ -1452,17 +1520,23 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_remove_contact(
     ): Short
+    fun uniffi_privcord_ffi_checksum_method_privcordengine_remove_device_now(
+    ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_remove_group_member(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_rename_contact(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_rename_group(
     ): Short
+    fun uniffi_privcord_ffi_checksum_method_privcordengine_request_device_removal(
+    ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_reset_dial_backoff(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_retry_answer(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_retry_message(
+    ): Short
+    fun uniffi_privcord_ffi_checksum_method_privcordengine_schedule_message(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_search(
     ): Short
@@ -1477,6 +1551,8 @@ internal interface UniffiLib : Library {
     fun uniffi_privcord_ffi_checksum_method_privcordengine_send_message(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_send_signal(
+    ): Short
+    fun uniffi_privcord_ffi_checksum_method_privcordengine_set_bulk_allowed(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_set_checked(
     ): Short
@@ -1495,6 +1571,8 @@ internal interface UniffiLib : Library {
     fun uniffi_privcord_ffi_checksum_method_privcordengine_signal_blob(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_snapshot(
+    ): Short
+    fun uniffi_privcord_ffi_checksum_method_privcordengine_start_device_link(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_stop_invite(
     ): Short
@@ -1545,6 +1623,9 @@ private fun uniffiCheckContractApiVersion(lib: UniffiLib) {
 
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: UniffiLib) {
+    if (lib.uniffi_privcord_ffi_checksum_func_background_plan() != 60086.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_privcord_ffi_checksum_func_core_version() != 14917.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1581,7 +1662,19 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_ble_secret() != 10999.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_cancel_device_link() != 19478.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_cancel_device_removal() != 32243.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_cancel_scheduled() != 29662.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_clear_answer() != 55739.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_confirm_device_link() != 56402.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_create_group() != 11412.toShort()) {
@@ -1612,6 +1705,15 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_join_channel() != 1805.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_join_device_link() != 27528.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_lan_beacon() != 10643.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_lan_beacon_seen() != 34601.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_last_wipe_report() != 42249.toShort()) {
@@ -1668,6 +1770,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_remove_contact() != 13126.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_remove_device_now() != 12271.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_remove_group_member() != 4702.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1677,6 +1782,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_rename_group() != 8179.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_request_device_removal() != 59975.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_reset_dial_backoff() != 27923.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1684,6 +1792,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_retry_message() != 1610.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_schedule_message() != 2140.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_search() != 51141.toShort()) {
@@ -1705,6 +1816,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_send_signal() != 24050.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_set_bulk_allowed() != 58938.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_set_checked() != 19308.toShort()) {
@@ -1732,6 +1846,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_snapshot() != 20760.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_start_device_link() != 15845.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_stop_invite() != 37776.toShort()) {
@@ -1828,6 +1945,52 @@ inline fun <T : Disposable?, R> T.use(block: (T) -> R) =
  * @suppress
  * */
 object NoPointer
+
+/**
+ * @suppress
+ */
+public object FfiConverterUByte: FfiConverter<UByte, Byte> {
+    override fun lift(value: Byte): UByte {
+        return value.toUByte()
+    }
+
+    override fun read(buf: ByteBuffer): UByte {
+        return lift(buf.get())
+    }
+
+    override fun lower(value: UByte): Byte {
+        return value.toByte()
+    }
+
+    override fun allocationSize(value: UByte) = 1UL
+
+    override fun write(value: UByte, buf: ByteBuffer) {
+        buf.put(value.toByte())
+    }
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterUShort: FfiConverter<UShort, Short> {
+    override fun lift(value: Short): UShort {
+        return value.toUShort()
+    }
+
+    override fun read(buf: ByteBuffer): UShort {
+        return lift(buf.getShort())
+    }
+
+    override fun lower(value: UShort): Short {
+        return value.toShort()
+    }
+
+    override fun allocationSize(value: UShort) = 2UL
+
+    override fun write(value: UShort, buf: ByteBuffer) {
+        buf.putShort(value.toShort())
+    }
+}
 
 /**
  * @suppress
@@ -3040,7 +3203,24 @@ public interface PrivcordEngineInterface {
      */
     fun `bleSecret`(`peer`: kotlin.String): kotlin.ByteArray
     
+    fun `cancelDeviceLink`()
+    
+    /**
+     * Take back a removal asked for.
+     */
+    fun `cancelDeviceRemoval`(`device`: kotlin.String)
+    
+    /**
+     * Take a scheduled message back.
+     */
+    fun `cancelScheduled`(`id`: kotlin.String)
+    
     fun `clearAnswer`()
+    
+    /**
+     * After comparing the 6-digit codes, on the device holding the account key: let the new device in, or not.
+     */
+    fun `confirmDeviceLink`(`accept`: kotlin.Boolean)
     
     /**
      * Make a group with these contacts. Returns the group's id.
@@ -3088,6 +3268,22 @@ public interface PrivcordEngineInterface {
      * Join a public channel; returns its normalised name.
      */
     fun `joinChannel`(`name`: kotlin.String): kotlin.String
+    
+    /**
+     * On a new device with no account: take the code shown by the other device.
+     */
+    fun `joinDeviceLink`(`code`: kotlin.String, `name`: kotlin.String)
+    
+    /**
+     * The beacon to broadcast on the local network now (this device listens on `port`), or `None` when there is no other
+     * device of the account to find.
+     */
+    fun `lanBeacon`(`port`: kotlin.UShort): kotlin.String?
+    
+    /**
+     * A beacon heard on the local network: another device of ours, its port, and whether this side connects.
+     */
+    fun `lanBeaconSeen`(`beacon`: kotlin.String): LanPeerDto?
     
     /**
      * The report of the last deletion that was started, if any.
@@ -3160,6 +3356,11 @@ public interface PrivcordEngineInterface {
      */
     fun `removeContact`(`uid`: kotlin.String)
     
+    /**
+     * Remove another device of the account at once, with the recovery phrase (not kept).
+     */
+    fun `removeDeviceNow`(`device`: kotlin.String, `phrase`: kotlin.String, `passphrase`: kotlin.String)
+    
     fun `removeGroupMember`(`group`: kotlin.String, `uid`: kotlin.String)
     
     /**
@@ -3168,6 +3369,12 @@ public interface PrivcordEngineInterface {
     fun `renameContact`(`uid`: kotlin.String, `name`: kotlin.String)
     
     fun `renameGroup`(`group`: kotlin.String, `name`: kotlin.String)
+    
+    /**
+     * Ask for another device of the account to be removed: every device shows it, and it happens in 24 hours unless
+     * taken back (a device holding the account key can only be removed with the phrase).
+     */
+    fun `requestDeviceRemoval`(`device`: kotlin.String)
     
     /**
      * Dial again at the next tick instead of waiting out the retry delay: for one friend, or for everyone not linked.
@@ -3180,6 +3387,12 @@ public interface PrivcordEngineInterface {
      * Send one of your own messages again from the start (it was refused, or never got through).
      */
     fun `retryMessage`(`messageId`: kotlin.String)
+    
+    /**
+     * Write a message to go out at `at` (milliseconds): to a friend (`group` false, `target` their uid) or a group.
+     * Kept on this device, and sent by it.
+     */
+    fun `scheduleMessage`(`target`: kotlin.String, `group`: kotlin.Boolean, `text`: kotlin.String, `at`: kotlin.Long)
     
     /**
      * Search messages on this device (two characters at least). Newest first.
@@ -3210,6 +3423,11 @@ public interface PrivcordEngineInterface {
      * `sdp` is the session description for an offer or an answer.
      */
     fun `sendSignal`(`peer`: kotlin.String, `kind`: SignalKindDto, `sdp`: kotlin.String?)
+    
+    /**
+     * Whether bulk work (files between the account's devices) may run now: pass `background_plan(..).bulk`.
+     */
+    fun `setBulkAllowed`(`allowed`: kotlin.Boolean)
     
     /**
      * Record that you compared the safety number with this person (or took it back).
@@ -3252,6 +3470,11 @@ public interface PrivcordEngineInterface {
      * Everything a recreated UI needs, so it never depends on having seen every event.
      */
     fun `snapshot`(): SnapshotDto
+    
+    /**
+     * On the device holding the account key: start linking a new device. Returns the code to show as a QR code.
+     */
+    fun `startDeviceLink`(): kotlin.String
     
     fun `stopInvite`()
     
@@ -3428,12 +3651,69 @@ open class PrivcordEngine: Disposable, AutoCloseable, PrivcordEngineInterface {
     
 
     
+    @Throws(FfiException::class)override fun `cancelDeviceLink`()
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_cancel_device_link(
+        it, _status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Take back a removal asked for.
+     */
+    @Throws(FfiException::class)override fun `cancelDeviceRemoval`(`device`: kotlin.String)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_cancel_device_removal(
+        it, FfiConverterString.lower(`device`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Take a scheduled message back.
+     */
+    @Throws(FfiException::class)override fun `cancelScheduled`(`id`: kotlin.String)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_cancel_scheduled(
+        it, FfiConverterString.lower(`id`),_status)
+}
+    }
+    
+    
+
+    
     @Throws(FfiException::class)override fun `clearAnswer`()
         = 
     callWithPointer {
     uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_clear_answer(
         it, _status)
+}
+    }
+    
+    
+
+    
+    /**
+     * After comparing the 6-digit codes, on the device holding the account key: let the new device in, or not.
+     */
+    @Throws(FfiException::class)override fun `confirmDeviceLink`(`accept`: kotlin.Boolean)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_confirm_device_link(
+        it, FfiConverterBoolean.lower(`accept`),_status)
 }
     }
     
@@ -3586,6 +3866,54 @@ open class PrivcordEngine: Disposable, AutoCloseable, PrivcordEngineInterface {
     uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_join_channel(
         it, FfiConverterString.lower(`name`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * On a new device with no account: take the code shown by the other device.
+     */
+    @Throws(FfiException::class)override fun `joinDeviceLink`(`code`: kotlin.String, `name`: kotlin.String)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_join_device_link(
+        it, FfiConverterString.lower(`code`),FfiConverterString.lower(`name`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * The beacon to broadcast on the local network now (this device listens on `port`), or `None` when there is no other
+     * device of the account to find.
+     */
+    @Throws(FfiException::class)override fun `lanBeacon`(`port`: kotlin.UShort): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_lan_beacon(
+        it, FfiConverterUShort.lower(`port`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * A beacon heard on the local network: another device of ours, its port, and whether this side connects.
+     */
+    @Throws(FfiException::class)override fun `lanBeaconSeen`(`beacon`: kotlin.String): LanPeerDto? {
+            return FfiConverterOptionalTypeLanPeerDto.lift(
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_lan_beacon_seen(
+        it, FfiConverterString.lower(`beacon`),_status)
 }
     }
     )
@@ -3849,6 +4177,21 @@ open class PrivcordEngine: Disposable, AutoCloseable, PrivcordEngineInterface {
     
 
     
+    /**
+     * Remove another device of the account at once, with the recovery phrase (not kept).
+     */
+    @Throws(FfiException::class)override fun `removeDeviceNow`(`device`: kotlin.String, `phrase`: kotlin.String, `passphrase`: kotlin.String)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_remove_device_now(
+        it, FfiConverterString.lower(`device`),FfiConverterString.lower(`phrase`),FfiConverterString.lower(`passphrase`),_status)
+}
+    }
+    
+    
+
+    
     @Throws(FfiException::class)override fun `removeGroupMember`(`group`: kotlin.String, `uid`: kotlin.String)
         = 
     callWithPointer {
@@ -3882,6 +4225,22 @@ open class PrivcordEngine: Disposable, AutoCloseable, PrivcordEngineInterface {
     uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_rename_group(
         it, FfiConverterString.lower(`group`),FfiConverterString.lower(`name`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Ask for another device of the account to be removed: every device shows it, and it happens in 24 hours unless
+     * taken back (a device holding the account key can only be removed with the phrase).
+     */
+    @Throws(FfiException::class)override fun `requestDeviceRemoval`(`device`: kotlin.String)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_request_device_removal(
+        it, FfiConverterString.lower(`device`),_status)
 }
     }
     
@@ -3924,6 +4283,22 @@ open class PrivcordEngine: Disposable, AutoCloseable, PrivcordEngineInterface {
     uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_retry_message(
         it, FfiConverterString.lower(`messageId`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Write a message to go out at `at` (milliseconds): to a friend (`group` false, `target` their uid) or a group.
+     * Kept on this device, and sent by it.
+     */
+    @Throws(FfiException::class)override fun `scheduleMessage`(`target`: kotlin.String, `group`: kotlin.Boolean, `text`: kotlin.String, `at`: kotlin.Long)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_schedule_message(
+        it, FfiConverterString.lower(`target`),FfiConverterBoolean.lower(`group`),FfiConverterString.lower(`text`),FfiConverterLong.lower(`at`),_status)
 }
     }
     
@@ -4030,6 +4405,21 @@ open class PrivcordEngine: Disposable, AutoCloseable, PrivcordEngineInterface {
     uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_send_signal(
         it, FfiConverterString.lower(`peer`),FfiConverterTypeSignalKindDto.lower(`kind`),FfiConverterOptionalString.lower(`sdp`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Whether bulk work (files between the account's devices) may run now: pass `background_plan(..).bulk`.
+     */
+    @Throws(FfiException::class)override fun `setBulkAllowed`(`allowed`: kotlin.Boolean)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_set_bulk_allowed(
+        it, FfiConverterBoolean.lower(`allowed`),_status)
 }
     }
     
@@ -4161,6 +4551,22 @@ open class PrivcordEngine: Disposable, AutoCloseable, PrivcordEngineInterface {
     callWithPointer {
     uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_snapshot(
+        it, _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * On the device holding the account key: start linking a new device. Returns the code to show as a QR code.
+     */
+    @Throws(FfiException::class)override fun `startDeviceLink`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_start_device_link(
         it, _status)
 }
     }
@@ -5159,6 +5565,45 @@ public object FfiConverterTypeAnswerDto: FfiConverterRustBuffer<AnswerDto> {
 
 
 
+/**
+ * What may run in the background (`privcord_domain::background`).
+ */
+data class BackgroundPlanDto (
+    var `internetSync`: kotlin.Boolean, 
+    var `bulk`: kotlin.Boolean, 
+    var `bleScan`: BleScanDto
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBackgroundPlanDto: FfiConverterRustBuffer<BackgroundPlanDto> {
+    override fun read(buf: ByteBuffer): BackgroundPlanDto {
+        return BackgroundPlanDto(
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterTypeBleScanDto.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: BackgroundPlanDto) = (
+            FfiConverterBoolean.allocationSize(value.`internetSync`) +
+            FfiConverterBoolean.allocationSize(value.`bulk`) +
+            FfiConverterTypeBleScanDto.allocationSize(value.`bleScan`)
+    )
+
+    override fun write(value: BackgroundPlanDto, buf: ByteBuffer) {
+            FfiConverterBoolean.write(value.`internetSync`, buf)
+            FfiConverterBoolean.write(value.`bulk`, buf)
+            FfiConverterTypeBleScanDto.write(value.`bleScan`, buf)
+    }
+}
+
+
+
 data class ChannelPersonDto (
     var `uid`: kotlin.String, 
     var `name`: kotlin.String
@@ -5298,6 +5743,124 @@ public object FfiConverterTypeConversationDto: FfiConverterRustBuffer<Conversati
             FfiConverterSequenceTypeMessageDto.write(value.`messages`, buf)
             FfiConverterOptionalTypeLastMessageDto.write(value.`last`, buf)
             FfiConverterUInt.write(value.`unread`, buf)
+    }
+}
+
+
+
+/**
+ * One device of the account.
+ */
+data class DeviceDto (
+    var `id`: kotlin.String, 
+    var `name`: kotlin.String, 
+    var `addedAt`: kotlin.Long, 
+    var `thisDevice`: kotlin.Boolean, 
+    /**
+     * When it last wrote anything this device has (milliseconds), if ever.
+     */
+    var `lastSeen`: kotlin.Long?, 
+    /**
+     * Not heard from for 90 days: offer "Remove or reconnect".
+     */
+    var `stale`: kotlin.Boolean, 
+    /**
+     * A removal was asked for: when it takes effect (milliseconds), unless taken back.
+     */
+    var `removalAt`: kotlin.Long?
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeDeviceDto: FfiConverterRustBuffer<DeviceDto> {
+    override fun read(buf: ByteBuffer): DeviceDto {
+        return DeviceDto(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterOptionalLong.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterOptionalLong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: DeviceDto) = (
+            FfiConverterString.allocationSize(value.`id`) +
+            FfiConverterString.allocationSize(value.`name`) +
+            FfiConverterLong.allocationSize(value.`addedAt`) +
+            FfiConverterBoolean.allocationSize(value.`thisDevice`) +
+            FfiConverterOptionalLong.allocationSize(value.`lastSeen`) +
+            FfiConverterBoolean.allocationSize(value.`stale`) +
+            FfiConverterOptionalLong.allocationSize(value.`removalAt`)
+    )
+
+    override fun write(value: DeviceDto, buf: ByteBuffer) {
+            FfiConverterString.write(value.`id`, buf)
+            FfiConverterString.write(value.`name`, buf)
+            FfiConverterLong.write(value.`addedAt`, buf)
+            FfiConverterBoolean.write(value.`thisDevice`, buf)
+            FfiConverterOptionalLong.write(value.`lastSeen`, buf)
+            FfiConverterBoolean.write(value.`stale`, buf)
+            FfiConverterOptionalLong.write(value.`removalAt`, buf)
+    }
+}
+
+
+
+/**
+ * What the platform knows about the device right now.
+ */
+data class DeviceStateDto (
+    /**
+     * 0–100, or none for a device with no battery.
+     */
+    var `batteryPercent`: kotlin.UByte?, 
+    var `charging`: kotlin.Boolean, 
+    var `network`: NetworkKindDto, 
+    var `dataSaver`: kotlin.Boolean, 
+    var `powerSaver`: kotlin.Boolean, 
+    var `foreground`: kotlin.Boolean
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeDeviceStateDto: FfiConverterRustBuffer<DeviceStateDto> {
+    override fun read(buf: ByteBuffer): DeviceStateDto {
+        return DeviceStateDto(
+            FfiConverterOptionalUByte.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterTypeNetworkKindDto.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: DeviceStateDto) = (
+            FfiConverterOptionalUByte.allocationSize(value.`batteryPercent`) +
+            FfiConverterBoolean.allocationSize(value.`charging`) +
+            FfiConverterTypeNetworkKindDto.allocationSize(value.`network`) +
+            FfiConverterBoolean.allocationSize(value.`dataSaver`) +
+            FfiConverterBoolean.allocationSize(value.`powerSaver`) +
+            FfiConverterBoolean.allocationSize(value.`foreground`)
+    )
+
+    override fun write(value: DeviceStateDto, buf: ByteBuffer) {
+            FfiConverterOptionalUByte.write(value.`batteryPercent`, buf)
+            FfiConverterBoolean.write(value.`charging`, buf)
+            FfiConverterTypeNetworkKindDto.write(value.`network`, buf)
+            FfiConverterBoolean.write(value.`dataSaver`, buf)
+            FfiConverterBoolean.write(value.`powerSaver`, buf)
+            FfiConverterBoolean.write(value.`foreground`, buf)
     }
 }
 
@@ -5519,6 +6082,51 @@ public object FfiConverterTypeInviteDto: FfiConverterRustBuffer<InviteDto> {
     override fun write(value: InviteDto, buf: ByteBuffer) {
             FfiConverterString.write(value.`words`, buf)
             FfiConverterLong.write(value.`expiresAt`, buf)
+    }
+}
+
+
+
+/**
+ * Another device of ours heard on the local network.
+ */
+data class LanPeerDto (
+    /**
+     * Its address: pass it to `link_up` (path `DirectLan`, kind `Open`) and `frame_received` for this connection.
+     */
+    var `address`: kotlin.String, 
+    var `port`: kotlin.UShort, 
+    /**
+     * Whether this side opens the connection.
+     */
+    var `initiator`: kotlin.Boolean
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeLanPeerDto: FfiConverterRustBuffer<LanPeerDto> {
+    override fun read(buf: ByteBuffer): LanPeerDto {
+        return LanPeerDto(
+            FfiConverterString.read(buf),
+            FfiConverterUShort.read(buf),
+            FfiConverterBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: LanPeerDto) = (
+            FfiConverterString.allocationSize(value.`address`) +
+            FfiConverterUShort.allocationSize(value.`port`) +
+            FfiConverterBoolean.allocationSize(value.`initiator`)
+    )
+
+    override fun write(value: LanPeerDto, buf: ByteBuffer) {
+            FfiConverterString.write(value.`address`, buf)
+            FfiConverterUShort.write(value.`port`, buf)
+            FfiConverterBoolean.write(value.`initiator`, buf)
     }
 }
 
@@ -5855,6 +6463,59 @@ public object FfiConverterTypeRestoreDto: FfiConverterRustBuffer<RestoreDto> {
 
 
 
+/**
+ * A message written for later on this device.
+ */
+data class ScheduledDto (
+    var `id`: kotlin.String, 
+    /**
+     * A friend's uid, or a group's id.
+     */
+    var `target`: kotlin.String, 
+    var `group`: kotlin.Boolean, 
+    var `text`: kotlin.String, 
+    /**
+     * When it goes out (milliseconds).
+     */
+    var `at`: kotlin.Long
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeScheduledDto: FfiConverterRustBuffer<ScheduledDto> {
+    override fun read(buf: ByteBuffer): ScheduledDto {
+        return ScheduledDto(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterLong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: ScheduledDto) = (
+            FfiConverterString.allocationSize(value.`id`) +
+            FfiConverterString.allocationSize(value.`target`) +
+            FfiConverterBoolean.allocationSize(value.`group`) +
+            FfiConverterString.allocationSize(value.`text`) +
+            FfiConverterLong.allocationSize(value.`at`)
+    )
+
+    override fun write(value: ScheduledDto, buf: ByteBuffer) {
+            FfiConverterString.write(value.`id`, buf)
+            FfiConverterString.write(value.`target`, buf)
+            FfiConverterBoolean.write(value.`group`, buf)
+            FfiConverterString.write(value.`text`, buf)
+            FfiConverterLong.write(value.`at`, buf)
+    }
+}
+
+
+
 data class SearchHitDto (
     var `messageId`: kotlin.String, 
     var `conversation`: kotlin.String, 
@@ -5954,7 +6615,21 @@ data class SnapshotDto (
     /**
      * Groups from before protocol v2 that can be made again with one tap.
      */
-    var `legacyGroups`: List<LegacyGroupDto>
+    var `legacyGroups`: List<LegacyGroupDto>, 
+    /**
+     * The account's devices, this one included.
+     */
+    var `devices`: List<DeviceDto>, 
+    /**
+     * Whether this install holds the account key (it can link other devices and change groups).
+     */
+    var `holdsAccountKey`: kotlin.Boolean, 
+    /**
+     * Items from other devices of the account that could not be recovered.
+     */
+    var `syncLost`: kotlin.ULong, 
+    var `scheduled`: List<ScheduledDto>, 
+    var `usage`: UsageDto
 ) {
     
     companion object
@@ -5980,6 +6655,11 @@ public object FfiConverterTypeSnapshotDto: FfiConverterRustBuffer<SnapshotDto> {
             FfiConverterULong.read(buf),
             FfiConverterSequenceTypeChannelPersonDto.read(buf),
             FfiConverterSequenceTypeLegacyGroupDto.read(buf),
+            FfiConverterSequenceTypeDeviceDto.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterSequenceTypeScheduledDto.read(buf),
+            FfiConverterTypeUsageDto.read(buf),
         )
     }
 
@@ -5997,7 +6677,12 @@ public object FfiConverterTypeSnapshotDto: FfiConverterRustBuffer<SnapshotDto> {
             FfiConverterBoolean.allocationSize(value.`lookupPending`) +
             FfiConverterULong.allocationSize(value.`queued`) +
             FfiConverterSequenceTypeChannelPersonDto.allocationSize(value.`channelPeople`) +
-            FfiConverterSequenceTypeLegacyGroupDto.allocationSize(value.`legacyGroups`)
+            FfiConverterSequenceTypeLegacyGroupDto.allocationSize(value.`legacyGroups`) +
+            FfiConverterSequenceTypeDeviceDto.allocationSize(value.`devices`) +
+            FfiConverterBoolean.allocationSize(value.`holdsAccountKey`) +
+            FfiConverterULong.allocationSize(value.`syncLost`) +
+            FfiConverterSequenceTypeScheduledDto.allocationSize(value.`scheduled`) +
+            FfiConverterTypeUsageDto.allocationSize(value.`usage`)
     )
 
     override fun write(value: SnapshotDto, buf: ByteBuffer) {
@@ -6015,6 +6700,58 @@ public object FfiConverterTypeSnapshotDto: FfiConverterRustBuffer<SnapshotDto> {
             FfiConverterULong.write(value.`queued`, buf)
             FfiConverterSequenceTypeChannelPersonDto.write(value.`channelPeople`, buf)
             FfiConverterSequenceTypeLegacyGroupDto.write(value.`legacyGroups`, buf)
+            FfiConverterSequenceTypeDeviceDto.write(value.`devices`, buf)
+            FfiConverterBoolean.write(value.`holdsAccountKey`, buf)
+            FfiConverterULong.write(value.`syncLost`, buf)
+            FfiConverterSequenceTypeScheduledDto.write(value.`scheduled`, buf)
+            FfiConverterTypeUsageDto.write(value.`usage`, buf)
+    }
+}
+
+
+
+/**
+ * What this device holds (the usage screen).
+ */
+data class UsageDto (
+    var `messages`: kotlin.ULong, 
+    var `files`: kotlin.ULong, 
+    var `fileBytes`: kotlin.ULong, 
+    var `contacts`: kotlin.ULong, 
+    var `syncEntries`: kotlin.ULong
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeUsageDto: FfiConverterRustBuffer<UsageDto> {
+    override fun read(buf: ByteBuffer): UsageDto {
+        return UsageDto(
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: UsageDto) = (
+            FfiConverterULong.allocationSize(value.`messages`) +
+            FfiConverterULong.allocationSize(value.`files`) +
+            FfiConverterULong.allocationSize(value.`fileBytes`) +
+            FfiConverterULong.allocationSize(value.`contacts`) +
+            FfiConverterULong.allocationSize(value.`syncEntries`)
+    )
+
+    override fun write(value: UsageDto, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`messages`, buf)
+            FfiConverterULong.write(value.`files`, buf)
+            FfiConverterULong.write(value.`fileBytes`, buf)
+            FfiConverterULong.write(value.`contacts`, buf)
+            FfiConverterULong.write(value.`syncEntries`, buf)
     }
 }
 
@@ -6133,6 +6870,40 @@ public object FfiConverterTypeAnswerState: FfiConverterRustBuffer<AnswerState> {
     override fun allocationSize(value: AnswerState) = 4UL
 
     override fun write(value: AnswerState, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+/**
+ * How hard the platform should look for Bluetooth neighbours.
+ */
+
+enum class BleScanDto {
+    
+    OFF,
+    LOW_POWER,
+    BALANCED;
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBleScanDto: FfiConverterRustBuffer<BleScanDto> {
+    override fun read(buf: ByteBuffer) = try {
+        BleScanDto.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: BleScanDto) = 4UL
+
+    override fun write(value: BleScanDto, buf: ByteBuffer) {
         buf.putInt(value.ordinal + 1)
     }
 }
@@ -6375,6 +7146,17 @@ sealed class EventDto {
     
     
     /**
+     * Linking a device by QR code: `stage` is "code" (show the 6-digit `code`; on the device holding the account key,
+     * `name` is the new device's), then "done", "failed", "cancelled" or "expired".
+     */
+    data class DeviceLink(
+        val `stage`: kotlin.String, 
+        val `code`: kotlin.String?, 
+        val `name`: kotlin.String?) : EventDto() {
+        companion object
+    }
+    
+    /**
      * A file is arriving: `percent` is how much of it is here.
      */
     data class FileProgress(
@@ -6484,26 +7266,31 @@ public object FfiConverterTypeEventDto : FfiConverterRustBuffer<EventDto>{
                 FfiConverterString.read(buf),
                 )
             19 -> EventDto.SnapshotChanged
-            20 -> EventDto.FileProgress(
+            20 -> EventDto.DeviceLink(
+                FfiConverterString.read(buf),
+                FfiConverterOptionalString.read(buf),
+                FfiConverterOptionalString.read(buf),
+                )
+            21 -> EventDto.FileProgress(
                 FfiConverterString.read(buf),
                 FfiConverterUInt.read(buf),
                 )
-            21 -> EventDto.FileIncoming(
+            22 -> EventDto.FileIncoming(
                 FfiConverterString.read(buf),
                 FfiConverterString.read(buf),
                 FfiConverterString.read(buf),
                 FfiConverterULong.read(buf),
                 )
-            22 -> EventDto.FileQueued(
+            23 -> EventDto.FileQueued(
                 FfiConverterString.read(buf),
                 FfiConverterString.read(buf),
                 FfiConverterUInt.read(buf),
                 )
-            23 -> EventDto.Wiped
-            24 -> EventDto.Lagged(
+            24 -> EventDto.Wiped
+            25 -> EventDto.Lagged(
                 FfiConverterULong.read(buf),
                 )
-            25 -> EventDto.ShutDown
+            26 -> EventDto.ShutDown
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -6644,6 +7431,15 @@ public object FfiConverterTypeEventDto : FfiConverterRustBuffer<EventDto>{
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
+            )
+        }
+        is EventDto.DeviceLink -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`stage`)
+                + FfiConverterOptionalString.allocationSize(value.`code`)
+                + FfiConverterOptionalString.allocationSize(value.`name`)
             )
         }
         is EventDto.FileProgress -> {
@@ -6795,14 +7591,21 @@ public object FfiConverterTypeEventDto : FfiConverterRustBuffer<EventDto>{
                 buf.putInt(19)
                 Unit
             }
-            is EventDto.FileProgress -> {
+            is EventDto.DeviceLink -> {
                 buf.putInt(20)
+                FfiConverterString.write(value.`stage`, buf)
+                FfiConverterOptionalString.write(value.`code`, buf)
+                FfiConverterOptionalString.write(value.`name`, buf)
+                Unit
+            }
+            is EventDto.FileProgress -> {
+                buf.putInt(21)
                 FfiConverterString.write(value.`messageId`, buf)
                 FfiConverterUInt.write(value.`percent`, buf)
                 Unit
             }
             is EventDto.FileIncoming -> {
-                buf.putInt(21)
+                buf.putInt(22)
                 FfiConverterString.write(value.`conversation`, buf)
                 FfiConverterString.write(value.`messageId`, buf)
                 FfiConverterString.write(value.`name`, buf)
@@ -6810,23 +7613,23 @@ public object FfiConverterTypeEventDto : FfiConverterRustBuffer<EventDto>{
                 Unit
             }
             is EventDto.FileQueued -> {
-                buf.putInt(22)
+                buf.putInt(23)
                 FfiConverterString.write(value.`peer`, buf)
                 FfiConverterString.write(value.`messageId`, buf)
                 FfiConverterUInt.write(value.`frames`, buf)
                 Unit
             }
             is EventDto.Wiped -> {
-                buf.putInt(23)
+                buf.putInt(24)
                 Unit
             }
             is EventDto.Lagged -> {
-                buf.putInt(24)
+                buf.putInt(25)
                 FfiConverterULong.write(value.`missed`, buf)
                 Unit
             }
             is EventDto.ShutDown -> {
-                buf.putInt(25)
+                buf.putInt(26)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -6845,6 +7648,12 @@ public object FfiConverterTypeEventDto : FfiConverterRustBuffer<EventDto>{
 sealed class FfiException: kotlin.Exception() {
     
     class NoIdentity(
+        ) : FfiException() {
+        override val message
+            get() = ""
+    }
+    
+    class NeedsAccountKey(
         ) : FfiException() {
         override val message
             get() = ""
@@ -6911,6 +7720,12 @@ sealed class FfiException: kotlin.Exception() {
     }
     
     class SecureStorage(
+        ) : FfiException() {
+        override val message
+            get() = ""
+    }
+    
+    class UnknownDevice(
         ) : FfiException() {
         override val message
             get() = ""
@@ -7053,37 +7868,39 @@ public object FfiConverterTypeFfiError : FfiConverterRustBuffer<FfiException> {
 
         return when(buf.getInt()) {
             1 -> FfiException.NoIdentity()
-            2 -> FfiException.IdentityExists()
-            3 -> FfiException.InvalidPhrase()
-            4 -> FfiException.InvalidCard()
-            5 -> FfiException.OwnCard()
-            6 -> FfiException.UnknownContact()
-            7 -> FfiException.EmptyMessage()
-            8 -> FfiException.MessageTooLong()
-            9 -> FfiException.DirectNotAllowed()
-            10 -> FfiException.UnknownMessage()
-            11 -> FfiException.Storage()
-            12 -> FfiException.SecureStorage()
-            13 -> FfiException.Crypto()
-            14 -> FfiException.ShuttingDown()
-            15 -> FfiException.Busy()
-            16 -> FfiException.InvalidArgument()
-            17 -> FfiException.NoSuchGroup()
-            18 -> FfiException.GroupRefused()
-            19 -> FfiException.GroupFull()
-            20 -> FfiException.BadFile()
-            21 -> FfiException.BadChannel()
-            22 -> FfiException.NotJoined()
-            23 -> FfiException.NoSignaling()
-            24 -> FfiException.InvalidInvite()
-            25 -> FfiException.InviteNotFound()
-            26 -> FfiException.OwnInvite()
-            27 -> FfiException.StillInGroup()
-            28 -> FfiException.NoRoute()
-            29 -> FfiException.BadReaction()
-            30 -> FfiException.WeakPassphrase()
-            31 -> FfiException.BackupUnreadable()
-            32 -> FfiException.BackupNotYours()
+            2 -> FfiException.NeedsAccountKey()
+            3 -> FfiException.IdentityExists()
+            4 -> FfiException.InvalidPhrase()
+            5 -> FfiException.InvalidCard()
+            6 -> FfiException.OwnCard()
+            7 -> FfiException.UnknownContact()
+            8 -> FfiException.EmptyMessage()
+            9 -> FfiException.MessageTooLong()
+            10 -> FfiException.DirectNotAllowed()
+            11 -> FfiException.UnknownMessage()
+            12 -> FfiException.Storage()
+            13 -> FfiException.SecureStorage()
+            14 -> FfiException.UnknownDevice()
+            15 -> FfiException.Crypto()
+            16 -> FfiException.ShuttingDown()
+            17 -> FfiException.Busy()
+            18 -> FfiException.InvalidArgument()
+            19 -> FfiException.NoSuchGroup()
+            20 -> FfiException.GroupRefused()
+            21 -> FfiException.GroupFull()
+            22 -> FfiException.BadFile()
+            23 -> FfiException.BadChannel()
+            24 -> FfiException.NotJoined()
+            25 -> FfiException.NoSignaling()
+            26 -> FfiException.InvalidInvite()
+            27 -> FfiException.InviteNotFound()
+            28 -> FfiException.OwnInvite()
+            29 -> FfiException.StillInGroup()
+            30 -> FfiException.NoRoute()
+            31 -> FfiException.BadReaction()
+            32 -> FfiException.WeakPassphrase()
+            33 -> FfiException.BackupUnreadable()
+            34 -> FfiException.BackupNotYours()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -7091,6 +7908,10 @@ public object FfiConverterTypeFfiError : FfiConverterRustBuffer<FfiException> {
     override fun allocationSize(value: FfiException): ULong {
         return when(value) {
             is FfiException.NoIdentity -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is FfiException.NeedsAccountKey -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
             )
@@ -7135,6 +7956,10 @@ public object FfiConverterTypeFfiError : FfiConverterRustBuffer<FfiException> {
                 4UL
             )
             is FfiException.SecureStorage -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is FfiException.UnknownDevice -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
             )
@@ -7227,128 +8052,136 @@ public object FfiConverterTypeFfiError : FfiConverterRustBuffer<FfiException> {
                 buf.putInt(1)
                 Unit
             }
-            is FfiException.IdentityExists -> {
+            is FfiException.NeedsAccountKey -> {
                 buf.putInt(2)
                 Unit
             }
-            is FfiException.InvalidPhrase -> {
+            is FfiException.IdentityExists -> {
                 buf.putInt(3)
                 Unit
             }
-            is FfiException.InvalidCard -> {
+            is FfiException.InvalidPhrase -> {
                 buf.putInt(4)
                 Unit
             }
-            is FfiException.OwnCard -> {
+            is FfiException.InvalidCard -> {
                 buf.putInt(5)
                 Unit
             }
-            is FfiException.UnknownContact -> {
+            is FfiException.OwnCard -> {
                 buf.putInt(6)
                 Unit
             }
-            is FfiException.EmptyMessage -> {
+            is FfiException.UnknownContact -> {
                 buf.putInt(7)
                 Unit
             }
-            is FfiException.MessageTooLong -> {
+            is FfiException.EmptyMessage -> {
                 buf.putInt(8)
                 Unit
             }
-            is FfiException.DirectNotAllowed -> {
+            is FfiException.MessageTooLong -> {
                 buf.putInt(9)
                 Unit
             }
-            is FfiException.UnknownMessage -> {
+            is FfiException.DirectNotAllowed -> {
                 buf.putInt(10)
                 Unit
             }
-            is FfiException.Storage -> {
+            is FfiException.UnknownMessage -> {
                 buf.putInt(11)
                 Unit
             }
-            is FfiException.SecureStorage -> {
+            is FfiException.Storage -> {
                 buf.putInt(12)
                 Unit
             }
-            is FfiException.Crypto -> {
+            is FfiException.SecureStorage -> {
                 buf.putInt(13)
                 Unit
             }
-            is FfiException.ShuttingDown -> {
+            is FfiException.UnknownDevice -> {
                 buf.putInt(14)
                 Unit
             }
-            is FfiException.Busy -> {
+            is FfiException.Crypto -> {
                 buf.putInt(15)
                 Unit
             }
-            is FfiException.InvalidArgument -> {
+            is FfiException.ShuttingDown -> {
                 buf.putInt(16)
                 Unit
             }
-            is FfiException.NoSuchGroup -> {
+            is FfiException.Busy -> {
                 buf.putInt(17)
                 Unit
             }
-            is FfiException.GroupRefused -> {
+            is FfiException.InvalidArgument -> {
                 buf.putInt(18)
                 Unit
             }
-            is FfiException.GroupFull -> {
+            is FfiException.NoSuchGroup -> {
                 buf.putInt(19)
                 Unit
             }
-            is FfiException.BadFile -> {
+            is FfiException.GroupRefused -> {
                 buf.putInt(20)
                 Unit
             }
-            is FfiException.BadChannel -> {
+            is FfiException.GroupFull -> {
                 buf.putInt(21)
                 Unit
             }
-            is FfiException.NotJoined -> {
+            is FfiException.BadFile -> {
                 buf.putInt(22)
                 Unit
             }
-            is FfiException.NoSignaling -> {
+            is FfiException.BadChannel -> {
                 buf.putInt(23)
                 Unit
             }
-            is FfiException.InvalidInvite -> {
+            is FfiException.NotJoined -> {
                 buf.putInt(24)
                 Unit
             }
-            is FfiException.InviteNotFound -> {
+            is FfiException.NoSignaling -> {
                 buf.putInt(25)
                 Unit
             }
-            is FfiException.OwnInvite -> {
+            is FfiException.InvalidInvite -> {
                 buf.putInt(26)
                 Unit
             }
-            is FfiException.StillInGroup -> {
+            is FfiException.InviteNotFound -> {
                 buf.putInt(27)
                 Unit
             }
-            is FfiException.NoRoute -> {
+            is FfiException.OwnInvite -> {
                 buf.putInt(28)
                 Unit
             }
-            is FfiException.BadReaction -> {
+            is FfiException.StillInGroup -> {
                 buf.putInt(29)
                 Unit
             }
-            is FfiException.WeakPassphrase -> {
+            is FfiException.NoRoute -> {
                 buf.putInt(30)
                 Unit
             }
-            is FfiException.BackupUnreadable -> {
+            is FfiException.BadReaction -> {
                 buf.putInt(31)
                 Unit
             }
-            is FfiException.BackupNotYours -> {
+            is FfiException.WeakPassphrase -> {
                 buf.putInt(32)
+                Unit
+            }
+            is FfiException.BackupUnreadable -> {
+                buf.putInt(33)
+                Unit
+            }
+            is FfiException.BackupNotYours -> {
+                buf.putInt(34)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -7516,6 +8349,40 @@ public object FfiConverterTypeLinkState : FfiConverterRustBuffer<LinkState>{
 
 
 
+/**
+ * The device's network, as the platform sees it.
+ */
+
+enum class NetworkKindDto {
+    
+    NONE,
+    UNMETERED,
+    METERED;
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeNetworkKindDto: FfiConverterRustBuffer<NetworkKindDto> {
+    override fun read(buf: ByteBuffer) = try {
+        NetworkKindDto.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: NetworkKindDto) = 4UL
+
+    override fun write(value: NetworkKindDto, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
 
 enum class PathKind {
     
@@ -7650,6 +8517,70 @@ public object FfiConverterTypeWipeStatus: FfiConverterRustBuffer<WipeStatus> {
 }
 
 
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalUByte: FfiConverterRustBuffer<kotlin.UByte?> {
+    override fun read(buf: ByteBuffer): kotlin.UByte? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterUByte.read(buf)
+    }
+
+    override fun allocationSize(value: kotlin.UByte?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterUByte.allocationSize(value)
+        }
+    }
+
+    override fun write(value: kotlin.UByte?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterUByte.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalLong: FfiConverterRustBuffer<kotlin.Long?> {
+    override fun read(buf: ByteBuffer): kotlin.Long? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterLong.read(buf)
+    }
+
+    override fun allocationSize(value: kotlin.Long?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterLong.allocationSize(value)
+        }
+    }
+
+    override fun write(value: kotlin.Long?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterLong.write(value, buf)
+        }
+    }
+}
 
 
 
@@ -7807,6 +8738,38 @@ public object FfiConverterOptionalTypeInviteDto: FfiConverterRustBuffer<InviteDt
         } else {
             buf.put(1)
             FfiConverterTypeInviteDto.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeLanPeerDto: FfiConverterRustBuffer<LanPeerDto?> {
+    override fun read(buf: ByteBuffer): LanPeerDto? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeLanPeerDto.read(buf)
+    }
+
+    override fun allocationSize(value: LanPeerDto?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeLanPeerDto.allocationSize(value)
+        }
+    }
+
+    override fun write(value: LanPeerDto?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeLanPeerDto.write(value, buf)
         }
     }
 }
@@ -8057,6 +9020,34 @@ public object FfiConverterSequenceTypeConversationDto: FfiConverterRustBuffer<Li
 /**
  * @suppress
  */
+public object FfiConverterSequenceTypeDeviceDto: FfiConverterRustBuffer<List<DeviceDto>> {
+    override fun read(buf: ByteBuffer): List<DeviceDto> {
+        val len = buf.getInt()
+        return List<DeviceDto>(len) {
+            FfiConverterTypeDeviceDto.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<DeviceDto>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeDeviceDto.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<DeviceDto>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeDeviceDto.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceTypeGroupDto: FfiConverterRustBuffer<List<GroupDto>> {
     override fun read(buf: ByteBuffer): List<GroupDto> {
         val len = buf.getInt()
@@ -8225,6 +9216,34 @@ public object FfiConverterSequenceTypeRequestDto: FfiConverterRustBuffer<List<Re
 /**
  * @suppress
  */
+public object FfiConverterSequenceTypeScheduledDto: FfiConverterRustBuffer<List<ScheduledDto>> {
+    override fun read(buf: ByteBuffer): List<ScheduledDto> {
+        val len = buf.getInt()
+        return List<ScheduledDto>(len) {
+            FfiConverterTypeScheduledDto.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<ScheduledDto>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeScheduledDto.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<ScheduledDto>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeScheduledDto.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceTypeSearchHitDto: FfiConverterRustBuffer<List<SearchHitDto>> {
     override fun read(buf: ByteBuffer): List<SearchHitDto> {
         val len = buf.getInt()
@@ -8302,6 +9321,18 @@ public object FfiConverterSequenceTypeWipeStepDto: FfiConverterRustBuffer<List<W
         }
     }
 }
+        /**
+         * The same background decision on every platform: the platform reports the device, the core decides.
+         */ fun `backgroundPlan`(`state`: DeviceStateDto): BackgroundPlanDto {
+            return FfiConverterTypeBackgroundPlanDto.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_func_background_plan(
+        FfiConverterTypeDeviceStateDto.lower(`state`),_status)
+}
+    )
+    }
+    
+
         /**
          * Version of the Rust core inside this build.
          */ fun `coreVersion`(): kotlin.String {

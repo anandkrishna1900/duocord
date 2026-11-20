@@ -227,6 +227,16 @@ data class ChatState(
     val requests: List<InviteRequest> = emptyList(),
     /** Groups from before the protocol update, which can be made again with one tap. */
     val legacyGroups: List<LegacyGroup> = emptyList(),
+    /** The account's devices, this one included, and whether this one holds the account key. */
+    val devices: List<DeviceInfo> = emptyList(),
+    val holdsAccountKey: Boolean = false,
+    /** Items from other devices that could not be recovered (that device was gone before they were sent on). */
+    val syncLost: Long = 0,
+    /** Messages written for later on this phone, soonest first. */
+    val scheduled: List<ScheduledMessage> = emptyList(),
+    /** What this phone holds (the usage screen). */
+    val usage: UsageInfo = UsageInfo(),
+    val deviceLink: DeviceLinkState? = null,
     val answer: InviteAnswer? = null,
     val channels: List<ChannelView> = emptyList(),
     /** Phones currently linked over the Bluetooth mesh (0 when the mesh is off). */
@@ -349,3 +359,34 @@ fun createOutgoingMessage(senderId: String, text: String, replyTo: ReplyRef? = n
 
 /** A group from before the protocol update: its name, the friends who will be in it again, and how many others were. */
 data class LegacyGroup(val oldId: String, val name: String, val memberNames: List<String>, val missing: Int)
+
+/** One device of the account. */
+data class DeviceInfo(
+    val id: String,
+    val name: String,
+    val addedAt: Long,
+    val thisDevice: Boolean,
+    /** When it last wrote anything this phone has, if ever. */
+    val lastSeen: Long? = null,
+    /** Not heard from for 90 days: "Remove or reconnect". */
+    val stale: Boolean = false,
+    /** A removal was asked for: when it takes effect, unless taken back. */
+    val removalAt: Long? = null,
+)
+
+/** A message waiting for its time (kept on this phone, sent by it). [target] is a friend's uid or a group's id. */
+data class ScheduledMessage(val id: String, val target: String, val group: Boolean, val text: String, val at: Long)
+
+/** What this phone holds: counts and the size of the files. */
+data class UsageInfo(val messages: Long = 0, val files: Long = 0, val fileBytes: Long = 0, val contacts: Long = 0, val syncEntries: Long = 0)
+
+/** Removing another device of the account: in 24 hours (any device can take it back), or now with the recovery phrase. */
+sealed interface DeviceRemoval {
+    val deviceId: String
+    data class Request(override val deviceId: String) : DeviceRemoval
+    data class Cancel(override val deviceId: String) : DeviceRemoval
+    data class Now(override val deviceId: String, val phrase: String) : DeviceRemoval
+}
+
+/** Linking a device, while it happens: "code" (compare [code], the 6 digits), then "done", "failed", "cancelled" or "expired". */
+data class DeviceLinkState(val stage: String, val code: String? = null, val name: String? = null)

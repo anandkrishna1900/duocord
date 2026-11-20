@@ -120,6 +120,33 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /* ---- linking another device of the account ---- */
+
+    fun startDeviceLink(onResult: (Result<String>) -> Unit) {
+        viewModelScope.launch { onResult(engine?.startDeviceLink() ?: Result.failure(IllegalStateException("Chat is not ready yet."))) }
+    }
+
+    fun joinDeviceLink(code: String, name: String, onResult: (Result<Unit>) -> Unit) {
+        viewModelScope.launch { onResult(engine?.joinDeviceLink(code, name) ?: Result.failure(IllegalStateException("Chat is not ready yet."))) }
+    }
+
+    fun confirmDeviceLink(accept: Boolean) {
+        viewModelScope.launch { engine?.confirmDeviceLink(accept) }
+    }
+
+    fun cancelDeviceLink() {
+        engine?.cancelDeviceLink()
+    }
+
+    fun deviceRemoval(action: com.duochat.app.data.DeviceRemoval, onResult: (Result<Unit>) -> Unit) {
+        viewModelScope.launch { onResult(engine?.deviceRemoval(action) ?: Result.failure(IllegalStateException("Chat is not ready yet."))) }
+    }
+
+    /** This phone was linked to an account on another device: start again as that account. */
+    fun onDeviceLinked() {
+        startEngine()
+    }
+
     /** (Re)starts the chat engine. Also used by the "Try again" button. */
     fun startEngine() {
         stopEngine()
@@ -267,6 +294,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun send(conversationId: String, text: String, replyToId: String?, onResult: (Result<Unit>) -> Unit) =
         withEngine(onResult) { it.send(conversationId, text, replyToId) }
+
+    fun scheduleMessage(conversationId: String, text: String, at: Long, onResult: (Result<Unit>) -> Unit) =
+        withEngine(onResult) { it.scheduleMessage(conversationId, text, at) }
+
+    fun cancelScheduled(id: String) {
+        viewModelScope.launch { engine?.cancelScheduled(id) }
+    }
 
     fun sendFile(conversationId: String, name: String, mime: String, bytes: ByteArray, replyToId: String?, onResult: (Result<Unit>) -> Unit) =
         withEngine(onResult) { it.sendFile(conversationId, name, mime, bytes, replyToId) }

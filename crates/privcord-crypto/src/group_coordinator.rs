@@ -6,9 +6,12 @@
 
 use crate::{
     card::ContactCard,
+    devices::Author,
     error::CryptoError,
-    group::{sign_group_event, AddStatus, EventType, GroupEvent, GroupLog, GroupState, NewEvent},
-    identity::{uid_from_keys, Identity},
+    group::{
+        sign_group_event_as, AddStatus, EventType, GroupEvent, GroupLog, GroupState, NewEvent,
+    },
+    identity::uid_from_keys,
 };
 use privcord_domain::{
     blob::SealedBlob,
@@ -313,7 +316,7 @@ impl GroupCoordinator {
 
     pub fn create_group(
         &mut self,
-        identity: &Identity,
+        author: &Author<'_>,
         name: &str,
         initial_members: &[ContactCard],
         now_ms: i64,
@@ -321,8 +324,8 @@ impl GroupCoordinator {
         if initial_members.len() + 1 > MAX_GROUP_MEMBERS {
             return Err(GroupError::TooManyMembers);
         }
-        let create = sign_group_event(
-            identity,
+        let create = sign_group_event_as(
+            author,
             NewEvent {
                 group_id: String::new(),
                 kind: EventType::Create,
@@ -342,7 +345,7 @@ impl GroupCoordinator {
         result.changed.push(group_id.clone());
         result.joined.push(group_id.clone());
         for card in initial_members {
-            let r = self.add_member(identity, &group_id, card, now_ms)?;
+            let r = self.add_member(author, &group_id, card, now_ms)?;
             result.outgoing.extend(r.outgoing);
         }
         Ok((group_id, result))
@@ -351,7 +354,7 @@ impl GroupCoordinator {
     #[allow(clippy::too_many_arguments)]
     fn author(
         &mut self,
-        identity: &Identity,
+        author: &Author<'_>,
         group_id: &str,
         kind: EventType,
         target: Option<String>,
@@ -364,14 +367,14 @@ impl GroupCoordinator {
         if !log.state().is_some_and(|s| s.members.contains_key(&own)) {
             return Err(GroupError::NotMember);
         }
-        let event = sign_group_event(
-            identity,
+        let event = sign_group_event_as(
+            author,
             NewEvent {
                 group_id: group_id.to_owned(),
                 kind,
                 actor: own.clone(),
                 ts: now_ms,
-                deps: log.heads(),
+                deps: log.build_on(),
                 target: target.clone(),
                 card,
                 name,
@@ -408,7 +411,7 @@ impl GroupCoordinator {
 
     pub fn add_member(
         &mut self,
-        identity: &Identity,
+        author: &Author<'_>,
         group_id: &str,
         card: &ContactCard,
         now_ms: i64,
@@ -421,7 +424,7 @@ impl GroupCoordinator {
             return Err(GroupError::Full);
         }
         self.author(
-            identity,
+            author,
             group_id,
             EventType::Add,
             Some(uid),
@@ -433,13 +436,13 @@ impl GroupCoordinator {
 
     pub fn remove_member(
         &mut self,
-        identity: &Identity,
+        author: &Author<'_>,
         group_id: &str,
         uid: &str,
         now_ms: i64,
     ) -> Result<GroupResult, GroupError> {
         self.author(
-            identity,
+            author,
             group_id,
             EventType::Remove,
             Some(uid.to_owned()),
@@ -451,13 +454,13 @@ impl GroupCoordinator {
 
     pub fn leave(
         &mut self,
-        identity: &Identity,
+        author: &Author<'_>,
         group_id: &str,
         now_ms: i64,
     ) -> Result<GroupResult, GroupError> {
         let own = self.own_uid.clone();
         self.author(
-            identity,
+            author,
             group_id,
             EventType::Remove,
             Some(own),
@@ -469,13 +472,13 @@ impl GroupCoordinator {
 
     pub fn rename(
         &mut self,
-        identity: &Identity,
+        author: &Author<'_>,
         group_id: &str,
         name: &str,
         now_ms: i64,
     ) -> Result<GroupResult, GroupError> {
         self.author(
-            identity,
+            author,
             group_id,
             EventType::Rename,
             None,

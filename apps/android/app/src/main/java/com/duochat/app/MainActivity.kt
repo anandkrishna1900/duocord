@@ -66,6 +66,17 @@ class MainActivity : FragmentActivity() {
             }
         }
     }
+
+    // On screen or not is one of the inputs of the shared background policy (how hard Bluetooth scans, for one).
+    override fun onStart() {
+        super.onStart()
+        com.duochat.app.engine.BackgroundPolicy.setForeground(true)
+    }
+
+    override fun onStop() {
+        com.duochat.app.engine.BackgroundPolicy.setForeground(false)
+        super.onStop()
+    }
 }
 
 // Where the user is, as plain text so it survives process death and rotation:
@@ -184,7 +195,13 @@ private fun RootScreen(viewModel: AppViewModel) {
 
         shown == "loading" -> LoadingScreen("Opening your encrypted local data…")
 
-        shown == "setup" -> OnboardingScreen(onCreate = viewModel::createIdentity)
+        shown == "setup" -> OnboardingScreen(
+            onCreate = viewModel::createIdentity,
+            state = state,
+            onJoinDevice = viewModel::joinDeviceLink,
+            onCancelDeviceLink = viewModel::cancelDeviceLink,
+            onDeviceLinked = viewModel::onDeviceLinked,
+        )
 
         shown == "error" -> FatalScreen(
             message = state?.error ?: "The chat engine could not start.",
@@ -244,6 +261,8 @@ private fun RootScreen(viewModel: AppViewModel) {
                         muted = openChatId in settings.mutedChats,
                         onBack = back,
                         onSend = { text, replyToId, done -> viewModel.send(openChatId, text, replyToId, done) },
+                        onSchedule = { text, at, done -> viewModel.scheduleMessage(openChatId, text, at, done) },
+                        onCancelScheduled = viewModel::cancelScheduled,
                         onSendFile = { name, mime, bytes, replyToId, done -> viewModel.sendFile(openChatId, name, mime, bytes, replyToId, done) },
                         loadFile = { id -> viewModel.getFile(id) },
                         onRetry = viewModel::retry,
@@ -327,6 +346,10 @@ private fun RootScreen(viewModel: AppViewModel) {
                     onBluetoothPermissionResult = viewModel::refreshBluetooth,
                     onExportBackup = viewModel::exportBackup,
                     onImportBackup = viewModel::importBackup,
+                    onStartDeviceLink = viewModel::startDeviceLink,
+                    onConfirmDeviceLink = viewModel::confirmDeviceLink,
+                    onCancelDeviceLink = viewModel::cancelDeviceLink,
+                    onDeviceRemoval = viewModel::deviceRemoval,
                 )
             }
 

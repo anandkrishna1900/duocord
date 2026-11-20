@@ -167,6 +167,37 @@ pub enum Op {
         limit: usize,
     },
     ExportBackup(String),
+    StartDeviceLink,
+    JoinDeviceLink {
+        code: String,
+        name: String,
+    },
+    ConfirmDeviceLink(bool),
+    CancelDeviceLink,
+    /// Ask for a device of the account to be removed (in 24 hours, unless taken back).
+    RequestDeviceRemoval(String),
+    /// Take back a removal asked for.
+    CancelDeviceRemoval(String),
+    /// Remove a device at once, with the recovery phrase.
+    RemoveDeviceNow {
+        device: String,
+        phrase: String,
+        passphrase: String,
+    },
+    /// Write a message to go out later.
+    ScheduleMessage {
+        target: String,
+        group: bool,
+        text: String,
+        at: i64,
+    },
+    CancelScheduled(String),
+    /// Whether bulk work (media between devices) may run now.
+    SetBulkAllowed(bool),
+    /// The local-network beacon to send, saying this device listens on this port.
+    LanBeacon(u16),
+    /// A local-network beacon heard.
+    LanBeaconSeen(String),
     ImportBackup {
         text: String,
         passphrase: String,
@@ -187,7 +218,10 @@ pub enum Op {
 #[derive(Debug)]
 pub enum Answer {
     Done,
-    Invite { words: String, expires_at: i64 },
+    Invite {
+        words: String,
+        expires_at: i64,
+    },
     Preview(Option<InvitePreview>),
     Person(UserId),
     Report(Option<KillSwitchReport>),
@@ -195,6 +229,9 @@ pub enum Answer {
     Text(String),
     Restored(crate::core::RestoreSummary),
     Bytes(Vec<u8>),
+    /// Another device of ours heard on the local network (or `None`).
+    Lan(Option<crate::core::lan::LanPeer>),
+    Maybe(Option<String>),
 }
 
 /// A channel operation. Returns the channel's normalised name or the new message's id, else an empty string.
@@ -341,6 +378,43 @@ fn pump(core: &mut Core, cmd: Command) -> bool {
                     .map(|()| Answer::Done),
                 Op::Search { query, limit } => Ok(Answer::Hits(core.search(&query, limit))),
                 Op::ExportBackup(p) => core.export_backup(&p).map(Answer::Text),
+                Op::StartDeviceLink => core.start_device_link().map(Answer::Text),
+                Op::JoinDeviceLink { code, name } => {
+                    core.join_device_link(&code, &name).map(|()| Answer::Done)
+                }
+                Op::ConfirmDeviceLink(accept) => {
+                    core.confirm_device_link(accept).map(|()| Answer::Done)
+                }
+                Op::CancelDeviceLink => {
+                    core.cancel_device_link();
+                    Ok(Answer::Done)
+                }
+                Op::RequestDeviceRemoval(d) => {
+                    core.request_device_removal(&d).map(|()| Answer::Done)
+                }
+                Op::CancelDeviceRemoval(d) => core.cancel_device_removal(&d).map(|()| Answer::Done),
+                Op::RemoveDeviceNow {
+                    device,
+                    phrase,
+                    passphrase,
+                } => core
+                    .remove_device_now(&device, &phrase, &passphrase)
+                    .map(|()| Answer::Done),
+                Op::ScheduleMessage {
+                    target,
+                    group,
+                    text,
+                    at,
+                } => core
+                    .schedule_message(&target, group, &text, at)
+                    .map(|_| Answer::Done),
+                Op::CancelScheduled(id) => core.cancel_scheduled(&id).map(|()| Answer::Done),
+                Op::LanBeacon(port) => Ok(Answer::Maybe(core.lan_beacon(port))),
+                Op::LanBeaconSeen(text) => Ok(Answer::Lan(core.lan_beacon_seen(&text))),
+                Op::SetBulkAllowed(allowed) => {
+                    core.set_bulk_allowed(allowed);
+                    Ok(Answer::Done)
+                }
                 Op::ImportBackup { text, passphrase } => {
                     core.import_backup(&text, &passphrase).map(Answer::Restored)
                 }

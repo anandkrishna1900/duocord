@@ -4,11 +4,11 @@
 use crate::{
     aead,
     card::{Contact, ContactCard},
+    devices::{AccountKeys, Author},
     error::CryptoError,
-    identity::Identity,
     kdf::{hkdf_sha256, sha256},
     rng::{random_array, Entropy},
-    seal::{placeholder_epk, sign_blob, verify_blob_signature},
+    seal::{placeholder_epk, signed_by, signed_part},
 };
 use privcord_domain::{blob::SealedBlob, codec, limits::MAX_CHANNEL_TEXT, text::js_trim};
 use serde_json::{json, Value};
@@ -58,10 +58,11 @@ pub struct ChannelMessage {
     pub contact: Contact,
 }
 
+/// `card` is the poster's account card; `author` signs (the account key, or this device with the account's list).
 pub fn seal_channel_message(
     channel: &ChannelKeys,
-    identity: &Identity,
-    name: Option<&str>,
+    author: &Author<'_>,
+    card: &ContactCard,
     text: &str,
     at: i64,
     entropy: &mut dyn Entropy,
@@ -70,10 +71,10 @@ pub fn seal_channel_message(
     if text.is_empty() {
         return Err(CryptoError::EmptyMessage);
     }
-    let card = ContactCard::of(identity, name)?;
-    let uid = identity.uid()?;
+    let uid = author.uid;
     let iv: [u8; 12] = random_array(entropy)?;
-    let body = json!({ "c": channel.name, "t": text, "at": at, "card": card.encode()? });
+    let body =
+        author.payload(&json!({ "c": channel.name, "t": text, "at": at, "card": card.encode()? }));
     let ct = aead::encrypt(
         &*channel.key,
         &iv,
@@ -91,7 +92,7 @@ pub fn seal_channel_message(
         kem: None,
         key: None,
     };
-    blob.sig = sign_blob(identity, &blob)?;
+    blob.sig = codec::encode(&author.sign(&signed_part(&blob)?));
     Ok(blob)
 }
 
@@ -121,9 +122,16 @@ pub fn open_channel_message(channel: &ChannelKeys, blob: &Value) -> Option<Chann
         return None;
     }
     let contact = ContactCard::decode(body.get("card")?.as_str()?)?;
-    if contact.uid.as_str() != blob.from || !verify_blob_signature(&blob, &contact.card.sign) {
+    if contact.uid.as_str() != blob.from {
         return None;
     }
+    let keys = AccountKeys::new(
+        contact.uid.clone(),
+        contact.card.sign.clone(),
+        contact.card.dh.clone(),
+        None,
+    );
+    signed_by(&blob, &keys, body.clone())?;
     Some(ChannelMessage {
         channel: channel.name.clone(),
         text: text.to_owned(),

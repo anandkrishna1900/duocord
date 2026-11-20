@@ -86,7 +86,12 @@ fun SettingsDialog(
     onBluetoothPermissionResult: () -> Unit = {},
     onExportBackup: (String, (Result<String>) -> Unit) -> Unit = { _, _ -> },
     onImportBackup: (String, String, (Result<String>) -> Unit) -> Unit = { _, _, _ -> },
+    onStartDeviceLink: ((Result<String>) -> Unit) -> Unit = { it(Result.failure(IllegalStateException("Not available."))) },
+    onConfirmDeviceLink: (Boolean) -> Unit = {},
+    onCancelDeviceLink: () -> Unit = {},
+    onDeviceRemoval: (com.duochat.app.data.DeviceRemoval, (Result<Unit>) -> Unit) -> Unit = { _, done -> done(Result.failure(IllegalStateException("Not available."))) },
 ) {
+    var linking by remember { mutableStateOf(false) }
     var displayName by remember { mutableStateOf(settings.displayName) }
     var nameStatus by remember { mutableStateOf<String?>(null) }
     var advanced by remember { mutableStateOf(false) }
@@ -183,6 +188,20 @@ fun SettingsDialog(
                 nameStatus?.let {
                     Spacer(Modifier.height(6.dp))
                     Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+
+                Spacer(Modifier.height(20.dp))
+
+                SectionTitle("Devices")
+                DevicesSection(state, onLinkNew = { linking = true }, onRemoval = onDeviceRemoval)
+                if (linking) {
+                    LinkHostDialog(
+                        state = state,
+                        onStart = onStartDeviceLink,
+                        onConfirm = onConfirmDeviceLink,
+                        onCancel = onCancelDeviceLink,
+                        onClose = { linking = false },
+                    )
                 }
 
                 Spacer(Modifier.height(20.dp))
@@ -716,6 +735,12 @@ SectionTitle("About DuoCord")
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Spacer(Modifier.height(6.dp))
+                Text("On this phone", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                DetailRow("Messages", state.usage.messages.toString())
+                DetailRow("Friends", state.usage.contacts.toString())
+                DetailRow("Files and photos", "${state.usage.files} · " + android.text.format.Formatter.formatShortFileSize(androidx.compose.ui.platform.LocalContext.current, state.usage.fileBytes))
+                if (state.usage.syncEntries > 0) DetailRow("Kept for syncing your devices", "${state.usage.syncEntries} entries")
+                Spacer(Modifier.height(10.dp))
                 DetailRow("Version", AppConfig.APP_VERSION)
                 DetailRow("Platform", "Android · Kotlin/Compose")
                 DetailRow("Rust core", com.duochat.app.RustCore.status)

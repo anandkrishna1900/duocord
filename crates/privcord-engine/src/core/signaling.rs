@@ -37,7 +37,8 @@ const MESH_MAX_ROUNDS_FILE: u32 = 3;
 
 #[derive(Default)]
 pub(super) struct SealedState {
-    subscribed: bool,
+    /// The mailboxes we listen on: the account's (with its key) and this device's (once the account has several).
+    subscribed: Vec<String>,
     /// (message, recipient) pairs already handed to a signaling service.
     relayed: HashSet<(MessageId, UserId)>,
     /// (message, member) pairs handed to other members to pass on, and when.
@@ -53,6 +54,19 @@ impl Core {
         } else {
             privcord_domain::message::TransportKind::P2p
         }
+    }
+
+    /// The mailboxes sealed blobs for us arrive on: the account's (where an install holding its key answers; a linked
+    /// device has its own and the account's is no use to it) and this device's, once the account has several devices.
+    pub(super) fn own_mailboxes(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        if let (Some(uid), true) = (&self.uid, self.identity.is_some()) {
+            out.push(mailbox_for(uid.as_str()));
+        }
+        if let Some(a) = self.own_address().filter(|a| Self::device_of(a).is_some()) {
+            out.push(mailbox_for(a.as_str()));
+        }
+        out
     }
 
     /// Acknowledge a delivered message: over the link if it came over the link, sealed through the service if not.
@@ -77,21 +91,18 @@ impl Core {
         peer: &UserId,
         payload: &Value,
     ) -> Result<SealedBlob, ErrorCode> {
-        let dh = self
-            .contacts
-            .get(peer)
-            .ok_or(ErrorCode::UnknownContact)?
-            .contact
-            .card
-            .dh
-            .clone();
+        let (_, dh) = self
+            .keys_of_address(peer)
+            .ok_or(ErrorCode::UnknownContact)?;
         // v2 to one of their keys once we have them; v1 only before the first link (see core::keys).
-        self.seal_for(peer, payload, &dh)
+        let mut payload = payload.clone();
+        self.mark_devices(&mut payload);
+        self.seal_for(peer, &payload, &dh)
     }
 
     /// Seal `payload` to a contact and send it: through signaling if it is up, else (for live signaling only) through
     /// mutual contacts.
-    fn put_sealed(
+    pub(super) fn put_sealed(
         &mut self,
         peer: &UserId,
         payload: &Value,
@@ -175,7 +186,7 @@ impl Core {
         let Some(GroupFrame::RelayBlob { blob, hops }) = GroupFrame::parse(frame) else {
             return;
         };
-        if Some(blob.to.as_str()) == self.uid.as_ref().map(UserId::as_str) {
+        if self.is_own_address(&blob.to) {
             self.handle_own_blob(*blob);
             return;
         }
@@ -201,25 +212,43 @@ impl Core {
         {
             return;
         }
-        let (Ok(from), Some(own), true) = (
+        let (Ok(person), Ok(own)) = (
             UserId::new(blob.from.as_str()),
-            self.uid.clone(),
-            self.identity.is_some(),
+            UserId::new(blob.to.as_str()),
         ) else {
             return;
         };
-        let Some(sign) = self
-            .contacts
-            .get(&from)
-            .map(|c| c.contact.card.sign.clone())
-        else {
+        if !self.is_own_address(own.as_str()) {
+            return;
+        }
+        let Some(keys) = self.contact_keys(&person) else {
             // Not a contact: the only thing a stranger may send is a friend request after adding us from our card.
-            self.on_friend_request(&blob);
+            if self.uid.as_ref() == Some(&own) {
+                self.on_friend_request(&blob);
+            }
             return;
         };
-        let Some(Value::Object(payload)) = self.open_from_contact(&blob, &from, &sign) else {
+        let Some((Value::Object(payload), from)) = self.open_from_contact(&blob, &keys) else {
             return;
         };
+        if !self.known_address(&from) {
+            return;
+        }
+        self.note_devices(&from, &Value::Object(payload.clone()));
+        // From another device of ours: only connection setup and keys (sync and files have their own paths).
+        if self.is_own_person(&from)
+            && !matches!(
+                payload.get("t").and_then(Value::as_str),
+                Some("ready" | "offer" | "answer" | "keys")
+            )
+        {
+            return;
+        }
+        // They reached us at `own`: that is who we are on this route.
+        self.peers
+            .entry(from.clone())
+            .or_insert_with(super::Peer::offline)
+            .as_me = Some(own.clone());
         let text = |k: &str| payload.get(k).and_then(Value::as_str);
         match text("t") {
             Some("ready") => {
@@ -302,7 +331,7 @@ impl Core {
                         json!({ "v": 1, "kind": "gmsg", "groupId": g, "messageId": id, "text": body, "clientCreatedAt": at })
                     }
                     None => {
-                        json!({ "v": 1, "kind": "message", "messageId": id, "clientMessageId": id, "senderId": from.as_str(), "text": body, "clientCreatedAt": at })
+                        json!({ "v": 1, "kind": "message", "messageId": id, "clientMessageId": id, "senderId": person.as_str(), "text": body, "clientCreatedAt": at })
                     }
                 };
                 self.relay_inbound = true;
@@ -356,6 +385,8 @@ impl Core {
                     _ => {}
                 }
             }
+            Some("devices") => self.on_device_notice(&from, &Value::Object(payload.clone())),
+            Some("keys") => self.take_keys(&from, &Value::Object(payload.clone())),
             Some("ack") => {
                 if let Some(id) = text("id") {
                     self.on_ack(&from, &json!({ "messageId": id, "state": "DELIVERED" }));
@@ -380,7 +411,7 @@ impl Core {
             .outbox
             .iter()
             .filter(|o| {
-                !self.peers.get(&o.recipient).is_some_and(super::Peer::ready)
+                !self.person_ready(&o.recipient)
                     && self
                         .sealed
                         .meshed
@@ -419,9 +450,8 @@ impl Core {
                 .unwrap_or_default()
                 .iter()
                 .filter_map(|u| UserId::new(u.as_str()).ok())
-                .filter(|u| {
-                    *u != entry.recipient && self.peers.get(u).is_some_and(super::Peer::ready)
-                })
+                .filter(|u| *u != entry.recipient)
+                .filter_map(|u| self.ready_addresses(&u).into_iter().next())
                 .take(2)
                 .collect();
             if helpers.is_empty() {
@@ -444,23 +474,26 @@ impl Core {
                     .collect()
             };
             let mut sent = true;
-            for payload in payloads {
-                let Ok(blob) = self.seal_to(&entry.recipient, &payload) else {
-                    sent = false;
-                    break;
-                };
-                let frame = GroupFrame::RelayBlob {
-                    blob: Box::new(blob),
-                    hops: 1,
-                }
-                .to_value();
-                let mut any = false;
-                for h in &helpers {
-                    any |= self.send_secure(h, &frame);
-                }
-                if !any {
-                    sent = false;
-                    break;
+            let targets = self.addresses_of(&entry.recipient);
+            'payloads: for payload in payloads {
+                for target in &targets {
+                    let Ok(blob) = self.seal_to(target, &payload) else {
+                        sent = false;
+                        break 'payloads;
+                    };
+                    let frame = GroupFrame::RelayBlob {
+                        blob: Box::new(blob),
+                        hops: 1,
+                    }
+                    .to_value();
+                    let mut any = false;
+                    for h in &helpers {
+                        any |= self.send_secure(h, &frame);
+                    }
+                    if !any {
+                        sent = false;
+                        break 'payloads;
+                    }
                 }
             }
             if sent {
@@ -480,20 +513,18 @@ impl Core {
     pub(super) fn tick_sealed(&mut self) {
         let available = self.ports.transport.signal_available();
         if !available {
-            self.sealed.subscribed = false;
+            self.sealed.subscribed.clear();
             return;
         }
         let Some(uid) = self.uid.clone() else {
             return;
         };
-        if !self.sealed.subscribed
-            && self
-                .ports
-                .transport
-                .signal_subscribe(&mailbox_for(uid.as_str()))
-                .is_ok()
-        {
-            self.sealed.subscribed = true;
+        for m in self.own_mailboxes() {
+            if !self.sealed.subscribed.contains(&m)
+                && self.ports.transport.signal_subscribe(&m).is_ok()
+            {
+                self.sealed.subscribed.push(m);
+            }
         }
         if !matches!(self.ports.storage.kv(super::invites::KV_STORE_FORWARD), Ok(Some(v)) if v == b"1")
         {
@@ -503,7 +534,7 @@ impl Core {
             .outbox
             .iter()
             .filter(|o| {
-                !self.peers.get(&o.recipient).is_some_and(super::Peer::ready)
+                !self.person_ready(&o.recipient)
                     && !self
                         .sealed
                         .relayed
@@ -527,10 +558,14 @@ impl Core {
             let was_queued = row.message.delivery_state == DeliveryState::Queued;
             let key = (entry.message_id.clone(), entry.recipient.clone());
             self.sealed.relayed.insert(key.clone());
-            if self
-                .put_sealed(&entry.recipient, &payload, PutKind::Msg, RELAY_TTL_SEC)
-                .is_err()
-            {
+            // A copy for each of their devices: the first receipt from any of them counts.
+            let mut put = false;
+            for addr in self.addresses_of(&entry.recipient) {
+                put |= self
+                    .put_sealed(&addr, &payload, PutKind::Msg, RELAY_TTL_SEC)
+                    .is_ok();
+            }
+            if !put {
                 self.sealed.relayed.remove(&key);
                 continue;
             }

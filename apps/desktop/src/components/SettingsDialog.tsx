@@ -6,20 +6,67 @@ import type { AppSettings, ThemeMode } from '../lib/settings';
 import { ACCENTS } from '../lib/settings';
 import { THEMES, themeVars } from '../lib/themes';
 import { ensureNotificationPermission } from '../lib/notifications';
-import { config } from '../config';
+import { config, isTauri } from '../config';
 import { Modal } from './Modal';
 import { NetworkSettings } from './NetworkSettings';
+import { DeviceLinkDialog } from './DeviceLinkDialog';
+import { DeviceRow } from './DeviceRow';
+import { AutoBackupControl } from './AutoBackupControl';
+import { formatBytes } from '../lib/format';
 import { AlertIcon, CheckIcon, KeyIcon, TrashIcon } from './Icons';
 
-export type SettingsSection = 'profile' | 'appearance' | 'connection' | 'security' | 'about';
+export type SettingsSection = 'profile' | 'devices' | 'appearance' | 'connection' | 'security' | 'about';
 
 const SECTIONS: Array<{ id: SettingsSection; label: string }> = [
   { id: 'profile', label: 'Profile' },
+  { id: 'devices', label: 'Devices' },
   { id: 'appearance', label: 'Look' },
   { id: 'connection', label: 'Connection' },
   { id: 'security', label: 'Security' },
   { id: 'about', label: 'About' },
 ];
+
+interface BackgroundSettings {
+  closeToTray: boolean;
+  startAtLogin: boolean;
+}
+
+/** Desktop only: keep running in the tray when the window closes, and start at sign-in (in the tray). */
+function BackgroundToggles() {
+  const [value, setValue] = useState<BackgroundSettings | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    void import('@tauri-apps/api/core')
+      .then(({ invoke }) => invoke<BackgroundSettings>('background_settings'))
+      .then(setValue)
+      .catch(() => setValue(null));
+  }, []);
+  if (!value) return null;
+  const change = (command: string, key: keyof BackgroundSettings, on: boolean) => {
+    setError(null);
+    void import('@tauri-apps/api/core')
+      .then(({ invoke }) => invoke(command, { on }))
+      .then(() => setValue({ ...value, [key]: on }))
+      .catch((e: unknown) => setError(String((e as Error)?.message ?? e)));
+  };
+  return (
+    <>
+      <Toggle
+        label="Keep running in the tray"
+        description="Closing the window keeps DuoCord running in the tray, so messages still arrive and notify you. Quit from the tray icon."
+        checked={value.closeToTray}
+        onChange={(on) => change('set_close_to_tray', 'closeToTray', on)}
+      />
+      <Toggle
+        label="Start when you sign in"
+        description="Starts DuoCord in the tray when you sign in to your computer."
+        checked={value.startAtLogin}
+        onChange={(on) => change('set_start_at_login', 'startAtLogin', on)}
+      />
+      {error ? <p className="small" role="alert">{error}</p> : null}
+    </>
+  );
+}
 
 function Toggle({
   checked,
@@ -138,6 +185,7 @@ function BackupControl({ engine }: { engine: ChatEngineApi | null }) {
           {message.text}
         </p>
       ) : null}
+      {isTauri() ? <AutoBackupControl pass={pass} /> : null}
     </div>
   );
 }
@@ -227,6 +275,7 @@ export function SettingsDialog({
   const [section, setSection] = useState<SettingsSection>(initialSection);
   const [displayName, setDisplayName] = useState(settings.displayName);
   const [saved, setSaved] = useState(false);
+  const [linking, setLinking] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -290,6 +339,40 @@ export function SettingsDialog({
             ) : (
               <p className="muted small">Shown on your invite. There are no accounts: your identity lives on this device.</p>
             )}
+          </section>
+        ) : null}
+
+        {section === 'devices' ? (
+          <section className="settings-section">
+            {state.devices && state.devices.length > 0 ? (
+              <ul className="device-list" aria-label="Your devices">
+                {state.devices.map((d) => (
+                  <DeviceRow key={d.id} device={d} engine={engine} />
+                ))}
+              </ul>
+            ) : (
+              <p className="muted small">Only this device so far.</p>
+            )}
+            {state.syncLost ? (
+              <p className="muted small">
+                {state.syncLost === 1
+                  ? '1 item from another device could not be recovered (that device was gone before it was sent on).'
+                  : `${state.syncLost} items from another device could not be recovered (that device was gone before they were sent on).`}
+              </p>
+            ) : null}
+            {engine?.startDeviceLink && state.holdsAccountKey ? (
+              <div className="button-row">
+                <button type="button" className="button primary" onClick={() => setLinking(true)}>
+                  Link a new device
+                </button>
+              </div>
+            ) : null}
+            <p className="muted small">
+              {state.holdsAccountKey
+                ? 'Your chats stay in step on every device you link, with no server in between. Your account key stays on this device.'
+                : 'This device was linked to your account. Linking more devices is done from the device that holds your account key.'}
+            </p>
+            <DeviceLinkDialog open={linking} mode="host" engine={engine} state={state} onClose={() => setLinking(false)} />
           </section>
         ) : null}
 
@@ -370,7 +453,7 @@ export function SettingsDialog({
             )}
             <Toggle
               label="Notifications"
-              description="Show a system notification for new messages while the app is open."
+              description="Show a system notification for new messages while DuoCord is running, also from the tray."
               checked={settings.notificationsEnabled}
               onChange={(value) => {
                 updateSettings({ notificationsEnabled: value });
@@ -384,6 +467,7 @@ export function SettingsDialog({
               onChange={(value) => updateSettings({ notificationPreviews: value })}
               disabled={!settings.notificationsEnabled}
             />
+            {isTauri() ? <BackgroundToggles /> : null}
           </section>
         ) : null}
 
@@ -491,6 +575,34 @@ export function SettingsDialog({
 
         {section === 'about' ? (
           <section className="settings-section">
+            {state.usage ? (
+              <div className="card-box">
+                <strong>On this device</strong>
+                <ul className="usage-list">
+                  <li>
+                    <span>Messages</span>
+                    <span>{state.usage.messages.toLocaleString()}</span>
+                  </li>
+                  <li>
+                    <span>Friends</span>
+                    <span>{state.usage.contacts.toLocaleString()}</span>
+                  </li>
+                  <li>
+                    <span>Files and photos</span>
+                    <span>
+                      {state.usage.files.toLocaleString()} · {formatBytes(state.usage.fileBytes)}
+                    </span>
+                  </li>
+                  {state.usage.syncEntries > 0 ? (
+                    <li>
+                      <span>Kept for syncing your devices</span>
+                      <span>{state.usage.syncEntries.toLocaleString()} entries</span>
+                    </li>
+                  ) : null}
+                </ul>
+                <p className="muted small">Everything stays on this device, encrypted. Deleting a chat frees its files.</p>
+              </div>
+            ) : null}
             <p>
               <strong>DuoCord</strong> · version {config.appVersion}
             </p>

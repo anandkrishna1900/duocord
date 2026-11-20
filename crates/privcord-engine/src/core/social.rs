@@ -2,7 +2,7 @@
 //!
 //! None of this can be enforced against a modified app: a receiver who wants to keep a message can. The apps say so.
 
-use super::{Core, Peer, StorageOp};
+use super::{Core, StorageOp};
 use crate::{
     api::{ConversationSummary, DeliveryDetail, EngineEvent, LastMessage},
     error::ErrorCode,
@@ -92,8 +92,8 @@ impl Core {
         }
         self.apply_tombstone(id)?;
         for peer in self.conversation_others(&conversation) {
-            if self.peers.get(&peer).is_some_and(Peer::ready) {
-                self.send_secure(&peer, &delete_frame(id));
+            for addr in self.ready_addresses(&peer) {
+                self.send_secure(&addr, &delete_frame(id));
             }
         }
         Ok(())
@@ -176,8 +176,8 @@ impl Core {
             != Some(emoji);
         self.set_reaction(id, &own, on.then_some(emoji))?;
         for peer in self.conversation_others(&conversation) {
-            if self.peers.get(&peer).is_some_and(Peer::ready) {
-                self.send_secure(&peer, &react_frame(id, emoji, on));
+            for addr in self.ready_addresses(&peer) {
+                self.send_secure(&addr, &react_frame(id, emoji, on));
             }
         }
         Ok(())
@@ -265,13 +265,14 @@ impl Core {
         let Some(own) = self.uid.clone() else {
             return;
         };
+        let who = Self::person_of(peer);
         let member_of: Vec<String> = self
             .groups
             .as_ref()
             .map(|c| {
                 c.my_groups()
                     .iter()
-                    .filter(|s| s.members.contains_key(peer.as_str()))
+                    .filter(|s| s.members.contains_key(who.as_str()))
                     .map(|s| s.group_id.clone())
                     .collect()
             })
@@ -279,7 +280,7 @@ impl Core {
         let mut frames: Vec<Value> = Vec::new();
         for (id, m) in &self.messages {
             let relevant = match &m.conversation {
-                ConversationId::Direct(p) => p == peer,
+                ConversationId::Direct(p) => p == &who,
                 ConversationId::Group(g) => member_of.iter().any(|x| x == g.as_str()),
                 ConversationId::Channel(_) => false,
             };

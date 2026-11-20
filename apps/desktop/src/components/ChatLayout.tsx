@@ -455,6 +455,9 @@ export function ChatLayout({
                 disabled={state.phase !== 'ready'}
                 placeholder={group ? `Message ${group.name}` : `Message ${current.name}`}
                 isChannel={channel !== null}
+                onSchedule={engine?.scheduleMessage ? (text, at) => engine.scheduleMessage!(selected!, text, at) : undefined}
+                scheduled={(state.scheduled ?? []).filter((m) => m.target === selected)}
+                onCancelScheduled={(id) => void engine?.cancelScheduled?.(id)}
                 reply={replying ? { name: replying.own ? 'yourself' : replying.senderName, preview: replying.text } : null}
                 onCancelReply={() => setReplying(null)}
                 onSend={async (text) => {

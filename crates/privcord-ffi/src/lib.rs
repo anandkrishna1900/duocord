@@ -39,6 +39,8 @@ uniffi::setup_scaffolding!();
 pub enum FfiError {
     #[error("no identity")]
     NoIdentity,
+    #[error("needs the device holding the account key")]
+    NeedsAccountKey,
     #[error("identity exists")]
     IdentityExists,
     #[error("invalid recovery phrase")]
@@ -61,6 +63,8 @@ pub enum FfiError {
     Storage,
     #[error("secure storage failed")]
     SecureStorage,
+    #[error("unknown device")]
+    UnknownDevice,
     #[error("cryptography failed")]
     Crypto,
     #[error("shutting down")]
@@ -107,6 +111,7 @@ impl From<ErrorCode> for FfiError {
     fn from(e: ErrorCode) -> Self {
         match e {
             ErrorCode::NoIdentity => Self::NoIdentity,
+            ErrorCode::NeedsAccountKey => Self::NeedsAccountKey,
             ErrorCode::IdentityExists => Self::IdentityExists,
             ErrorCode::InvalidPhrase => Self::InvalidPhrase,
             ErrorCode::InvalidCard => Self::InvalidCard,
@@ -118,6 +123,7 @@ impl From<ErrorCode> for FfiError {
             ErrorCode::UnknownMessage => Self::UnknownMessage,
             ErrorCode::Storage => Self::Storage,
             ErrorCode::SecureStorage => Self::SecureStorage,
+            ErrorCode::UnknownDevice => Self::UnknownDevice,
             ErrorCode::Crypto => Self::Crypto,
             ErrorCode::ShuttingDown => Self::ShuttingDown,
             ErrorCode::Busy => Self::Busy,
@@ -601,6 +607,65 @@ pub struct SnapshotDto {
     pub channel_people: Vec<ChannelPersonDto>,
     /// Groups from before protocol v2 that can be made again with one tap.
     pub legacy_groups: Vec<LegacyGroupDto>,
+    /// The account's devices, this one included.
+    pub devices: Vec<DeviceDto>,
+    /// Whether this install holds the account key (it can link other devices and change groups).
+    pub holds_account_key: bool,
+    /// Items from other devices of the account that could not be recovered.
+    pub sync_lost: u64,
+    pub scheduled: Vec<ScheduledDto>,
+    pub usage: UsageDto,
+}
+
+/// Another device of ours heard on the local network.
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct LanPeerDto {
+    /// Its address: pass it to `link_up` (path `DirectLan`, kind `Open`) and `frame_received` for this connection.
+    pub address: String,
+    pub port: u16,
+    /// Whether this side opens the connection.
+    pub initiator: bool,
+}
+
+/// One device of the account.
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct DeviceDto {
+    pub id: String,
+    pub name: String,
+    pub added_at: i64,
+    pub this_device: bool,
+    /// When it last wrote anything this device has (milliseconds), if ever.
+    pub last_seen: Option<i64>,
+    /// Not heard from for 90 days: offer "Remove or reconnect".
+    pub stale: bool,
+    /// A removal was asked for: when it takes effect (milliseconds), unless taken back.
+    pub removal_at: Option<i64>,
+}
+
+/// What this device holds (the usage screen).
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct UsageDto {
+    pub messages: u64,
+    pub files: u64,
+    pub file_bytes: u64,
+    pub contacts: u64,
+    pub sync_entries: u64,
+}
+
+/// A message written for later on this device.
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ScheduledDto {
+    pub id: String,
+    /// A friend's uid, or a group's id.
+    pub target: String,
+    pub group: bool,
+    pub text: String,
+    /// When it goes out (milliseconds).
+    pub at: i64,
 }
 
 /// A group from before protocol v2: its name and who was in it (their names, for friends who are still friends).
@@ -768,6 +833,13 @@ pub enum EventDto {
     },
     /// A backup was restored, or a setting changed: ask for a snapshot.
     SnapshotChanged,
+    /// Linking a device by QR code: `stage` is "code" (show the 6-digit `code`; on the device holding the account key,
+    /// `name` is the new device's), then "done", "failed", "cancelled" or "expired".
+    DeviceLink {
+        stage: String,
+        code: Option<String>,
+        name: Option<String>,
+    },
     /// A file is arriving: `percent` is how much of it is here.
     FileProgress {
         message_id: String,
@@ -856,6 +928,7 @@ fn event_dto(e: EngineEvent) -> EventDto {
             message_id: message_id.to_string(),
         },
         EngineEvent::Restored | EngineEvent::SettingsChanged => EventDto::SnapshotChanged,
+        EngineEvent::DeviceLink { stage, code, name } => EventDto::DeviceLink { stage, code, name },
         EngineEvent::FileProgress {
             message_id,
             percent,
@@ -1340,6 +1413,110 @@ impl PrivcordEngine {
         }
     }
 
+    /// On the device holding the account key: start linking a new device. Returns the code to show as a QR code.
+    pub fn start_device_link(&self) -> Result<String, FfiError> {
+        match pollster::block_on(self.handle.op(Op::StartDeviceLink))? {
+            Answer::Text(t) => Ok(t),
+            _ => Err(FfiError::InvalidArgument),
+        }
+    }
+
+    /// On a new device with no account: take the code shown by the other device.
+    pub fn join_device_link(&self, code: String, name: String) -> Result<(), FfiError> {
+        pollster::block_on(self.handle.op(Op::JoinDeviceLink { code, name }))?;
+        Ok(())
+    }
+
+    /// After comparing the 6-digit codes, on the device holding the account key: let the new device in, or not.
+    pub fn confirm_device_link(&self, accept: bool) -> Result<(), FfiError> {
+        pollster::block_on(self.handle.op(Op::ConfirmDeviceLink(accept)))?;
+        Ok(())
+    }
+
+    pub fn cancel_device_link(&self) -> Result<(), FfiError> {
+        pollster::block_on(self.handle.op(Op::CancelDeviceLink))?;
+        Ok(())
+    }
+
+    /// Ask for another device of the account to be removed: every device shows it, and it happens in 24 hours unless
+    /// taken back (a device holding the account key can only be removed with the phrase).
+    pub fn request_device_removal(&self, device: String) -> Result<(), FfiError> {
+        pollster::block_on(self.handle.op(Op::RequestDeviceRemoval(device)))?;
+        Ok(())
+    }
+
+    /// Write a message to go out at `at` (milliseconds): to a friend (`group` false, `target` their uid) or a group.
+    /// Kept on this device, and sent by it.
+    pub fn schedule_message(
+        &self,
+        target: String,
+        group: bool,
+        text: String,
+        at: i64,
+    ) -> Result<(), FfiError> {
+        pollster::block_on(self.handle.op(Op::ScheduleMessage {
+            target,
+            group,
+            text,
+            at,
+        }))?;
+        Ok(())
+    }
+
+    /// Take a scheduled message back.
+    pub fn cancel_scheduled(&self, id: String) -> Result<(), FfiError> {
+        pollster::block_on(self.handle.op(Op::CancelScheduled(id)))?;
+        Ok(())
+    }
+
+    /// Take back a removal asked for.
+    pub fn cancel_device_removal(&self, device: String) -> Result<(), FfiError> {
+        pollster::block_on(self.handle.op(Op::CancelDeviceRemoval(device)))?;
+        Ok(())
+    }
+
+    /// Remove another device of the account at once, with the recovery phrase (not kept).
+    pub fn remove_device_now(
+        &self,
+        device: String,
+        phrase: String,
+        passphrase: String,
+    ) -> Result<(), FfiError> {
+        pollster::block_on(self.handle.op(Op::RemoveDeviceNow {
+            device,
+            phrase,
+            passphrase,
+        }))?;
+        Ok(())
+    }
+
+    /// The beacon to broadcast on the local network now (this device listens on `port`), or `None` when there is no other
+    /// device of the account to find.
+    pub fn lan_beacon(&self, port: u16) -> Result<Option<String>, FfiError> {
+        match pollster::block_on(self.handle.op(Op::LanBeacon(port)))? {
+            Answer::Maybe(b) => Ok(b),
+            _ => Err(FfiError::InvalidArgument),
+        }
+    }
+
+    /// A beacon heard on the local network: another device of ours, its port, and whether this side connects.
+    pub fn lan_beacon_seen(&self, beacon: String) -> Result<Option<LanPeerDto>, FfiError> {
+        match pollster::block_on(self.handle.op(Op::LanBeaconSeen(beacon)))? {
+            Answer::Lan(p) => Ok(p.map(|p| LanPeerDto {
+                address: p.address.to_string(),
+                port: p.port,
+                initiator: p.initiator,
+            })),
+            _ => Err(FfiError::InvalidArgument),
+        }
+    }
+
+    /// Whether bulk work (files between the account's devices) may run now: pass `background_plan(..).bulk`.
+    pub fn set_bulk_allowed(&self, allowed: bool) -> Result<(), FfiError> {
+        pollster::block_on(self.handle.op(Op::SetBulkAllowed(allowed)))?;
+        Ok(())
+    }
+
     /// Add what is in a backup to what is here. Never replaces or removes anything that already exists.
     pub fn import_backup(&self, text: String, passphrase: String) -> Result<RestoreDto, FfiError> {
         match pollster::block_on(self.handle.op(Op::ImportBackup { text, passphrase }))? {
@@ -1538,6 +1715,39 @@ impl PrivcordEngine {
                         members: friends.into_iter().map(ToString::to_string).collect(),
                         missing: u32::try_from(others.len()).unwrap_or(u32::MAX),
                     }
+                })
+                .collect(),
+            devices: s
+                .devices
+                .iter()
+                .map(|d| DeviceDto {
+                    id: d.id.clone(),
+                    name: d.name.clone(),
+                    added_at: d.added_at,
+                    this_device: d.this_device,
+                    last_seen: d.last_seen,
+                    stale: d.stale,
+                    removal_at: d.removal_at,
+                })
+                .collect(),
+            holds_account_key: s.holds_account_key,
+            sync_lost: s.sync_lost,
+            usage: UsageDto {
+                messages: s.usage.messages,
+                files: s.usage.files,
+                file_bytes: s.usage.file_bytes,
+                contacts: s.usage.contacts,
+                sync_entries: s.usage.sync_entries,
+            },
+            scheduled: s
+                .scheduled
+                .iter()
+                .map(|m| ScheduledDto {
+                    id: m.id.clone(),
+                    target: m.target.clone(),
+                    group: m.group,
+                    text: m.text.clone(),
+                    at: m.at,
                 })
                 .collect(),
         })
@@ -1821,7 +2031,13 @@ pub fn self_test() -> String {
         );
         let payload = serde_json_probe();
         let blob = seal::seal(&a, &bu, &b.dh_public(), &payload, &mut rng).map_err(|_| "seal")?;
-        let opened = seal::open(&blob, &bu, &b, &a.sign_public(), &au).ok_or("open")?;
+        let keys = privcord_crypto::devices::AccountKeys::new(
+            au.clone(),
+            a.sign_public(),
+            a.dh_public(),
+            None,
+        );
+        let opened = seal::open(&blob, &bu, &b, &keys).ok_or("open")?.payload;
         if opened != payload {
             return Err("roundtrip");
         }
@@ -1837,4 +2053,69 @@ pub fn self_test() -> String {
 
 fn serde_json_probe() -> serde_json::Value {
     serde_json::json!({ "probe": "self-test" })
+}
+
+/* ------------------------------------------------------------------ background policy */
+
+/// The device's network, as the platform sees it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum NetworkKindDto {
+    None,
+    Unmetered,
+    Metered,
+}
+
+/// How hard the platform should look for Bluetooth neighbours.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum BleScanDto {
+    Off,
+    LowPower,
+    Balanced,
+}
+
+/// What the platform knows about the device right now.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Record)]
+pub struct DeviceStateDto {
+    /// 0–100, or none for a device with no battery.
+    pub battery_percent: Option<u8>,
+    pub charging: bool,
+    pub network: NetworkKindDto,
+    pub data_saver: bool,
+    pub power_saver: bool,
+    pub foreground: bool,
+}
+
+/// What may run in the background (`privcord_domain::background`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Record)]
+pub struct BackgroundPlanDto {
+    pub internet_sync: bool,
+    pub bulk: bool,
+    pub ble_scan: BleScanDto,
+}
+
+/// The same background decision on every platform: the platform reports the device, the core decides.
+#[uniffi::export]
+pub fn background_plan(state: DeviceStateDto) -> BackgroundPlanDto {
+    use privcord_domain::background::{plan, BleScan, DeviceState, NetworkKind};
+    let p = plan(DeviceState {
+        battery_percent: state.battery_percent.map(|b| b.min(100)),
+        charging: state.charging,
+        network: match state.network {
+            NetworkKindDto::None => NetworkKind::None,
+            NetworkKindDto::Unmetered => NetworkKind::Unmetered,
+            NetworkKindDto::Metered => NetworkKind::Metered,
+        },
+        data_saver: state.data_saver,
+        power_saver: state.power_saver,
+        foreground: state.foreground,
+    });
+    BackgroundPlanDto {
+        internet_sync: p.internet_sync,
+        bulk: p.bulk,
+        ble_scan: match p.ble_scan {
+            BleScan::Off => BleScanDto::Off,
+            BleScan::LowPower => BleScanDto::LowPower,
+            BleScan::Balanced => BleScanDto::Balanced,
+        },
+    }
 }

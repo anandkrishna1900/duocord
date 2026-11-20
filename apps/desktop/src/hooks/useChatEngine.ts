@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ChatEngine, type ChatState } from '../lib/engine';
+import { pushNativeConfig } from '../lib/network';
 import type { ChatEngineApi } from '../lib/engineApi';
 import { hostedEngineEnabled } from '../lib/hosted/enable';
 import { startHostedEngine } from '../lib/hosted/start';
@@ -19,6 +20,9 @@ export interface UseChatEngine {
   reload: () => void;
 }
 
+/** The previous engine going away: a new one starts only after it, so the shell never hands back the old engine. */
+let stopping: Promise<void> = Promise.resolve();
+
 export function useChatEngine(): UseChatEngine {
   const [state, setState] = useState<ChatState | null>(null);
   const [engine, setEngine] = useState<ChatEngineApi | null>(null);
@@ -32,8 +36,25 @@ export function useChatEngine(): UseChatEngine {
     let unsubscribe: (() => void) | undefined;
 
     void (async () => {
+      await stopping;
       const identity = await loadIdentity();
       if (cancelled) return;
+      if (!identity && hostedEngineEnabled()) {
+        // No recovery phrase on this device: the engine may hold an account this device was linked to, or the person
+        // may link it now. Start it either way; only an engine with no account asks for an identity.
+        const hosted = await startHostedEngine(null);
+        created = hosted;
+        if (cancelled) {
+          hosted.stop();
+          return;
+        }
+        setEngine(hosted);
+        unsubscribe = hosted.subscribe(setState);
+        await hosted.start();
+        setNeedsIdentity(!hosted.getState().uid);
+        await pushNativeConfig();
+        return;
+      }
       setNeedsIdentity(identity === null);
       if (!identity) return;
       if (hostedEngineEnabled()) {
@@ -47,6 +68,9 @@ export function useChatEngine(): UseChatEngine {
         setEngine(hosted);
         unsubscribe = hosted.subscribe(setState);
         await hosted.start();
+        // The shell's relay sockets get the settings once the engine runs (and, after a start at sign-in, the hidden
+        // window can then go).
+        await pushNativeConfig();
         return;
       }
       const store = new LocalStore();
@@ -68,7 +92,8 @@ export function useChatEngine(): UseChatEngine {
     return () => {
       cancelled = true;
       unsubscribe?.();
-      created?.stop();
+      if (created && 'stopAndWait' in created) stopping = (created as { stopAndWait(): Promise<void> }).stopAndWait();
+      else created?.stop();
       setEngine(null);
       setState(null);
     };

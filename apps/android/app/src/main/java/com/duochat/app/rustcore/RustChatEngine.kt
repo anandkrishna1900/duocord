@@ -99,6 +99,13 @@ class RustChatEngine(
     override val state: StateFlow<ChatState> = _state.asStateFlow()
 
     private var engine: PrivcordEngine? = null
+
+    /** Files between the account's devices move only when the shared background plan allows bulk work. */
+    private val bulkChanged: () -> Unit = {
+        val e = engine
+        val allowed = com.duochat.app.engine.BackgroundPolicy.plan.bulk
+        if (e != null) scope.launch(Dispatchers.IO) { runCatching { e.setBulkAllowed(allowed) } }
+    }
     private var stopped = false
     private var visible = false
     private var openChat: String? = null
@@ -214,10 +221,11 @@ class RustChatEngine(
         private val job = scope.launch(Dispatchers.Default) {
             for (frame in queue) {
                 val web = links[peer]
-                val ok = if (web != null && web.isOpen) {
-                    web.awaitWritable() && web.sendJson(frame)
-                } else {
-                    bleLinks[peer]?.takeIf { it.isOpen }?.sendJson(frame) == true
+                val ble = bleLinks[peer]?.takeIf { it.isOpen }
+                val ok = when {
+                    web != null && web.isOpen -> web.awaitWritable() && web.sendJson(frame)
+                    ble != null -> ble.sendJson(frame)
+                    else -> lan?.send(peer, frame) == true
                 }
                 if (ok) {
                     written.incrementAndGet()
@@ -230,6 +238,7 @@ class RustChatEngine(
                     inbound.trySend(Inbound.Down(peer))
                     links.remove(peer)?.close()
                     bleLinks.remove(peer)?.close()
+                    lan?.close(peer)
                     break
                 }
             }
@@ -267,9 +276,12 @@ class RustChatEngine(
         }
     }
 
+    /** The account's other devices on the local network (step 7). */
+    @Volatile private var lan: AndroidLan? = null
+
     private val transport = object : TransportCallbacks {
         override fun send(peer: String, frame: String): Boolean {
-            val open = links[peer]?.isOpen == true || bleLinks[peer]?.isOpen == true
+            val open = links[peer]?.isOpen == true || bleLinks[peer]?.isOpen == true || lan?.isOpen(peer) == true
             if (!open) return false
             return senders.getOrPut(peer) { Outbound(peer) }.add(frame)
         }
@@ -280,6 +292,7 @@ class RustChatEngine(
             stopSender(peer)
             links.remove(peer)?.close()
             bleLinks.remove(peer)?.close()
+            lan?.close(peer)
         }
 
         override fun signalAvailable(): Boolean = networkConfig().signaling.isNotEmpty()
@@ -358,6 +371,17 @@ class RustChatEngine(
                 }
             }
             runCatching { withContext(Dispatchers.IO) { started.setGroupOnly(groupOnly) } }
+            runCatching { withContext(Dispatchers.IO) { started.setBulkAllowed(com.duochat.app.engine.BackgroundPolicy.plan.bulk) } }
+            com.duochat.app.engine.BackgroundPolicy.addListener(bulkChanged)
+            // The account's other devices on this network: found and linked directly, even with no internet.
+            lan = AndroidLan(
+                app, scope,
+                beacon = { port -> runCatching { started.lanBeacon(port.toUShort()) }.getOrNull() },
+                seen = { b -> runCatching { started.lanBeaconSeen(b) }.getOrNull() },
+                onUp = { peer -> inbound.trySend(Inbound.Up(peer, PathKind.DIRECT_LAN, LinkKind.OPEN)) },
+                onFrame = { peer, text -> inbound.trySend(Inbound.Frame(peer, text)) },
+                onDown = { peer -> inbound.trySend(Inbound.Down(peer)) },
+            ).also { it.start() }
             runCatching { withContext(Dispatchers.IO) { started.setStoreForward(networkConfig().relaysMessages) } }
             requestRefresh()
         } catch (error: Throwable) {
@@ -380,6 +404,9 @@ class RustChatEngine(
 
     override fun stop() {
         stopped = true
+        com.duochat.app.engine.BackgroundPolicy.removeListener(bulkChanged)
+        lan?.stop()
+        lan = null
         refreshJob?.cancel()
         refreshRequests.close()
         inbound.close()
@@ -493,6 +520,10 @@ class RustChatEngine(
             }
             is EventDto.FileQueued -> senders[event.peer]?.beginTransfer(event.messageId, event.frames.toLong())
             is EventDto.PeerStateChanged -> requestRefresh()
+            is EventDto.DeviceLink -> {
+                _state.update { it.copy(deviceLink = com.duochat.app.data.DeviceLinkState(event.stage, event.code, event.name)) }
+                requestRefresh()
+            }
             else -> requestRefresh()
         }
     }
@@ -670,7 +701,11 @@ class RustChatEngine(
     override suspend fun connectBluetooth(uid: String, manual: Boolean): Result<Unit> {
         val failure = { message: String -> Result.failure<Unit>(IllegalStateException(message)) }
         val own = last?.ownUid ?: return failure("Identity is not ready yet.")
-        if (last?.contacts?.none { it.uid == uid } != false) return failure("Add your friend first.")
+        // `uid` may name one of a friend's devices ("uid.device"), or another device of ours: the person is the part
+        // before the dot.
+        val person = uid.substringBefore('.')
+        val ownDevice = person == own && uid.contains('.')
+        if (!ownDevice && last?.contacts?.none { it.uid == person } != false) return failure("Add your friend first.")
         if (bleLinks[uid]?.isOpen == true) return Result.success(Unit)
         if (bleLinks.isNotEmpty() && !bleLinks.containsKey(uid)) return failure("Bluetooth is already in use for another friend.")
         when (bleEnv.availability()) {
@@ -979,6 +1014,16 @@ class RustChatEngine(
                 },
                 invite = s.invite?.let { inv -> ActiveInvite(inv.words, inv.expiresAt) },
                 requests = s.requests.map { r -> InviteRequest(r.uid, r.name, r.safetyNumber) },
+                devices = s.devices.map { d ->
+                    com.duochat.app.data.DeviceInfo(d.id, d.name, d.addedAt, d.thisDevice, d.lastSeen, d.stale, d.removalAt)
+                },
+                holdsAccountKey = s.holdsAccountKey,
+                syncLost = s.syncLost.toLong(),
+                scheduled = s.scheduled.map { m -> com.duochat.app.data.ScheduledMessage(m.id, m.target, m.group, m.text, m.at) },
+                usage = com.duochat.app.data.UsageInfo(
+                    s.usage.messages.toLong(), s.usage.files.toLong(), s.usage.fileBytes.toLong(),
+                    s.usage.contacts.toLong(), s.usage.syncEntries.toLong(),
+                ),
                 legacyGroups = s.legacyGroups.map { g ->
                     com.duochat.app.data.LegacyGroup(g.oldId, g.name, g.members.map { m -> nameOf(s, m) }, g.missing.toInt())
                 },
@@ -1027,6 +1072,8 @@ class RustChatEngine(
         is uniffi.privcord_ffi.FfiException.WeakPassphrase -> "Use a longer backup passphrase: at least 12 characters."
         is uniffi.privcord_ffi.FfiException.BackupUnreadable -> "That backup could not be opened. Check the passphrase, or that it is a DuoCord backup."
         is uniffi.privcord_ffi.FfiException.BackupNotYours -> "That backup belongs to a different account (another recovery phrase)."
+        is uniffi.privcord_ffi.FfiException.InvalidPhrase -> "That is not your account's recovery phrase."
+        is uniffi.privcord_ffi.FfiException.UnknownDevice -> "That device is not on your account's list any more."
         else -> t.message ?: "That did not work."
     }
 
@@ -1169,6 +1216,39 @@ class RustChatEngine(
 
     override suspend fun dismissLegacyGroup(oldId: String): Result<Unit> = call { dismissLegacyGroup(oldId) }
     override suspend fun renameGroup(groupId: String, name: String): Result<Unit> = call { renameGroup(groupId, name) }
+
+    override suspend fun startDeviceLink(): Result<String> {
+        _state.update { it.copy(deviceLink = null) }
+        return call { startDeviceLink() }
+    }
+
+    override suspend fun joinDeviceLink(code: String, name: String): Result<Unit> {
+        _state.update { it.copy(deviceLink = null) }
+        return call { joinDeviceLink(code.trim(), name.trim().ifEmpty { "Phone" }) }
+    }
+
+    override suspend fun confirmDeviceLink(accept: Boolean): Result<Unit> = call { confirmDeviceLink(accept) }
+
+    override fun cancelDeviceLink() {
+        _state.update { it.copy(deviceLink = null) }
+        val e = engine ?: return
+        scope.launch(Dispatchers.IO) { runCatching { e.cancelDeviceLink() } }
+    }
+
+    override suspend fun scheduleMessage(conversationId: String, text: String, at: Long): Result<Unit> {
+        val group = isGroup(conversationId)
+        return call { scheduleMessage(conversationId, group, text, at) }
+    }
+
+    override suspend fun cancelScheduled(id: String): Result<Unit> = call { cancelScheduled(id) }
+
+    override suspend fun deviceRemoval(action: com.duochat.app.data.DeviceRemoval): Result<Unit> = call {
+        when (action) {
+            is com.duochat.app.data.DeviceRemoval.Request -> requestDeviceRemoval(action.deviceId)
+            is com.duochat.app.data.DeviceRemoval.Cancel -> cancelDeviceRemoval(action.deviceId)
+            is com.duochat.app.data.DeviceRemoval.Now -> removeDeviceNow(action.deviceId, action.phrase.trim(), "")
+        }
+    }
 
     private fun isGroup(id: String): Boolean = last?.groups?.any { it.id == id } == true
 

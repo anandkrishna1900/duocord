@@ -5,6 +5,10 @@ use thiserror::Error;
 pub enum ErrorCode {
     #[error("There is no identity yet.")]
     NoIdentity,
+    /// This device was linked to an account whose key is on another device, and this needs that key: linking another
+    /// device (the account key signs the device list).
+    #[error("This needs the device that holds your account key.")]
+    NeedsAccountKey,
     #[error("An identity already exists on this device.")]
     IdentityExists,
     #[error("That recovery phrase is not valid.")]
@@ -55,6 +59,8 @@ pub enum ErrorCode {
     BackupUnreadable,
     #[error("That backup belongs to a different identity.")]
     BackupNotYours,
+    #[error("That device is not on your account's list.")]
+    UnknownDevice,
     #[error("Storage failed; nothing was changed.")]
     Storage,
     #[error("Secure storage failed.")]

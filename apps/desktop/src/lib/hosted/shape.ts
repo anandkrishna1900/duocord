@@ -97,6 +97,19 @@ export interface SnapshotJson {
   queued: number;
   channel_people: { uid: string; name: string }[];
   legacy_groups?: { old_id: string; name: string; members: string[]; missing: number }[];
+  devices?: {
+    id: string;
+    name: string;
+    added_at: number;
+    this_device: boolean;
+    last_seen?: number | null;
+    stale?: boolean;
+    removal_at?: number | null;
+  }[];
+  holds_account_key?: boolean;
+  sync_lost?: number;
+  usage?: { messages: number; files: number; file_bytes: number; contacts: number; sync_entries: number };
+  scheduled?: { id: string; target: string; group: boolean; text: string; at: number }[];
 }
 
 /* ---- what the page knows that the engine does not ---- */
@@ -368,6 +381,21 @@ export function shapeState(s: SnapshotJson, ctx: ShapeContext): ChatState {
       : null,
     invite: s.invite ? { words: s.invite.words, expiresAt: s.invite.expires_at } : null,
     requests,
+    devices: (s.devices ?? []).map((d) => ({
+      id: d.id,
+      name: d.name,
+      addedAt: d.added_at,
+      thisDevice: d.this_device,
+      lastSeen: d.last_seen ?? undefined,
+      stale: d.stale === true,
+      removalAt: d.removal_at ?? undefined,
+    })),
+    holdsAccountKey: s.holds_account_key === true,
+    syncLost: s.sync_lost ?? 0,
+    usage: s.usage
+      ? { messages: s.usage.messages, files: s.usage.files, fileBytes: s.usage.file_bytes, contacts: s.usage.contacts, syncEntries: s.usage.sync_entries }
+      : undefined,
+    scheduled: (s.scheduled ?? []).map((m) => ({ id: m.id, target: m.target, group: m.group, text: m.text, at: m.at })),
     legacyGroups: (s.legacy_groups ?? []).map((g) => ({
       oldId: g.old_id,
       name: g.name,

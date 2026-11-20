@@ -150,6 +150,43 @@ pub struct Snapshot {
     pub files: Vec<(MessageId, privcord_ports::FileInfo)>,
     /// Groups from before protocol v2, waiting to be made again or dismissed.
     pub legacy_groups: Vec<LegacyGroupView>,
+    /// The account's devices (active ones), this one included.
+    pub devices: Vec<DeviceView>,
+    /// Whether this install holds the account key (it can link other devices and change groups).
+    pub holds_account_key: bool,
+    /// Items from other devices of the account that could not be recovered (a device gone before they left it).
+    pub sync_lost: u64,
+    /// Messages written for later on this device, soonest first.
+    pub scheduled: Vec<crate::core::Scheduled>,
+    /// What this device holds (the usage screen).
+    pub usage: UsageView,
+}
+
+/// What this device holds: counts and the size of the files (build step 10, the usage screen).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct UsageView {
+    pub messages: u64,
+    pub files: u64,
+    pub file_bytes: u64,
+    pub contacts: u64,
+    /// Entries of the account's sync log held here (zero on a one-device account that never synced).
+    pub sync_entries: u64,
+}
+
+/// One device of the account.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeviceView {
+    pub id: String,
+    pub name: String,
+    /// When it was linked (milliseconds).
+    pub added_at: i64,
+    pub this_device: bool,
+    /// When it last wrote anything this device has (milliseconds), if ever.
+    pub last_seen: Option<i64>,
+    /// Not heard from for 90 days: "Remove or reconnect".
+    pub stale: bool,
+    /// A removal was asked for: when it takes effect (milliseconds), unless taken back.
+    pub removal_at: Option<i64>,
 }
 
 /// Something that happened. Each has a number; numbers rise by one, so a gap means events were missed.
@@ -213,6 +250,13 @@ pub enum EngineEvent {
     },
     /// A backup was restored: ask for a snapshot.
     Restored,
+    /// Linking a device by QR code: `stage` is "code" (show `code`, the 6 digits; on the device holding the account
+    /// key, `name` is the new device's), then "done", "failed", "cancelled" or "expired".
+    DeviceLink {
+        stage: String,
+        code: Option<String>,
+        name: Option<String>,
+    },
     /// A setting the snapshot shows changed (the muted list).
     SettingsChanged,
     /// A file is arriving: how much of it is here, in percent.

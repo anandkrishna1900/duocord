@@ -13,15 +13,16 @@
 use crate::{
     aead,
     canonical::canonical_json,
+    devices::{AccountKeys, Author},
     error::CryptoError,
-    identity::{jwk_of, public_key_from_jwk, Identity},
+    identity::{jwk_of, public_key_from_jwk},
     pq::{
         combine, kem_encapsulate, KemKeyPair, KEM_CIPHERTEXT_BYTES, KEM_PUBLIC_BYTES,
         KEM_SEED_BYTES,
     },
     pq_channel::{pad, unpad},
     rng::{random_array, random_secret_key, Entropy},
-    seal::{signed_part, verify_blob_signature},
+    seal::{signed_by, signed_part, Opened},
 };
 use p256::{ecdh::diffie_hellman, SecretKey};
 use privcord_domain::{
@@ -146,13 +147,13 @@ fn blob_key(
 
 /// Seal `payload` to one of the recipient's v2 keys, signed by us.
 pub fn seal_v2(
-    identity: &Identity,
+    author: &Author<'_>,
     to: &UserId,
     key: &PeerKey,
     payload: &Value,
     entropy: &mut dyn Entropy,
 ) -> Result<SealedBlob, CryptoError> {
-    let from = identity.uid()?;
+    let from = author.uid;
     let ephemeral = random_secret_key(entropy)?;
     let peer = public_key_from_jwk(&key.dh)?;
     let shared = diffie_hellman(ephemeral.to_nonzero_scalar(), peer.as_affine());
@@ -168,7 +169,8 @@ pub fn seal_v2(
         &kem_ss,
     )?;
     let iv: [u8; 12] = random_array(entropy)?;
-    let plaintext = serde_json::to_vec(payload).map_err(|_| CryptoError::Invalid)?;
+    let plaintext =
+        serde_json::to_vec(&author.payload(payload)).map_err(|_| CryptoError::Invalid)?;
     let ct = aead::encrypt(
         &aead_key[..],
         &iv,
@@ -186,27 +188,25 @@ pub fn seal_v2(
         kem: Some(codec::encode(&kem_ct)),
         key: Some(key.id.clone()),
     };
-    blob.sig = codec::encode(&identity.sign_message(&signed_part(&blob)?));
+    blob.sig = codec::encode(&author.sign(&signed_part(&blob)?));
     if blob.encode().encode_utf16().count() > MAX_SEALED_BLOB_BYTES {
         return Err(CryptoError::TooLarge);
     }
     Ok(blob)
 }
 
-/// Open a v2 blob with the key it names. `None` for anything not for us, not from the pinned sender, for another key,
-/// or changed in transit.
+/// Open a v2 blob with the key it names. `None` for anything not for us, not signed for the pinned sender (their account
+/// key or one of their devices), for another key, or changed in transit.
 pub fn open_v2(
     blob: &SealedBlob,
     own_uid: &UserId,
     own_key: &OwnKey,
-    sender_sign: &PublicJwk,
-    sender_uid: &UserId,
-) -> Option<Value> {
-    if blob.v != 2 || blob.to != own_uid.as_str() || blob.from != sender_uid.as_str() {
+    from: &AccountKeys,
+) -> Option<Opened> {
+    if blob.v != 2 || blob.to != own_uid.as_str() || blob.from != from.uid.as_str() {
         return None;
     }
-    if blob.key.as_deref() != Some(own_key.id.as_str()) || !verify_blob_signature(blob, sender_sign)
-    {
+    if blob.key.as_deref() != Some(own_key.id.as_str()) {
         return None;
     }
     let kem_ct = codec::decode(blob.kem.as_deref()?).filter(|c| c.len() == KEM_CIPHERTEXT_BYTES)?;
@@ -230,14 +230,14 @@ pub fn open_v2(
         format!("{}|{}|v2", blob.to, blob.from).as_bytes(),
     )
     .ok()?;
-    serde_json::from_slice(unpad(&padded)?).ok()
+    signed_by(blob, from, serde_json::from_slice(unpad(&padded)?).ok()?)
 }
 
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
     use super::*;
-    use crate::rng::SeededEntropy;
+    use crate::{identity::Identity, rng::SeededEntropy};
 
     #[test]
     fn a_blob_sealed_to_a_key_opens_only_with_that_key_from_that_sender() {
@@ -252,17 +252,31 @@ mod tests {
         let public = PeerKey::from_value(&bob_key.public().to_value()).unwrap();
         let stored = OwnKey::from_private_value(&bob_key.to_private_value()).unwrap();
         let payload = json!({ "t": "msg", "text": "hello ✓" });
-        let blob = seal_v2(&ann, &bu, &public, &payload, &mut rng).unwrap();
+        let blob = seal_v2(
+            &Author::account(&au, &ann),
+            &bu,
+            &public,
+            &payload,
+            &mut rng,
+        )
+        .unwrap();
+        let keys = |id: &Identity| {
+            AccountKeys::new(id.uid().unwrap(), id.sign_public(), id.dh_public(), None)
+        };
+        let (ann_keys, eve_keys) = (keys(&ann), keys(&eve));
+        let mut eve_as_ann = eve_keys.clone();
+        eve_as_ann.uid = au.clone();
         // It survives the trip as text.
         let blob = SealedBlob::decode(&blob.encode()).unwrap();
         assert_eq!(
-            open_v2(&blob, &bu, &stored, &ann.sign_public(), &au),
+            open_v2(&blob, &bu, &stored, &ann_keys).map(|o| o.payload),
             Some(payload)
         );
         // Wrong key, wrong sender, wrong recipient: nothing.
-        assert!(open_v2(&blob, &bu, &other_key, &ann.sign_public(), &au).is_none());
-        assert!(open_v2(&blob, &bu, &stored, &eve.sign_public(), &eve.uid().unwrap()).is_none());
-        assert!(open_v2(&blob, &eve.uid().unwrap(), &stored, &ann.sign_public(), &au).is_none());
+        assert!(open_v2(&blob, &bu, &other_key, &ann_keys).is_none());
+        assert!(open_v2(&blob, &bu, &stored, &eve_keys).is_none());
+        assert!(open_v2(&blob, &bu, &stored, &eve_as_ann).is_none());
+        assert!(open_v2(&blob, &eve.uid().unwrap(), &stored, &ann_keys).is_none());
         // Any change in transit, including to the ML-KEM ciphertext or the key id, is refused.
         let flip = |s: &str| {
             let mut b = codec::decode(s).unwrap();
@@ -278,7 +292,7 @@ mod tests {
                 _ => b.key = Some(other_key.id.clone()),
             }
             assert!(
-                open_v2(&b, &bu, &stored, &ann.sign_public(), &au).is_none(),
+                open_v2(&b, &bu, &stored, &ann_keys).is_none(),
                 "change {change}"
             );
         }

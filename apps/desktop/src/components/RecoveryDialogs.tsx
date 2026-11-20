@@ -25,6 +25,8 @@ export interface RecoveryDialogProps {
   required?: boolean;
   /** Called once a new or restored identity has been saved. */
   onIdentityReady?: () => void;
+  /** First run: join an account you already use on another device instead (no phrase on this device). */
+  onLinkDevice?: () => void;
 }
 
 export function RecoveryDialog({
@@ -33,6 +35,7 @@ export function RecoveryDialog({
   mode = 'backup',
   required = false,
   onIdentityReady,
+  onLinkDevice,
 }: RecoveryDialogProps) {
   const [currentMode, setCurrentMode] = useState<'backup' | 'restore'>(mode);
   
@@ -201,13 +204,20 @@ export function RecoveryDialog({
                 )}
 
                 <div className="modal-actions" style={{ marginTop: '24px', display: 'flex', justifyContent: 'space-between' }}>
-                  <button
-                    type="button"
-                    className="button ghost"
-                    onClick={() => setCurrentMode('restore')}
-                  >
-                    Already have a phrase? Restore
-                  </button>
+                  <span style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="button ghost"
+                      onClick={() => setCurrentMode('restore')}
+                    >
+                      Already have a phrase? Restore
+                    </button>
+                    {onLinkDevice ? (
+                      <button type="button" className="button ghost" onClick={onLinkDevice}>
+                        Link to a device you already use
+                      </button>
+                    ) : null}
+                  </span>
                   <button
                     type="button"
                     className="button primary"

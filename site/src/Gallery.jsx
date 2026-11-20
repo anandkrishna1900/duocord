@@ -6,7 +6,7 @@ const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-r
 export function WindowFrame({ src, alt, w, h, enlarge, eager }) {
   return (
     <span className="win">
-      <span className="win-bar" aria-hidden="true"><i /><i /><i /><b>PrivCord</b>{enlarge ? <em>⤢</em> : null}</span>
+      <span className="win-bar" aria-hidden="true"><i /><i /><i /><b>PrivCord</b></span>
       <img key={src} src={src} alt={alt} width={w} height={h} loading={eager ? 'eager' : 'lazy'} draggable="false" />
     </span>
   );
@@ -22,7 +22,7 @@ export function PhoneFrame({ src, alt, w, h }) {
 }
 
 /*
- * Screens showcase: a yellow stage that shows one real screenshot inside a window or phone frame, with a numbered chapter
+ * Screens showcase: a stage that shows one real screenshot inside a window or phone frame, with a numbered chapter
  * list that auto-plays (each chapter has a progress line; hover, focus, a tap or leaving the screen pauses it). Tap the
  * stage to open the lightbox: a native <dialog> (focus trap, Esc, inert page behind it) with arrows, swipe, zoom to natural
  * size and focus returned to where you came from. Plain CSS, no library; honours prefers-reduced-motion.
@@ -143,7 +143,7 @@ export default function Gallery({ asset }) {
       <div className="wrap">
         <p className="eyebrow">Screens</p>
         <h2 id="screens-h">Take a look around</h2>
-        <p className="sub">Real screenshots, no mock-ups. Pick a screen, and tap the picture to see it full size.</p>
+        <p className="sub">Real screenshots, no mock-ups. Pick a screen. Click or tap the picture to open it bigger.</p>
 
         <div
           className={`show${playing ? ' playing' : ''}`}
@@ -195,7 +195,6 @@ export default function Gallery({ asset }) {
                   ? <PhoneFrame src={asset(now.src)} alt={`${now.title}. ${now.note}`} w={now.w} h={now.h} />
                   : <WindowFrame src={asset(now.src)} alt={`${now.title}. ${now.note}`} w={now.w} h={now.h} />}
               </span>
-              <span className="stage-hint" aria-hidden="true"><b>⤢</b> Full size</span>
             </button>
             <p className="stage-cap"><strong>{now.title}</strong> {now.note}</p>
           </div>

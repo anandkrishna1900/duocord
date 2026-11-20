@@ -26,7 +26,7 @@
   background: var(--surface-strong);
   box-shadow: 0 1px 0 var(--border-strong) inset, 0 4px 14px rgba(0, 0, 0, 0.18);
   transform: translateX(calc(var(--i, 0) * 100%));
-  transition: transform 0.38s cubic-bezier(0.34, 1.4, 0.5, 1);
+  transition: transform 0.38s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .filter-pill {
   position: relative;
@@ -106,7 +106,7 @@
 }
 .unread-dot,
 .filter-pill-count {
-  animation: wow-pop 0.4s cubic-bezier(0.34, 1.4, 0.5, 1) both;
+  animation: wow-pop 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 /* The duo link: two friends, one private line with a message travelling along it. */

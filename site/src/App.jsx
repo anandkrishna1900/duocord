@@ -243,7 +243,6 @@ export default function App() {
           </section>
 
 {/* ---------- screens: a rail of real screenshots and a lightbox ---------- */}
-          <Gallery asset={asset} footer={<p className="more-row"><Go className="more" to="screens">All screens, with notes →</Go></p>} />
 
 {/* ---------- compare (paper) ---------- */}
           <section id="compare" className="compare">
@@ -300,6 +299,7 @@ export default function App() {
           </section>
             </>
           )}
+          {route === 'home' && <Gallery asset={asset} bare />}
           {route === 'features' && <FeaturesPage Go={Go} />}
           {route === 'how' && <HowPage Go={Go} />}
           {route === 'screens' && <ScreensPage Go={Go} asset={asset} />}

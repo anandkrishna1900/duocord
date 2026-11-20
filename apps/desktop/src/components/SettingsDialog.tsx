@@ -15,6 +15,7 @@ import { AutoBackupControl } from './AutoBackupControl';
 import { LAST_BACKUP_KEY, PrivacyCheckup } from './PrivacyCheckup';
 import { NetworkTransparency } from './NetworkTransparency';
 import { StorageByChat } from './StorageByChat';
+import { NO_PREFS } from '../lib/engine';
 import { formatBytes } from '../lib/format';
 import { AlertIcon, CheckIcon, KeyIcon, TrashIcon } from './Icons';
 
@@ -286,6 +287,7 @@ export function SettingsDialog({
   const [displayName, setDisplayName] = useState(settings.displayName);
   const [saved, setSaved] = useState(false);
   const [linking, setLinking] = useState(false);
+  const quiet = (state.prefs ?? NO_PREFS).quiet;
 
   useEffect(() => {
     if (!open) return;
@@ -484,20 +486,20 @@ export function SettingsDialog({
             />
             <Toggle
               label="Quiet hours"
-              description="No notifications between these times. Messages still arrive and wait in the chat."
-              checked={settings.quietHours.enabled}
-              onChange={(value) => updateSettings({ quietHours: { ...settings.quietHours, enabled: value } })}
+              description="No notifications between these times, on all your devices. Messages still arrive and wait in the chat."
+              checked={quiet.enabled}
+              onChange={(value) => engine?.setQuietHours?.(value, quiet.from, quiet.to)}
               disabled={!settings.notificationsEnabled}
             />
-            {settings.quietHours.enabled ? (
+            {quiet.enabled ? (
               <div className="quiet-times">
                 <label className="field">
                   <span>From</span>
-                  <input type="time" value={settings.quietHours.from} onChange={(e) => e.target.value && updateSettings({ quietHours: { ...settings.quietHours, from: e.target.value } })} />
+                  <input type="time" value={minutesToTime(quiet.from)} onChange={(e) => e.target.value && engine?.setQuietHours?.(true, timeToMinutes(e.target.value), quiet.to)} />
                 </label>
                 <label className="field">
                   <span>Until</span>
-                  <input type="time" value={settings.quietHours.to} onChange={(e) => e.target.value && updateSettings({ quietHours: { ...settings.quietHours, to: e.target.value } })} />
+                  <input type="time" value={minutesToTime(quiet.to)} onChange={(e) => e.target.value && engine?.setQuietHours?.(true, quiet.from, timeToMinutes(e.target.value))} />
                 </label>
               </div>
             ) : null}
@@ -676,3 +678,13 @@ export function SettingsDialog({
 }
 
 
+
+function minutesToTime(m: number): string {
+  const h = Math.floor(m / 60) % 24;
+  return `${String(h).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+}
+
+function timeToMinutes(t: string): number {
+  const [h, m] = t.split(':').map(Number);
+  return (h ?? 0) * 60 + (m ?? 0);
+}

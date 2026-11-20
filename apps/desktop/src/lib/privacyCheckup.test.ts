@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { privacyCheckup } from './privacyCheckup';
-import { MAX_PINS, togglePin, withPinsFirst } from './pins';
+import { withPinsFirst } from './pins';
 import { networkHosts } from './networkHosts';
 import { DEFAULT_NETWORK_CONFIG } from '@duochat/protocol';
 
@@ -25,13 +25,6 @@ describe('pins', () => {
   it('puts pinned chats first in pin order', () => {
     expect(withPinsFirst(rows, ['c', 'a']).map((r) => r.id)).toEqual(['c', 'a', 'b', 'd']);
     expect(withPinsFirst(rows, ['gone']).map((r) => r.id)).toEqual(['a', 'b', 'c', 'd']);
-  });
-  it('keeps at most three, dropping the oldest', () => {
-    let p: string[] = [];
-    for (const id of ['a', 'b', 'c', 'd']) p = togglePin(p, id);
-    expect(p).toEqual(['b', 'c', 'd']);
-    expect(p.length).toBe(MAX_PINS);
-    expect(togglePin(p, 'c')).toEqual(['b', 'd']);
   });
 });
 

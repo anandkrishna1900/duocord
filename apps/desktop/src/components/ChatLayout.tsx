@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChatState, UiMessage } from '../lib/engine';
 import type { ChatEngineApi } from '../lib/engineApi';
 import type { AppSettings } from '../lib/settings';
-import { togglePin, withPinsFirst } from '../lib/pins';
-import { syncQuietHours } from '../lib/notifications';
+import { withPinsFirst } from '../lib/pins';
+import { MUTE_FOREVER, NO_PREFS } from '../lib/engine';
 import { deliveryRows } from '../lib/deliveryDetails';
 import { Modal } from './Modal';
 import { LOCAL_ID } from '../lib/identity';
@@ -79,9 +79,8 @@ export function ChatLayout({
   const [verifyUid, setVerifyUid] = useState<string | null>(null);
   const [replying, setReplying] = useState<UiMessage | null>(null);
   const [detailsFor, setDetailsFor] = useState<UiMessage | null>(null);
-  useEffect(() => {
-    syncQuietHours();
-  }, [settings.quietHours, settings.notificationsEnabled, settings.notificationPreviews]);
+  const prefs = state?.prefs ?? NO_PREFS;
+  const [showArchived, setShowArchived] = useState(false);
   /** The message just sent, for a few seconds: "Undo" takes it back from everyone. */
   const [undo, setUndo] = useState<{ conv: string; text: string } | null>(null);
   useEffect(() => {
@@ -198,8 +197,8 @@ export function ChatLayout({
         online: g.connected > 0,
       })),
     ];
-    return withPinsFirst(list.sort((a, b) => b.at - a.at || a.name.localeCompare(b.name)), settings.pinned);
-  }, [state, settings.pinned]);
+    return withPinsFirst(list.sort((a, b) => b.at - a.at || a.name.localeCompare(b.name)), state?.prefs?.pins ?? []);
+  }, [state]);
 
   const hits = useMemo(() => (engine && query.trim().length >= 2 ? engine.search(query) : []), [engine, query, state?.messages]);
 
@@ -330,7 +329,7 @@ export function ChatLayout({
           <>
           <FilterPills value={filter} onChange={setFilter} unread={rows.reduce((n, r) => n + (r.unread > 0 ? 1 : 0), 0)} />
           <nav className="chat-list" aria-label="Chats">
-            {rows.filter((r) => (filter === 'unread' ? r.unread > 0 : filter === 'groups' ? r.isGroup : true)).map((row) => (
+            {rows.filter((r) => prefs.archived.includes(r.id) === showArchived).filter((r) => (filter === 'unread' ? r.unread > 0 : filter === 'groups' ? r.isGroup : true)).map((row) => (
               <button
                 key={row.id}
                 type="button"
@@ -338,14 +337,14 @@ export function ChatLayout({
                 onClick={() => open(row.id)}
                 onContextMenu={(e) => {
                   e.preventDefault();
-                  updateSettings({ pinned: togglePin(settings.pinned, row.id) });
+                  engine?.togglePin?.(row.id);
                 }}
               >
                 <Avatar name={row.name} size={46} online={row.online} group={row.isGroup} />
                 <span className="chat-row-main">
                   <span className="chat-row-top">
                     <strong>{row.name}</strong>
-                    {settings.pinned.includes(row.id) ? <PinIcon size={13} className="chat-row-pin" aria-label="Pinned" /> : null}
+                    {prefs.pins.includes(row.id) ? <PinIcon size={13} className="chat-row-pin" aria-label="Pinned" /> : null}
                     {row.at ? <span className="muted small">{formatTime(row.at)}</span> : null}
                   </span>
                   <span className="chat-row-bottom">
@@ -355,6 +354,11 @@ export function ChatLayout({
                 </span>
               </button>
             ))}
+            {prefs.archived.length > 0 || showArchived ? (
+              <button type="button" className="button ghost small archived-toggle" onClick={() => setShowArchived(!showArchived)}>
+                {showArchived ? 'Back to chats' : `Archived (${prefs.archived.length})`}
+              </button>
+            ) : null}
             {rows.length > 0 && !rows.some((r) => (filter === 'unread' ? r.unread > 0 : filter === 'groups' ? r.isGroup : true)) ? (
               <p className="muted small chat-list-none">{filter === 'unread' ? 'You are all caught up.' : 'No groups yet.'}</p>
             ) : null}
@@ -405,11 +409,35 @@ export function ChatLayout({
                       role="menuitem"
                       onClick={() => {
                         setMenuOpen(false);
-                        updateSettings({ pinned: togglePin(settings.pinned, selected!) });
+                        engine?.togglePin?.(selected!);
                       }}
                     >
-                      {settings.pinned.includes(selected!) ? 'Unpin from top' : 'Pin to top'}
+                      {prefs.pins.includes(selected!) ? 'Unpin from top' : 'Pin to top'}
                     </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        engine?.setArchived?.(selected!, !prefs.archived.includes(selected!));
+                        if (!prefs.archived.includes(selected!)) setSelected(null);
+                      }}
+                    >
+                      {prefs.archived.includes(selected!) ? 'Bring back to chats' : 'Archive chat'}
+                    </button>
+                    {(prefs.muteUntil[selected!] ?? 0) > Date.now() ? (
+                      <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); engine?.setMuteUntil?.(selected!, 0); }}>
+                        Turn notifications back on
+                      </button>
+                    ) : (
+                      <>
+                        {muteChoices().map((m) => (
+                          <button key={m.label} type="button" role="menuitem" onClick={() => { setMenuOpen(false); engine?.setMuteUntil?.(selected!, m.until); }}>
+                            {m.label}
+                          </button>
+                        ))}
+                      </>
+                    )}
                     <button
                       type="button"
                       role="menuitem"
@@ -555,6 +583,7 @@ export function ChatLayout({
                 disabled={state.phase !== 'ready'}
                 placeholder={group ? `Message ${group.name}` : `Message ${current.name}`}
                 isChannel={channel !== null}
+                quickTimes={engine?.quickTimes ? () => engine.quickTimes!() : undefined}
                 onSchedule={engine?.scheduleMessage ? (text, at) => engine.scheduleMessage!(selected!, text, at) : undefined}
                 scheduled={(state.scheduled ?? []).filter((m) => m.target === selected)}
                 onCancelScheduled={(id) => void engine?.cancelScheduled?.(id)}
@@ -673,4 +702,17 @@ export function ChatLayout({
       <RecoveryDialog open={dialog === 'recovery'} onClose={() => setDialog(null)} mode="restore" onIdentityReady={() => window.location.reload()} />
     </div>
   );
+}
+
+/** "Mute for": an hour, eight hours, until tomorrow morning, or until switched back on. */
+function muteChoices(now = Date.now()): { label: string; until: number }[] {
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(8, 0, 0, 0);
+  return [
+    { label: 'Mute for 1 hour', until: now + 3_600_000 },
+    { label: 'Mute for 8 hours', until: now + 8 * 3_600_000 },
+    { label: 'Mute until tomorrow', until: tomorrow.getTime() },
+    { label: 'Mute until I turn it on', until: MUTE_FOREVER },
+  ];
 }

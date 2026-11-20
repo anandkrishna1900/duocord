@@ -1082,6 +1082,8 @@ internal open class UniffiVTableCallbackInterfaceTransportCallbacks(
 
 
 
+
+
 // A JNA Library to expose the extern-C FFI definitions.
 // This is an implementation detail which will be called internally by the public API.
 
@@ -1211,6 +1213,8 @@ internal interface UniffiLib : Library {
     fun uniffi_privcord_ffi_fn_method_privcordengine_prefs_json(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_privcord_ffi_fn_method_privcordengine_preview_invite(`ptr`: Pointer,`text`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    fun uniffi_privcord_ffi_fn_method_privcordengine_quick_send_times_json(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_privcord_ffi_fn_method_privcordengine_react(`ptr`: Pointer,`messageId`: RustBuffer.ByValue,`emoji`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
@@ -1542,6 +1546,8 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_preview_invite(
     ): Short
+    fun uniffi_privcord_ffi_checksum_method_privcordengine_quick_send_times_json(
+    ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_react(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_recover_identity(
@@ -1801,6 +1807,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_preview_invite() != 21260.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_quick_send_times_json() != 26771.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_react() != 12546.toShort()) {
@@ -3431,6 +3440,11 @@ public interface PrivcordEngineInterface {
     fun `previewInvite`(`text`: kotlin.String): PreviewDto?
     
     /**
+     * Ready-made times for "send later" in the person's own time, as JSON: `[{label, at}]`.
+     */
+    fun `quickSendTimesJson`(): kotlin.String
+    
+    /**
      * Toggle your reaction (one of 👍 ❤️ 😂 😮 😢 🙏) on a message; the same one again removes it.
      */
     fun `react`(`messageId`: kotlin.String, `emoji`: kotlin.String)
@@ -4251,6 +4265,22 @@ open class PrivcordEngine: Disposable, AutoCloseable, PrivcordEngineInterface {
     uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_preview_invite(
         it, FfiConverterString.lower(`text`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Ready-made times for "send later" in the person's own time, as JSON: `[{label, at}]`.
+     */
+    @Throws(FfiException::class)override fun `quickSendTimesJson`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_quick_send_times_json(
+        it, _status)
 }
     }
     )

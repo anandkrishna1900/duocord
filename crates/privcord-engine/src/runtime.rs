@@ -161,6 +161,8 @@ pub enum Op {
     ShouldNotify(String),
     /// The person's time zone, minutes east of UTC.
     SetUtcOffset(i32),
+    /// Ready-made times for "send later", as JSON.
+    QuickTimes,
     RenameContact {
         uid: UserId,
         name: String,
@@ -394,6 +396,9 @@ fn pump(core: &mut Core, cmd: Command) -> bool {
                 )),
                 Op::ShouldNotify(id) => Ok(Answer::Text(
                     if core.should_notify(&id) { "1" } else { "0" }.into(),
+                )),
+                Op::QuickTimes => Ok(Answer::Text(
+                    serde_json::to_string(&core.quick_times()).unwrap_or_default(),
                 )),
                 Op::SetUtcOffset(minutes) => {
                     core.set_utc_offset(minutes);

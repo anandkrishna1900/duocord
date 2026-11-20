@@ -25,7 +25,49 @@ pub struct Scheduled {
     pub at: i64,
 }
 
+/// A ready-made time for "send later".
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QuickTime {
+    pub label: String,
+    /// When it goes out (milliseconds since 1970 UTC).
+    pub at: i64,
+}
+
+const HOUR_MS: i64 = 60 * 60 * 1000;
+const DAY_MS: i64 = 24 * HOUR_MS;
+
+/// Up to three sensible times to send a message later, in the person's own time: in an hour, this evening (6 pm, if it
+/// is still at least half an hour away) and tomorrow morning (8 am). `utc_offset_min` is minutes east of UTC.
+pub fn quick_times(now_ms: i64, utc_offset_min: i32) -> Vec<QuickTime> {
+    let offset = i64::from(utc_offset_min) * 60_000;
+    let local = now_ms + offset;
+    let midnight_local = local.div_euclid(DAY_MS) * DAY_MS;
+    let at_local = |day_start: i64, hour: i64| day_start + hour * HOUR_MS - offset;
+    let mut times = vec![QuickTime {
+        label: "In an hour".into(),
+        // A round five minutes, so it reads as a time someone picked.
+        at: (now_ms + HOUR_MS).div_euclid(300_000) * 300_000 + 300_000,
+    }];
+    let evening = at_local(midnight_local, 18);
+    if evening - now_ms >= HOUR_MS / 2 {
+        times.push(QuickTime {
+            label: "This evening".into(),
+            at: evening,
+        });
+    }
+    times.push(QuickTime {
+        label: "Tomorrow morning".into(),
+        at: at_local(midnight_local + DAY_MS, 8),
+    });
+    times
+}
+
 impl Core {
+    /// Ready-made times for "send later", from the person's own clock.
+    pub fn quick_times(&self) -> Vec<QuickTime> {
+        quick_times(self.now(), self.utc_offset_min)
+    }
+
     /// Messages waiting to be sent, soonest first.
     pub fn scheduled(&self) -> Vec<Scheduled> {
         let mut all: Vec<Scheduled> = self.kv_json(KV_SCHEDULED).unwrap_or_default();
@@ -138,5 +180,41 @@ impl Core {
         let mut all = self.scheduled();
         all.retain(|s| !done.contains(&s.id));
         let _ = self.save_scheduled(&all);
+    }
+}
+
+#[cfg(test)]
+mod quick_tests {
+    use super::*;
+
+    #[test]
+    fn offers_an_hour_this_evening_and_tomorrow_morning_in_local_time() {
+        // 2023-11-14 10:00 UTC, in a zone 2 hours east: 12:00 local.
+        let now = 1_699_956_000_000;
+        let t = quick_times(now, 120);
+        assert_eq!(t.len(), 3);
+        assert_eq!(t[0].label, "In an hour");
+        assert!(t[0].at >= now + HOUR_MS && t[0].at < now + HOUR_MS + 300_000 + 1);
+        assert_eq!(t[0].at % 300_000, 0);
+        // 18:00 local is 16:00 UTC the same day.
+        assert_eq!(t[1].at, now + 6 * HOUR_MS);
+        // 08:00 local tomorrow is 06:00 UTC the next day.
+        assert_eq!(t[2].at, now + 20 * HOUR_MS);
+    }
+
+    #[test]
+    fn leaves_out_this_evening_once_it_is_too_close_or_past() {
+        // 17:45 local.
+        let t = quick_times(1_699_956_000_000 + 5 * HOUR_MS + 45 * 60_000, 120);
+        assert_eq!(
+            t.iter().map(|q| q.label.as_str()).collect::<Vec<_>>(),
+            ["In an hour", "Tomorrow morning"]
+        );
+        // 23:00 local: tomorrow morning is nine hours away.
+        let t = quick_times(1_699_956_000_000 + 11 * HOUR_MS, 120);
+        assert_eq!(
+            t.last().map(|q| q.at - (1_699_956_000_000 + 11 * HOUR_MS)),
+            Some(9 * HOUR_MS)
+        );
     }
 }

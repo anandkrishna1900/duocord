@@ -78,7 +78,7 @@ mod sync;
 
 pub use backup::RestoreSummary;
 pub use prefs::{Prefs, QuietHours, MUTE_FOREVER};
-pub use scheduled::Scheduled;
+pub use scheduled::{QuickTime, Scheduled};
 pub use social::SearchHit;
 
 pub use invites::InvitePreview;

@@ -404,6 +404,10 @@ impl DesktopHost {
             "prefs" => {
                 Ok(serde_json::from_str(&e.prefs_json().map_err(failed)?).unwrap_or(Value::Null))
             }
+            "quick_times" => Ok(
+                serde_json::from_str(&e.quick_send_times_json().map_err(failed)?)
+                    .unwrap_or(Value::Null),
+            ),
             "set_utc_offset" => unit(
                 e.set_utc_offset_minutes(
                     args.get("minutes")

@@ -14,7 +14,7 @@ import {
   validateFileSize,
   type NetworkConfig,
 } from '@duochat/protocol';
-import type { ChatState, DeviceLinkState, SearchHit } from '../engine';
+import { NO_PREFS, type ChatState, type DeviceLinkState, type PrefsView, type SearchHit } from '../engine';
 import type { ChatEngineApi, SendResult } from '../engineApi';
 import { HostedEngine, type EngineBridge } from '../engineBridge';
 import { uidMatchesKeys, type DeviceIdentity } from '../identity';
@@ -100,6 +100,7 @@ export class HostedChatEngine implements ChatEngineApi {
   private phase: ChatState['phase'] = 'starting';
   private notice: string | null = null;
   private deviceLink: DeviceLinkState | null = null;
+  private prefs: PrefsView = NO_PREFS;
   private error: string | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private refreshing = false;
@@ -148,7 +149,7 @@ export class HostedChatEngine implements ChatEngineApi {
       error: this.error,
       notice: this.notice,
     });
-    return { ...shaped, deviceLink: this.deviceLink };
+    return { ...shaped, deviceLink: this.deviceLink, prefs: this.prefs };
   }
 
   private emit(): void {
@@ -185,6 +186,7 @@ export class HostedChatEngine implements ChatEngineApi {
             // Never go back to an older picture than the one on screen.
             if (!this.snapshot || next.seq >= this.snapshot.seq) this.snapshot = next;
             this.runtime?.setOwnUid(next.own_uid ?? '');
+            this.prefs = shapePrefs(await this.engine.call<unknown>('prefs').catch(() => null)) ?? this.prefs;
           } catch {
             // Keep the picture we have.
           }
@@ -234,6 +236,10 @@ export class HostedChatEngine implements ChatEngineApi {
       await this.engine.start();
       const name = this.deps.ownName();
       if (name) await this.engine.call('set_display_name', { name }).catch(() => undefined);
+      // The engine keeps quiet in quiet hours itself, in the person's own time (daylight saving and travel included).
+      const zone = () => void this.engine.call('set_utc_offset', { minutes: -new Date().getTimezoneOffset() }).catch(() => undefined);
+      zone();
+      if (typeof window !== 'undefined') window.addEventListener('focus', zone);
       await this.engine.call('set_store_forward', { value: this.deps.network().storeForward || this.deps.network().torMode === true }).catch(() => undefined);
       // Private mode: files between your devices do not go over Tor (they wait for a direct local path).
       await this.engine.call('set_bulk_allowed', { allowed: this.deps.network().torMode !== true }).catch(() => undefined);
@@ -358,6 +364,29 @@ export class HostedChatEngine implements ChatEngineApi {
     } catch (e) {
       throw new Error(friendly(e));
     }
+  }
+
+  async quickTimes(): Promise<{ label: string; at: number }[]> {
+    const raw = await this.engine.call<unknown>('quick_times').catch(() => null);
+    return Array.isArray(raw)
+      ? raw.filter((q): q is { label: string; at: number } => typeof q === 'object' && q !== null && typeof (q as { at?: unknown }).at === 'number')
+      : [];
+  }
+
+  togglePin(conversation: string): void {
+    void this.engine.call('toggle_pin', { conversation }).then(() => this.refresh(), () => undefined);
+  }
+
+  setArchived(conversation: string, archived: boolean): void {
+    void this.engine.call('set_archived', { conversation, archived }).then(() => this.refresh(), () => undefined);
+  }
+
+  setMuteUntil(conversation: string, untilMs: number): void {
+    void this.engine.call('set_mute_until', { conversation, until_ms: Math.max(0, Math.round(untilMs)) }).then(() => this.refresh(), () => undefined);
+  }
+
+  setQuietHours(enabled: boolean, from: number, to: number): void {
+    void this.engine.call('set_quiet_hours', { enabled, from, to }).then(() => this.refresh(), () => undefined);
   }
 
   cancelDeviceLink(): void {
@@ -793,4 +822,20 @@ export class HostedChatEngine implements ChatEngineApi {
   eraseLocalChatSession(): void {
     // The full wipe (`localStore.clearAll`) closes every session with the rest of the engine's data.
   }
+}
+
+/** The engine's preferences (JSON with snake_case names) in the shape the screens use. */
+export function shapePrefs(raw: unknown): PrefsView | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const r = raw as Record<string, unknown>;
+  const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
+  const q = (r.quiet ?? {}) as Record<string, unknown>;
+  const mute: Record<string, number> = {};
+  for (const [k, v] of Object.entries((r.mute_until ?? {}) as Record<string, unknown>)) if (typeof v === 'number') mute[k] = v;
+  return {
+    pins: strings(r.pins),
+    archived: strings(r.archived),
+    muteUntil: mute,
+    quiet: { enabled: q.enabled === true, from: Number(q.from ?? 1320) || 0, to: Number(q.to ?? 420) || 0 },
+  };
 }

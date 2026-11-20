@@ -52,6 +52,15 @@ export interface ChatEngineApi {
   renameGroup(groupId: string, name: string): Promise<void>;
 
   /** Linking another device of the account (hosted engine only). */
+  /** Preferences held by the engine and synced to every device of the account. */
+  /** Ready-made times for "send later" in the person's own time: in an hour, this evening, tomorrow morning. */
+  quickTimes?(): Promise<{ label: string; at: number }[]>;
+  togglePin?(conversation: string): void;
+  setArchived?(conversation: string, archived: boolean): void;
+  /** Turn a chat's notifications off until a time in ms (0 turns them on again). */
+  setMuteUntil?(conversation: string, untilMs: number): void;
+  setQuietHours?(enabled: boolean, from: number, to: number): void;
+
   startDeviceLink?(): Promise<string>;
   joinDeviceLink?(code: string, name: string): Promise<void>;
   confirmDeviceLink?(accept: boolean): Promise<void>;

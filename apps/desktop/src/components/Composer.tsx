@@ -12,11 +12,14 @@ export function Composer({
   onSendFile,
   isChannel = false,
   onSchedule,
+  quickTimes,
   scheduled = [],
   onCancelScheduled,
 }: {
   /** Send later (friends and groups; not channels). */
   onSchedule?: (text: string, at: number) => Promise<{ ok: true } | { ok: false; error: string }>;
+  /** Ready-made times to offer (in an hour, this evening, tomorrow morning). */
+  quickTimes?: () => Promise<{ label: string; at: number }[]>;
   /** Messages waiting in this conversation. */
   scheduled?: ScheduledMessage[];
   onCancelScheduled?: (id: string) => void;
@@ -67,8 +70,13 @@ export function Composer({
     }
   }
 
-  async function schedule() {
-    const at = new Date(when).getTime();
+  const [quick, setQuick] = useState<{ label: string; at: number }[]>([]);
+  useEffect(() => {
+    if (picking && quickTimes) void quickTimes().then(setQuick, () => setQuick([]));
+  }, [picking, quickTimes]);
+
+  async function schedule(chosen?: number) {
+    const at = chosen ?? new Date(when).getTime();
     if (!onSchedule || !text.trim() || overLimit || !Number.isFinite(at)) return;
     const result = await onSchedule(text, at);
     if (result.ok) {
@@ -212,8 +220,13 @@ export function Composer({
       ) : null}
       {picking ? (
         <div className="schedule-picker">
+          {quick.map((q) => (
+            <button key={q.label} type="button" className="button secondary small" disabled={!text.trim() || overLimit} onClick={() => void schedule(q.at)}>
+              {q.label}
+            </button>
+          ))}
           <label className="small" htmlFor="schedule-when">
-            Send at
+            Or pick a time
           </label>
           <input id="schedule-when" type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} />
           <button

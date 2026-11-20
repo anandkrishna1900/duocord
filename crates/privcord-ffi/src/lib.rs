@@ -1419,6 +1419,14 @@ impl PrivcordEngine {
         }
     }
 
+    /// Ready-made times for "send later" in the person's own time, as JSON: `[{label, at}]`.
+    pub fn quick_send_times_json(&self) -> Result<String, FfiError> {
+        match pollster::block_on(self.handle.op(Op::QuickTimes))? {
+            Answer::Text(t) => Ok(t),
+            _ => Err(FfiError::InvalidArgument),
+        }
+    }
+
     /// Tell the engine the person's time zone (minutes east of UTC) so quiet hours mean local time. Call it at start
     /// and when the zone changes.
     pub fn set_utc_offset_minutes(&self, minutes: i32) -> Result<(), FfiError> {

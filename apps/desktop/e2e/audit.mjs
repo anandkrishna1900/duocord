@@ -118,9 +118,9 @@ try {
   const screens = [
     ['chat', async () => openChat(p, 'Annabelle')],
     ['group', async () => openChat(p, 'A group')],
-    ['add', async () => p.click('button[aria-label="Add friend"]')],
+    ['add', async () => p.click('button[aria-label="Add a friend"]')],
     ['newgroup', async () => p.click('button[aria-label="New group"]')],
-    ['channels', async () => p.click('button[aria-label="Channels"]')],
+    ['channels', async () => p.click('button[aria-label="Public channels"]')],
     ['settings', async () => p.click('button[aria-label="Settings"]')],
     ['settings-look', async () => { await p.click('button[aria-label="Settings"]'); await p.click('.tab:has-text("Appearance")'); }],
     ['settings-connection', async () => { await p.click('button[aria-label="Settings"]'); await p.click('.tab:has-text("Connection")'); }],

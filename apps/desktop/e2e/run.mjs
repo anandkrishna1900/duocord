@@ -743,14 +743,14 @@ await scenario(16, 'six-word invite: words (not a long string) connect two peopl
   ctx.cleanups.push(relay.close);
   const net = relayNet(relay.url);
   const [A, B] = [await namedDevice(ctx, net, 'Ann'), await namedDevice(ctx, net, 'Ben')];
-  await A.page.click('button[aria-label="Add friend"]');
+  await A.page.click('button[aria-label="Add a friend"]');
   await A.page.waitForSelector('.invite-words .invite-word', { timeout: 20000 });
   const words = (await A.page.locator('.invite-words .invite-word').allInnerTexts()).map((w) => w.trim());
   check(words.length === 6 && words.every((w) => /^[a-z]+$/.test(w)), 'six plain words are shown', words);
   check(!(await A.page.locator('textarea[aria-label="Your invite"]').isVisible()), 'the long invite string is not shown by default');
   check((await A.page.locator('.qr svg').count()) === 1, 'the QR code is still there');
   // Ben types five right words and one wrong word: clear error, nothing added.
-  await B.page.click('button[aria-label="Add friend"]');
+  await B.page.click('button[aria-label="Add a friend"]');
   await B.page.waitForSelector('.invite-words .invite-word', { timeout: 20000 });
   const wrong = [...words.slice(0, 5), words[5] === 'zoo' ? 'zone' : 'zoo'].join(' ');
   await B.page.fill('textarea[aria-label="Friend\'s invite"]', wrong);
@@ -831,7 +831,7 @@ await scenario(18, 'open channels: three strangers share #general, messages are 
   const net = relayNet(relay.url);
   const [A, B, C] = [await namedDevice(ctx, net, 'Ann'), await namedDevice(ctx, net, 'Ben'), await namedDevice(ctx, net, 'Cat')];
   const join = async (d, name) => {
-    await d.page.click('button[aria-label="Channels"]');
+    await d.page.click('button[aria-label="Public channels"]');
     await d.page.fill('input[aria-label="Channel name"]', name);
     await d.page.click('button:has-text("Join channel")');
     await d.page.waitForSelector('.chat-header h2:has-text("# general")', { timeout: 20000 });
@@ -851,7 +851,7 @@ await scenario(18, 'open channels: three strangers share #general, messages are 
   await say(B.page, 'hi, Ben here');
   for (const d of [A, C]) await d.page.waitForSelector('.bubble-text:text-is("hi, Ben here")', { timeout: 30000 });
   // a different room stays separate
-  await A.page.click('button[aria-label="Channels"]');
+  await A.page.click('button[aria-label="Public channels"]');
   await A.page.fill('input[aria-label="Channel name"]', 'quiet');
   await A.page.click('button:has-text("Join channel")');
   await A.page.waitForSelector('.chat-header h2:has-text("# quiet")');

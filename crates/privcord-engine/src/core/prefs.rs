@@ -230,6 +230,56 @@ impl Core {
     }
 }
 
+/// What one chat takes on this device.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ChatStorage {
+    pub id: String,
+    pub messages: u64,
+    pub files: u64,
+    /// Text plus file bytes.
+    pub bytes: u64,
+    pub file_bytes: u64,
+    pub file_ids: Vec<String>,
+}
+
+impl Core {
+    /// What each chat takes on this device, biggest first. Messages deleted for everyone are free.
+    pub fn storage_by_chat(&self) -> Vec<ChatStorage> {
+        let mut by: BTreeMap<String, ChatStorage> = BTreeMap::new();
+        for m in self.messages.values() {
+            if self.deleted.contains(&m.message.message_id) {
+                continue;
+            }
+            let id = m.conversation.storage_key();
+            let row = by.entry(id.clone()).or_insert_with(|| ChatStorage {
+                id,
+                messages: 0,
+                files: 0,
+                bytes: 0,
+                file_bytes: 0,
+                file_ids: Vec::new(),
+            });
+            row.messages += 1;
+            row.bytes += m.message.text.len() as u64;
+            if let Some(info) = self
+                .ports
+                .storage
+                .file_info(&m.message.message_id)
+                .ok()
+                .flatten()
+            {
+                row.files += 1;
+                row.file_bytes += info.size;
+                row.bytes += info.size;
+                row.file_ids.push(m.message.message_id.as_str().to_owned());
+            }
+        }
+        let mut rows: Vec<ChatStorage> = by.into_values().collect();
+        rows.sort_by(|a, b| b.bytes.cmp(&a.bytes).then_with(|| a.id.cmp(&b.id)));
+        rows
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

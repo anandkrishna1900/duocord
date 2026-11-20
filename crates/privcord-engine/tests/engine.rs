@@ -1055,3 +1055,29 @@ fn the_engine_itself_keeps_quiet_for_a_muted_chat_and_in_quiet_hours() {
     // The messages themselves were all kept.
     assert_eq!(texts(&b, &au).len(), 5);
 }
+
+#[test]
+fn storage_by_chat_counts_what_each_chat_holds_and_skips_what_was_deleted() {
+    let (mut a, mut b, au, bu) = pair();
+    connect(&mut a, &mut b, &au, &bu);
+    let keep = a.core.send_message(&bu, "hello", None).unwrap();
+    let gone = a.core.send_message(&bu, "to be removed", None).unwrap();
+    pump(&mut a, &mut b, &au, &bu);
+    let rows = a.core.storage_by_chat();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].id, bu.as_str());
+    assert_eq!(rows[0].messages, 2);
+    assert_eq!(
+        rows[0].bytes,
+        ("hello".len() + "to be removed".len()) as u64
+    );
+    a.core.delete_message(&gone, true).unwrap();
+    pump(&mut a, &mut b, &au, &bu);
+    let rows = a.core.storage_by_chat();
+    assert_eq!(
+        rows[0].messages, 1,
+        "a message deleted for everyone is free"
+    );
+    assert_eq!(rows[0].bytes, "hello".len() as u64);
+    let _ = keep;
+}

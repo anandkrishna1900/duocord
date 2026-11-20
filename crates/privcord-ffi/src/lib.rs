@@ -1419,6 +1419,21 @@ impl PrivcordEngine {
         }
     }
 
+    /// What each chat takes on this device, biggest first, as JSON: `[{id, messages, files, bytes, file_bytes, file_ids}]`.
+    pub fn storage_by_chat_json(&self) -> Result<String, FfiError> {
+        match pollster::block_on(self.handle.op(Op::StorageByChat))? {
+            Answer::Text(t) => Ok(t),
+            _ => Err(FfiError::InvalidArgument),
+        }
+    }
+
+    /// A small pure answer the screens show (`checkup`, `hosts`, `delivery_words`): JSON in, JSON out. The same
+    /// answer on every platform.
+    pub fn insight(&self, name: String, input_json: String) -> Result<String, FfiError> {
+        privcord_engine::insights::insight(&name, &input_json)
+            .map_err(|_| FfiError::InvalidArgument)
+    }
+
     /// Ready-made times for "send later" in the person's own time, as JSON: `[{label, at}]`.
     pub fn quick_send_times_json(&self) -> Result<String, FfiError> {
         match pollster::block_on(self.handle.op(Op::QuickTimes))? {

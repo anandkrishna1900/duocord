@@ -1084,6 +1084,10 @@ internal open class UniffiVTableCallbackInterfaceTransportCallbacks(
 
 
 
+
+
+
+
 // A JNA Library to expose the extern-C FFI definitions.
 // This is an implementation detail which will be called internally by the public API.
 
@@ -1175,6 +1179,8 @@ internal interface UniffiLib : Library {
     fun uniffi_privcord_ffi_fn_method_privcordengine_frame_received(`ptr`: Pointer,`peer`: RustBuffer.ByValue,`frame`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_import_backup(`ptr`: Pointer,`text`: RustBuffer.ByValue,`passphrase`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    fun uniffi_privcord_ffi_fn_method_privcordengine_insight(`ptr`: Pointer,`name`: RustBuffer.ByValue,`inputJson`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_privcord_ffi_fn_method_privcordengine_join_channel(`ptr`: Pointer,`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -1290,6 +1296,8 @@ internal interface UniffiLib : Library {
     ): RustBuffer.ByValue
     fun uniffi_privcord_ffi_fn_method_privcordengine_stop_invite(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    fun uniffi_privcord_ffi_fn_method_privcordengine_storage_by_chat_json(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     fun uniffi_privcord_ffi_fn_method_privcordengine_toggle_pin(`ptr`: Pointer,`conversation`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_wipe_conversation(`ptr`: Pointer,`conversation`: RustBuffer.ByValue,`eraseSession`: Byte,uniffi_out_err: UniffiRustCallStatus, 
@@ -1508,6 +1516,8 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_import_backup(
     ): Short
+    fun uniffi_privcord_ffi_checksum_method_privcordengine_insight(
+    ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_join_channel(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_join_device_link(
@@ -1621,6 +1631,8 @@ internal interface UniffiLib : Library {
     fun uniffi_privcord_ffi_checksum_method_privcordengine_start_device_link(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_stop_invite(
+    ): Short
+    fun uniffi_privcord_ffi_checksum_method_privcordengine_storage_by_chat_json(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_toggle_pin(
     ): Short
@@ -1750,6 +1762,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_import_backup() != 57407.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_insight() != 16493.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_join_channel() != 1805.toShort()) {
@@ -1921,6 +1936,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_stop_invite() != 37776.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_storage_by_chat_json() != 6766.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_toggle_pin() != 23048.toShort()) {
@@ -3360,6 +3378,12 @@ public interface PrivcordEngineInterface {
     fun `importBackup`(`text`: kotlin.String, `passphrase`: kotlin.String): RestoreDto
     
     /**
+     * A small pure answer the screens show (`checkup`, `hosts`, `delivery_words`): JSON in, JSON out. The same
+     * answer on every platform.
+     */
+    fun `insight`(`name`: kotlin.String, `inputJson`: kotlin.String): kotlin.String
+    
+    /**
      * Join a public channel; returns its normalised name.
      */
     fun `joinChannel`(`name`: kotlin.String): kotlin.String
@@ -3609,6 +3633,11 @@ public interface PrivcordEngineInterface {
     fun `startDeviceLink`(): kotlin.String
     
     fun `stopInvite`()
+    
+    /**
+     * What each chat takes on this device, biggest first, as JSON: `[{id, messages, files, bytes, file_bytes, file_ids}]`.
+     */
+    fun `storageByChatJson`(): kotlin.String
     
     /**
      * Pin a chat to the top of the list, or take it off. At most three pins; the same on all your devices.
@@ -3987,6 +4016,23 @@ open class PrivcordEngine: Disposable, AutoCloseable, PrivcordEngineInterface {
     uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_import_backup(
         it, FfiConverterString.lower(`text`),FfiConverterString.lower(`passphrase`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * A small pure answer the screens show (`checkup`, `hosts`, `delivery_words`): JSON in, JSON out. The same
+     * answer on every platform.
+     */
+    @Throws(FfiException::class)override fun `insight`(`name`: kotlin.String, `inputJson`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_insight(
+        it, FfiConverterString.lower(`name`),FfiConverterString.lower(`inputJson`),_status)
 }
     }
     )
@@ -4831,6 +4877,22 @@ open class PrivcordEngine: Disposable, AutoCloseable, PrivcordEngineInterface {
 }
     }
     
+    
+
+    
+    /**
+     * What each chat takes on this device, biggest first, as JSON: `[{id, messages, files, bytes, file_bytes, file_ids}]`.
+     */
+    @Throws(FfiException::class)override fun `storageByChatJson`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_storage_by_chat_json(
+        it, _status)
+}
+    }
+    )
+    }
     
 
     

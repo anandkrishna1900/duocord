@@ -163,6 +163,8 @@ pub enum Op {
     SetUtcOffset(i32),
     /// Ready-made times for "send later", as JSON.
     QuickTimes,
+    /// What each chat takes on this device, as JSON.
+    StorageByChat,
     RenameContact {
         uid: UserId,
         name: String,
@@ -396,6 +398,9 @@ fn pump(core: &mut Core, cmd: Command) -> bool {
                 )),
                 Op::ShouldNotify(id) => Ok(Answer::Text(
                     if core.should_notify(&id) { "1" } else { "0" }.into(),
+                )),
+                Op::StorageByChat => Ok(Answer::Text(
+                    serde_json::to_string(&core.storage_by_chat()).unwrap_or_default(),
                 )),
                 Op::QuickTimes => Ok(Answer::Text(
                     serde_json::to_string(&core.quick_times()).unwrap_or_default(),

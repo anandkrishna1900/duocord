@@ -61,7 +61,7 @@ export function PersonDialog({
           {!person.direct ? (
             <p className="muted small">
               You can talk in your shared groups, but not directly: one of you stays group-only. To message each
-              other directly, both add each other with an invite (Add friend).
+              other directly, both add each other with an invite (Add a friend).
             </p>
           ) : null}
         </div>

@@ -49,6 +49,10 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "com.google.devtools.ksp"
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "org.jetbrains.kotlin.android"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "gradle-wrapper"
+        update-types: ["version-update:semver-major"]
       - dependency-name: "androidx.fragment:fragment-ktx"
         update-types: ["version-update:semver-minor", "version-update:semver-major"]
 

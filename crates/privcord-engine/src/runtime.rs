@@ -172,6 +172,16 @@ pub enum Op {
         code: String,
         name: String,
     },
+    /// On the new device: show a code for the first device to scan (returns it).
+    StartScanLinkOffer {
+        name: String,
+    },
+    /// On the first device: the code the new device shows was scanned.
+    HostScannedLink {
+        code: String,
+    },
+    /// On the new device: the six digits read off the first device.
+    SubmitLinkCode(String),
     ConfirmDeviceLink(bool),
     CancelDeviceLink,
     /// Ask for a device of the account to be removed (in 24 hours, unless taken back).
@@ -232,6 +242,7 @@ pub enum Answer {
     /// Another device of ours heard on the local network (or `None`).
     Lan(Option<crate::core::lan::LanPeer>),
     Maybe(Option<String>),
+    Flag(bool),
 }
 
 /// A channel operation. Returns the channel's normalised name or the new message's id, else an empty string.
@@ -382,6 +393,13 @@ fn pump(core: &mut Core, cmd: Command) -> bool {
                 Op::JoinDeviceLink { code, name } => {
                     core.join_device_link(&code, &name).map(|()| Answer::Done)
                 }
+                Op::StartScanLinkOffer { name } => {
+                    core.start_scan_link_offer(&name).map(Answer::Text)
+                }
+                Op::HostScannedLink { code } => {
+                    core.host_scanned_link(&code).map(|()| Answer::Done)
+                }
+                Op::SubmitLinkCode(digits) => core.submit_link_code(&digits).map(Answer::Flag),
                 Op::ConfirmDeviceLink(accept) => {
                     core.confirm_device_link(accept).map(|()| Answer::Done)
                 }

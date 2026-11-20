@@ -126,6 +126,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { onResult(engine?.startDeviceLink() ?: Result.failure(IllegalStateException("Chat is not ready yet."))) }
     }
 
+    fun startScanLinkOffer(name: String, onResult: (Result<String>) -> Unit) {
+        viewModelScope.launch { onResult(engine?.startScanLinkOffer(name) ?: Result.failure(IllegalStateException("Chat is not ready yet."))) }
+    }
+
+    fun submitLinkCode(digits: String, onResult: (Result<Boolean>) -> Unit) {
+        viewModelScope.launch { onResult(engine?.submitLinkCode(digits) ?: Result.failure(IllegalStateException("Chat is not ready yet."))) }
+    }
+
+    fun hostScannedLink(code: String, onResult: (Result<Unit>) -> Unit) {
+        viewModelScope.launch { onResult(engine?.hostScannedLink(code) ?: Result.failure(IllegalStateException("Chat is not ready yet."))) }
+    }
+
     fun joinDeviceLink(code: String, name: String, onResult: (Result<Unit>) -> Unit) {
         viewModelScope.launch { onResult(engine?.joinDeviceLink(code, name) ?: Result.failure(IllegalStateException("Chat is not ready yet."))) }
     }

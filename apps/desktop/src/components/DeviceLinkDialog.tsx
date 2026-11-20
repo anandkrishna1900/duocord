@@ -4,14 +4,16 @@ import type { ChatEngineApi } from '../lib/engineApi';
 import { Modal } from './Modal';
 import { QrCode } from './QrCode';
 import { AlertIcon, CheckIcon } from './Icons';
+import { DigitBoxes } from './DigitBoxes';
 
 /**
  * Linking another device of the account (docs/design/syncengine.md §2).
  *
  * `host`: on the device holding the account key. It shows a code (QR and text) for the new device, then the 6 digits
  * both screens show; the person confirms here only if they match.
- * `join`: on the new device. The person types the code from the other device, compares the 6 digits, and waits for
- * the other device to confirm. The account key never leaves the other device.
+ * `join`: on the new device. It shows a QR for the phone to scan (like linking WhatsApp Web); the phone then shows six
+ * digits that are typed here, so a photo of the QR is useless on its own. The older way (type the phone's code here)
+ * stays as a fallback. The account key never leaves the other device.
  */
 export function DeviceLinkDialog({
   open,
@@ -33,6 +35,9 @@ export function DeviceLinkDialog({
   const [typed, setTyped] = useState('');
   const [name, setName] = useState(defaultName());
   const [joined, setJoined] = useState(false);
+  const [manual, setManual] = useState(false);
+  const [offer, setOffer] = useState<string | null>(null);
+  const [digits, setDigits] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const link = state?.deviceLink ?? null;
@@ -42,6 +47,9 @@ export function DeviceLinkDialog({
     setCode(null);
     setTyped('');
     setJoined(false);
+    setManual(false);
+    setOffer(null);
+    setDigits('');
     setError(null);
     if (mode === 'host' && engine?.startDeviceLink) {
       engine.startDeviceLink().then(setCode, (e: unknown) => setError(message(e)));
@@ -73,6 +81,33 @@ export function DeviceLinkDialog({
     }
   };
 
+  const showQr = async () => {
+    if (!engine?.startScanLinkOffer) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setOffer(await engine.startScanLinkOffer(name));
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitDigits = async (d: string) => {
+    if (!engine?.submitLinkCode) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await engine.submitLinkCode(d);
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      setDigits('');
+      setBusy(false);
+    }
+  };
+
   const confirm = async (accept: boolean) => {
     if (!engine?.confirmDeviceLink) return;
     setBusy(true);
@@ -86,7 +121,8 @@ export function DeviceLinkDialog({
     }
   };
 
-  const ended = link && link.stage !== 'code' ? link.stage : null;
+  const stage = link?.stage;
+  const ended = stage === 'done' || stage === 'failed' || stage === 'cancelled' || stage === 'expired' ? stage : null;
 
   return (
     <Modal open={open} onClose={close} title={mode === 'host' ? 'Link a new device' : 'Link to your other device'}>
@@ -134,6 +170,32 @@ export function DeviceLinkDialog({
         ) : !error ? (
           <p className="muted">Making a code…</p>
         ) : null
+      ) : mode === 'join' && !manual && offer ? (
+        stage === 'enter-code' || stage === 'wrong-code' ? (
+          <div className="link-join">
+            <p>
+              Your phone now shows six digits. Type them here. Only someone holding your phone can.
+            </p>
+            <DigitBoxes value={digits} onChange={setDigits} onComplete={(d) => void submitDigits(d)} disabled={busy} label="Digits shown on your phone" />
+            {stage === 'wrong-code' ? (
+              <p className="status-text error" role="alert">
+                <AlertIcon size={15} /> Those digits are not right. Look at your phone and try again.
+              </p>
+            ) : null}
+          </div>
+        ) : stage === 'matched' ? (
+          <p className="muted">Digits match. Tap Link on your phone to finish…</p>
+        ) : (
+          <div className="link-offer">
+            <QrCode value={offer} label="Code for your phone to scan" />
+            <ol className="link-steps">
+              <li>Open PrivCord on your phone.</li>
+              <li>Settings › Devices › Link a new device.</li>
+              <li>Scan this code.</li>
+            </ol>
+            <p className="muted small">Your phone will show six digits to type here. The code works once, for ten minutes.</p>
+          </div>
+        )
       ) : joined ? (
         <>
           <p className="muted">Waiting for your other device…</p>
@@ -146,16 +208,27 @@ export function DeviceLinkDialog({
       ) : (
         <div className="link-join">
           <label className="field">
-            <span>Code from your other device</span>
-            <input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="Settings › Devices › Link a new device" />
-          </label>
-          <label className="field">
             <span>Name for this device</span>
             <input value={name} maxLength={64} onChange={(e) => setName(e.target.value)} />
           </label>
+          {manual ? (
+            <label className="field">
+              <span>Code from your other device</span>
+              <input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="Settings › Devices › Link a new device" />
+            </label>
+          ) : null}
           <div className="button-row">
-            <button type="button" className="button primary" disabled={busy || typed.trim().length < 10} onClick={() => void join()}>
-              Link
+            {manual ? (
+              <button type="button" className="button primary" disabled={busy || typed.trim().length < 10} onClick={() => void join()}>
+                Link
+              </button>
+            ) : (
+              <button type="button" className="button primary" disabled={busy || !engine?.startScanLinkOffer} onClick={() => void showQr()}>
+                Show code to scan
+              </button>
+            )}
+            <button type="button" className="button" onClick={() => setManual(!manual)}>
+              {manual ? 'Scan instead' : 'Type a code instead'}
             </button>
           </div>
         </div>

@@ -135,7 +135,7 @@ export default function App() {
             <details className="mnav" key={route}>
               <summary aria-label="Menu"><span aria-hidden="true">Menu</span></summary>
               <div className="mnav-panel">
-                {[['home', 'Home'], ...NAV].map(([to, t]) => <Go key={to} to={to} aria-current={route === to ? 'page' : undefined}>{t}</Go>)}
+                {[['home', 'Home'], ...NAV, ['download', 'Download']].map(([to, t]) => <Go key={to} to={to} aria-current={route === to ? 'page' : undefined}>{t}</Go>)}
               </div>
             </details>
           </div>

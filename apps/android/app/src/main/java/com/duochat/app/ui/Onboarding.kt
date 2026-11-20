@@ -59,6 +59,8 @@ fun OnboardingScreen(
     onCreate: (phrase: String, passphrase: String, onResult: (Result<Unit>) -> Unit) -> Unit,
     state: com.duochat.app.data.ChatState? = null,
     onJoinDevice: (code: String, name: String, onResult: (Result<Unit>) -> Unit) -> Unit = { _, _, r -> r(Result.failure(IllegalStateException("Not available."))) },
+    onStartScanOffer: (name: String, onResult: (Result<String>) -> Unit) -> Unit = { _, r -> r(Result.failure(IllegalStateException("Not available."))) },
+    onSubmitLinkCode: (digits: String, onResult: (Result<Boolean>) -> Unit) -> Unit = { _, r -> r(Result.failure(IllegalStateException("Not available."))) },
     onCancelDeviceLink: () -> Unit = {},
     onDeviceLinked: () -> Unit = {},
 ) {
@@ -133,6 +135,8 @@ fun OnboardingScreen(
                 Step.LINK -> LinkJoinContent(
                     state = state,
                     onJoin = onJoinDevice,
+                    onStartScanOffer = onStartScanOffer,
+                    onSubmitLinkCode = onSubmitLinkCode,
                     onCancel = onCancelDeviceLink,
                     onLinked = onDeviceLinked,
                     onBack = { onCancelDeviceLink(); step = Step.INTRO },

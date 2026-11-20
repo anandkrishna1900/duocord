@@ -8,11 +8,8 @@ import { MAX_FILE_BYTES, formatBytes } from '@duochat/protocol';
 import { Avatar, BrandMark } from './Avatar';
 import { Composer } from './Composer';
 import { MessageList } from './MessageList';
-<<<<<<< HEAD
 import { FilterPills, type ChatFilter } from './FilterPills';
-=======
 import { takeRecentNotified } from '../lib/notifications';
->>>>>>> claude/ui-polish
 import { SettingsDialog, type SettingsSection } from './SettingsDialog';
 import { ManualConnectDialog } from './ManualConnectDialog';
 import { ClearChatDialog, NukeDialog } from './KillSwitchDialogs';

@@ -1711,13 +1711,13 @@ private fun VoiceNote(messageId: String, arrived: Boolean, size: Int, color: Col
                     Modifier.fillMaxWidth().height(28.dp).semantics { contentDescription = "Voice note waveform" },
                 ) {
                     val played = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
-                    val slot = size.width / bars.size
+                    val slot = this.size.width / bars.size
                     val barWidth = slot * 0.6f
                     bars.forEachIndexed { i, v ->
-                        val h = (size.height * v).coerceAtLeast(3.dp.toPx())
+                        val h = (this.size.height * v).coerceAtLeast(3.dp.toPx())
                         drawRoundRect(
                             color = if ((i + 0.5f) / bars.size <= played) color else color.copy(alpha = 0.35f),
-                            topLeft = androidx.compose.ui.geometry.Offset(i * slot + (slot - barWidth) / 2, (size.height - h) / 2),
+                            topLeft = androidx.compose.ui.geometry.Offset(i * slot + (slot - barWidth) / 2, (this.size.height - h) / 2),
                             size = androidx.compose.ui.geometry.Size(barWidth, h),
                             cornerRadius = androidx.compose.ui.geometry.CornerRadius(barWidth / 2),
                         )

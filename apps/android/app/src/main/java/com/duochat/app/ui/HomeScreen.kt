@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Podcasts
@@ -443,7 +444,7 @@ private fun ChatRow(chat: ChatSummary, pinned: Boolean = false, silent: Boolean 
                 if (silent) {
                     Spacer(Modifier.width(6.dp))
                     androidx.compose.material3.Icon(
-                        androidx.compose.material.icons.Icons.Filled.NotificationsOff, contentDescription = "Silent notifications",
+                        Icons.Filled.NotificationsOff, contentDescription = "Silent notifications",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp),
                     )
                 }

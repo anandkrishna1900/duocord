@@ -152,7 +152,7 @@ dependencies {
 
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.activity:activity-compose:1.10.0")
-    implementation("androidx.fragment:fragment-ktx:1.8.5")
+    implementation("androidx.fragment:fragment-ktx:1.9.1")
     implementation("androidx.biometric:biometric:1.1.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
@@ -185,5 +185,5 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     // Real org.json for JVM unit tests (the android.jar one is a stub); reads docs/ble-vectors.json.
-    testImplementation("org.json:json:20240303")
+    testImplementation("org.json:json:20260814")
 }

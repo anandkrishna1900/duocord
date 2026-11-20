@@ -19,9 +19,10 @@ pub fn encrypt(
         return Err(CryptoError::Encrypt);
     }
     let cipher = Aes256Gcm::new_from_slice(key).map_err(|_| CryptoError::Encrypt)?;
+    let nonce = Nonce::try_from(iv).map_err(|_| CryptoError::Encrypt)?;
     cipher
         .encrypt(
-            Nonce::from_slice(iv),
+            &nonce,
             Payload {
                 msg: plaintext,
                 aad,
@@ -41,9 +42,10 @@ pub fn decrypt(
         return Err(CryptoError::Decrypt);
     }
     let cipher = Aes256Gcm::new_from_slice(key).map_err(|_| CryptoError::Decrypt)?;
+    let nonce = Nonce::try_from(iv).map_err(|_| CryptoError::Decrypt)?;
     cipher
         .decrypt(
-            Nonce::from_slice(iv),
+            &nonce,
             Payload {
                 msg: ciphertext,
                 aad,

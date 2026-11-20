@@ -16,7 +16,7 @@ import AnimatedContent from './rb/AnimatedContent.jsx';
 import FadeContent from './rb/FadeContent.jsx';
 
 const REPO = 'https://github.com/__REPO__';
-const asset = (n) => `${import.meta.env.BASE_URL}assets/${n}`;
+
 
 function useReducedMotion() {
   const [r, setR] = useState(() => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -110,23 +110,50 @@ const DOORS = [
   ['faq', 'Questions', 'Accounts, servers, audits, losing your phone.'],
   ['download', 'Download', 'Windows and Android.'],
 ];
-// Pages are hash routes (#/features) so the site works from any GitHub Pages path with no server rewrites. Old anchors like #faq still work.
-const pageFromHash = () => {
+// Real addresses: /features/, /how/, ... Each is also a pre-built HTML file (scripts/pages.mjs), so a link, a refresh or a search
+// engine lands on the right page; inside the site, clicks switch pages without reloading. ROOT is wherever the site lives
+// (the domain root, or /PrivCord/ on a project page), worked out from the address we were opened at.
+const PAGES = Object.keys(TITLES);
+const locate = () => {
+  const parts = location.pathname.split('/').filter(Boolean);
+  const last = parts[parts.length - 1];
+  const route = PAGES.includes(last) && last !== 'home' ? last : 'home';
+  const rootParts = route === 'home' ? parts : parts.slice(0, -1);
+  return { route, root: `/${rootParts.join('/')}${rootParts.length ? '/' : ''}` };
+};
+const { route: FIRST, root: ROOT } = locate();
+const asset = (n) => `${ROOT}assets/${n}`;
+const hrefOf = (to) => (to === 'home' ? ROOT : `${ROOT}${to}/`);
+// Old hash links (#faq, #/faq) from before pages had addresses still land on the right page.
+const hashPage = () => {
   const h = location.hash.replace(/^#\/?/, '');
   return h === 'top' ? 'home' : TITLES[h] ? h : null;
 };
 function usePage() {
-  const [route, setRoute] = useState(() => pageFromHash() || 'home');
+  const [route, setRoute] = useState(() => hashPage() || FIRST);
   useEffect(() => {
-    const on = () => {
-      const r = pageFromHash();
-      if (r) setRoute(r);
-      else if (!location.hash || location.hash === '#/') setRoute('home');
+    const fromHash = () => {
+      const legacy = hashPage();
+      if (legacy) history.replaceState(null, '', hrefOf(legacy));
     };
-    addEventListener('hashchange', on);
-    return () => removeEventListener('hashchange', on);
+    fromHash();
+    const on = () => setRoute(locate().route);
+    const onHash = () => { fromHash(); on(); };
+    addEventListener('popstate', on);
+    addEventListener('hashchange', onHash);
+    return () => { removeEventListener('popstate', on); removeEventListener('hashchange', onHash); };
   }, []);
   return route;
+}
+/** An ordinary link to a real address; a plain left click switches page in place. */
+function Go({ to, children, ...p }) {
+  const click = (e) => {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    if (hrefOf(to) !== location.pathname) history.pushState(null, '', hrefOf(to));
+    dispatchEvent(new PopStateEvent('popstate'));
+  };
+  return <a href={hrefOf(to)} onClick={click} {...p}>{children}</a>;
 }
 
 const ReduceCtx = createContext(false);
@@ -166,15 +193,15 @@ export default function App() {
 
         <header className="top">
           <div className="wrap">
-            <a className="brand" href="#/home"><img src={asset('icon.png')} alt="" width="30" height="30" />PrivCord</a>
+            <Go className="brand" to="home"><img src={asset('icon.png')} alt="" width="30" height="30" />PrivCord</Go>
             <nav className="links" aria-label="Main">
-              {NAV.map(([to, t]) => <a key={to} href={`#/${to}`} aria-current={route === to ? 'page' : undefined}>{t}</a>)}
-              <a className="btn primary small" href="#/download">Download</a>
+              {NAV.map(([to, t]) => <Go key={to} to={to} aria-current={route === to ? 'page' : undefined}>{t}</Go>)}
+              <Go className="btn primary small" to="download">Download</Go>
             </nav>
             <details className="mnav" key={route}>
               <summary aria-label="Menu"><span aria-hidden="true">Menu</span></summary>
               <div className="mnav-panel">
-                {[['home', 'Home'], ...NAV].map(([to, t]) => <a key={to} href={`#/${to}`} aria-current={route === to ? 'page' : undefined}>{t}</a>)}
+                {[['home', 'Home'], ...NAV].map(([to, t]) => <Go key={to} to={to} aria-current={route === to ? 'page' : undefined}>{t}</Go>)}
               </div>
             </details>
           </div>
@@ -200,7 +227,7 @@ export default function App() {
                 <p className="lead">PrivCord is a peer-to-peer messenger for Windows and Android. Chats go straight from your device to your friend's over an encrypted link, you add people with a QR code or six words, and it can keep going over Bluetooth with no internet.</p>
                 <div className="cta">
                   <Magnet padding={80} magnetStrength={3} disabled={reduce}>
-                    <StarBorder as="a" href="#/download" color={YELLOW} trailColor="#ffffff" backgroundColor={YELLOW} textColor={INK} borderColor="rgba(0,0,0,0)" duration={5} radius={10} className="cta-star">Download for Windows or Android</StarBorder>
+                    <StarBorder as={Go} to="download" color={YELLOW} trailColor="#ffffff" backgroundColor={YELLOW} textColor={INK} borderColor="rgba(0,0,0,0)" duration={5} radius={10} className="cta-star">Download for Windows or Android</StarBorder>
                   </Magnet>
                   <a className="btn ghost" href={REPO}>View the source</a>
                 </div>
@@ -247,7 +274,7 @@ export default function App() {
               <h2 id="doors-h">Find what you came for</h2>
               <ul className="door-grid">
                 {DOORS.map(([to, t, p]) => (
-                  <li key={to}><a className="door" href={`#/${to}`}><strong>{t}</strong><span>{p}</span><b aria-hidden="true">→</b></a></li>
+                  <li key={to}><Go className="door" to={to}><strong>{t}</strong><span>{p}</span><b aria-hidden="true">→</b></Go></li>
                 ))}
               </ul>
             </div>

@@ -425,7 +425,7 @@ export function SettingsDialog({
                     onClick={() => updateSettings({ theme })}
                     aria-pressed={settings.theme === theme}
                   >
-                    {theme === 'system' ? 'Auto' : theme === 'dark' ? 'Dark' : 'Light'}
+                    {theme === 'system' ? 'System' : theme === 'dark' ? 'Dark' : 'Light'}
                   </button>
                 ))}
               </div>
@@ -459,7 +459,7 @@ export function SettingsDialog({
         {section === 'notifications' ? (
           <section className="settings-section">
             <Toggle
-              label="Notifications"
+              label="Message notifications"
               description="Show a system notification for new messages while DuoCord is running, also from the tray."
               checked={settings.notificationsEnabled}
               onChange={(value) => {
@@ -468,7 +468,7 @@ export function SettingsDialog({
               }}
             />
             <Toggle
-              label="Show message text in notifications"
+              label="Message previews"
               description="Turn off to keep message text out of notifications."
               checked={settings.notificationPreviews}
               onChange={(value) => updateSettings({ notificationPreviews: value })}

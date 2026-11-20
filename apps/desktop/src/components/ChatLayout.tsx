@@ -516,7 +516,7 @@ export function ChatLayout({
               <>
                 <p className="muted">Swap invite codes with a friend in person or by message. Your chats go device to device; no server keeps them.</p>
                 <ol className="welcome-steps">
-                  <li>Tap <strong>Add a friend</strong> and swap invites.</li>
+                  <li>Click <strong>Add a friend</strong> and swap invites.</li>
                   <li>Start chatting. Messages go straight to their device.</li>
                   <li>Make a <strong>group</strong>. Friends you add can add theirs, and everyone connects automatically.</li>
                 </ol>

@@ -135,7 +135,14 @@ export function DeviceLinkDialog({
           <p className="muted">Making a code…</p>
         ) : null
       ) : joined ? (
-        <p className="muted">Waiting for your other device…</p>
+        <>
+          <p className="muted">Waiting for your other device…</p>
+          <div className="button-row">
+            <button type="button" className="button" onClick={close}>
+              Cancel
+            </button>
+          </div>
+        </>
       ) : (
         <div className="link-join">
           <label className="field">

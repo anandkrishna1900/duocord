@@ -153,6 +153,7 @@ export function GroupDetailsDialog({
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
   const { picked, toggle, reset } = useToggleSet();
 
   useEffect(() => {
@@ -229,13 +230,24 @@ export function GroupDetailsDialog({
               </button>
             ) : null}
             {active && group.amAdmin && !member.isMe ? (
-              <button
-                type="button"
-                className="button ghost small danger"
-                onClick={() => void run(() => engine!.removeGroupMember(group.groupId, member.uid))}
-              >
-                Remove
-              </button>
+              confirmRemove === member.uid ? (
+                <>
+                  <button
+                    type="button"
+                    className="button ghost small danger"
+                    onClick={() => void run(() => engine!.removeGroupMember(group.groupId, member.uid)).finally(() => setConfirmRemove(null))}
+                  >
+                    Remove {member.name}?
+                  </button>
+                  <button type="button" className="button ghost small" onClick={() => setConfirmRemove(null)}>
+                    Keep
+                  </button>
+                </>
+              ) : (
+                <button type="button" className="button ghost small danger" onClick={() => setConfirmRemove(member.uid)}>
+                  Remove
+                </button>
+              )
             ) : null}
           </li>
         ))}
@@ -295,6 +307,8 @@ export function GroupDetailsDialog({
       {active ? (
         <div className="danger-zone">
           {confirmLeave ? (
+            <>
+            <p className="muted small">You will stop receiving messages from this group. You keep the old messages on this device.</p>
             <div className="button-row">
               <button
                 type="button"
@@ -312,6 +326,7 @@ export function GroupDetailsDialog({
                 Stay
               </button>
             </div>
+            </>
           ) : (
             <button type="button" className="button danger ghost" onClick={() => setConfirmLeave(true)}>
               <LogOutIcon size={16} />

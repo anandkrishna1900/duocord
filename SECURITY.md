@@ -1,4 +1,4 @@
-# Security policy
+# Security policy for PrivCord
 
 ## Reporting a vulnerability
 
@@ -6,7 +6,7 @@ Please report suspected vulnerabilities privately (for example through GitHub's
 "Report a vulnerability" on this repository) rather than in a public issue. Include steps
 to reproduce and the affected version. Do not include real conversation content.
 
-## What DuoChat protects, and what it does not
+## What PrivCord protects, and what it does not
 
 **Protects** (protocol v2, see [docs/rust/adr/ADR-011-protocol-v2.md](docs/rust/adr/ADR-011-protocol-v2.md))
 
@@ -39,3 +39,13 @@ to reproduce and the affected version. Do not include real conversation content.
 - Never commit keystores, signing keys, TURN credentials or `.env` files (all git-ignored).
 - Run your relay and TURN server behind TLS and keep them patched.
 - Ship only signed installers (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)).
+
+## Supported versions
+
+Security fixes go into the latest release and the `main` branch. PrivCord is a young project (0.x): use the newest build.
+
+## Automated checks on this repository
+
+CodeQL code scanning (Rust, TypeScript, Python, GitHub Actions), Dependabot version and security updates,
+`npm audit` and `cargo audit` on every CI run, and cargo-fuzz targets for every parser that reads untrusted input.
+`deny.toml` holds a `cargo deny` policy (licenses, banned sources) that can be run locally with `cargo deny check`.

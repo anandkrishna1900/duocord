@@ -1,6 +1,10 @@
+<p align="center">
+  <img src="docs/brand/privcord-icon.png" alt="PrivCord logo: a rounded letter D with a blue to cyan gradient on a dark background" width="128">
+</p>
+
 # PrivCord: private, end-to-end encrypted messenger with no account, no phone number and no server that reads your chats
 
-[![CI](https://github.com/anandkrishna1900/PrivCord/actions/workflows/ci.yml/badge.svg)](https://github.com/anandkrishna1900/PrivCord/actions/workflows/ci.yml)
+[![CI](https://github.com/raiden6767/PrivCord/actions/workflows/ci.yml/badge.svg)](https://github.com/raiden6767/PrivCord/actions/workflows/ci.yml)
 ![Platforms: Windows and Android](https://img.shields.io/badge/platforms-Windows%20%7C%20Android-blue)
 ![Rust engine](https://img.shields.io/badge/engine-Rust-orange)
 ![End-to-end encrypted](https://img.shields.io/badge/chats-end--to--end%20encrypted-brightgreen)
@@ -74,6 +78,16 @@ account key off the first device**.
   removed device is told to erase itself.
 
 The full design is in [docs/design/syncengine.md](docs/design/syncengine.md).
+
+## What people use PrivCord for
+
+- **A private chat app that does not need a phone number.** Create an identity from a 12-word phrase and chat with friends who scan your QR code. No SIM, email, username database or sign-up.
+- **An encrypted messenger for Windows and Android** with one account on your phone and your PC, and no cloud account to trust.
+- **Peer-to-peer chat and file sharing** over WebRTC: photos, videos and files up to 8 MB go straight to the other device, with no upload to a server.
+- **Group chat without a server in the middle.** Groups of up to 10 are kept in step by the members' own devices.
+- **Messaging with no internet or in a blackout.** Nearby phones pass sealed messages along over a Bluetooth mesh, up to 7 hops (Android, experimental).
+- **A self-hosted, privacy-first alternative to WhatsApp, Telegram, Discord and Signal.** Run your own signaling relay and TURN server, or use none and keep to Bluetooth and the local network.
+- **A Rust secure-messaging codebase to study.** Memory-safe core, post-quantum hybrid key exchange (ML-KEM-768 with P-256), shared test vectors and fuzzing in CI.
 
 ## How PrivCord compares
 
@@ -156,6 +170,26 @@ fuzzing in CI, and the security policy is in [SECURITY.md](SECURITY.md).
 **Which technologies does it use?** A Rust engine (domain rules, cryptography, storage, state machine) with a Kotlin and
 Jetpack Compose app on Android and a Tauri 2 and React app on Windows; WebRTC data channels, Bluetooth LE, Nostr relays,
 SQLite, AES-256-GCM, ECDSA and ECDH on P-256, and ML-KEM-768.
+**How do I chat privately without giving my phone number?** Install PrivCord, write down your 12-word recovery phrase, and
+add a friend by showing a QR code or six words. Nobody is asked for a number, email or name.
+
+**Is there an encrypted messenger that works without internet?** PrivCord's Bluetooth mesh (Android) passes sealed messages
+between nearby phones, and linked devices on the same Wi-Fi sync directly with no internet. See
+[Channels and mesh](docs/CHANNELS_AND_MESH.md).
+
+**Is PrivCord a Signal, Session, Briar, Element or Telegram alternative?** It covers similar ground (private, encrypted
+chat) with a different design: no phone number, device-to-device links instead of a central server, and an offline
+Bluetooth mesh. See the [comparison](#how-privcord-compares) and the honest note on audits.
+
+**Can I self-host it?** Yes. The signaling relay is a small Node.js program and the TURN server kit is a Docker Compose
+file; see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) and [relay/README.md](relay/README.md). You can also use no servers at all
+on a local network or over Bluetooth.
+
+**Where is my data stored?** Only on your devices, in an encrypted local database (SQLCipher). Your private keys live in
+the operating system's key store.
+
+**How do I report a security problem?** Privately, through GitHub's "Report a vulnerability" on this repository; see
+[SECURITY.md](SECURITY.md).
 
 ## Architecture
 

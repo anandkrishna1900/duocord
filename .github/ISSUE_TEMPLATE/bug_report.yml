@@ -1,0 +1,28 @@
+name: Bug report
+description: Something in PrivCord does not work as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: "Please do not include real conversations or keys. Security problems: use the private 'Report a vulnerability' option instead of an issue."
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options: [Android, Windows, Both, Other]
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or CI build
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce

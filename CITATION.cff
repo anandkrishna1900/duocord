@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: "If you use PrivCord in research or software, please cite it as below."
+title: "PrivCord: private, end-to-end encrypted, peer-to-peer messenger with no account or phone number"
+type: software
+authors:
+  - alias: "anandkrishna1900"
+repository-code: "https://github.com/raiden6767/PrivCord"
+license-url: "https://github.com/raiden6767/PrivCord/blob/main/LICENSE"
+keywords:
+  - encrypted messenger
+  - end-to-end encryption
+  - peer-to-peer
+  - private messaging
+  - no phone number
+  - WebRTC
+  - Bluetooth mesh
+  - post-quantum cryptography
+  - Rust
+  - Android
+  - Windows
+abstract: >-
+  PrivCord is a private messenger for Windows and Android. Chats are end-to-end encrypted and travel directly between
+  devices over WebRTC or Bluetooth, with no account, phone number or server that can read them. It supports groups,
+  files, public channels, an offline Bluetooth mesh, and multi-device sync, on a shared Rust engine.

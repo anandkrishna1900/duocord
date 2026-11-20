@@ -370,6 +370,18 @@ export class HostedChatEngine implements ChatEngineApi {
     return this.engine.call<unknown>('insight', { name, input: JSON.stringify(input) });
   }
 
+  async diagnostics(app: unknown): Promise<string> {
+    return this.engine.call<string>('diagnostics', { app: JSON.stringify(app) });
+  }
+
+  async selfTest(): Promise<Array<{ name: string; ok: boolean; detail: string }>> {
+    return this.engine.call<Array<{ name: string; ok: boolean; detail: string }>>('self_test');
+  }
+
+  setSecureScreen(on: boolean): void {
+    void this.engine.call('set_secure_screen', { on }).then(() => this.refresh(), () => undefined);
+  }
+
   async storageByChat(): Promise<Array<{ id: string; messages: number; files: number; bytes: number; fileBytes: number; fileIds: string[] }>> {
     const raw = await this.engine.call<unknown>('storage_by_chat').catch(() => []);
     if (!Array.isArray(raw)) return [];
@@ -857,5 +869,6 @@ export function shapePrefs(raw: unknown): PrefsView | null {
     archived: strings(r.archived),
     muteUntil: mute,
     quiet: { enabled: q.enabled === true, from: Number(q.from ?? 1320) || 0, to: Number(q.to ?? 420) || 0 },
+    secureScreen: r.secure_screen === true,
   };
 }

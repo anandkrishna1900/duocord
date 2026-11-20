@@ -5,6 +5,7 @@ import type { AppSettings } from '../lib/settings';
 import { withPinsFirst } from '../lib/pins';
 import { MUTE_FOREVER, NO_PREFS } from '../lib/engine';
 import { deliveryRows } from '../lib/deliveryDetails';
+import { config } from '../config';
 import { Modal } from './Modal';
 import { LOCAL_ID } from '../lib/identity';
 import { formatTime } from '../lib/format';
@@ -23,6 +24,9 @@ import { GroupDetailsDialog, NewGroupDialog } from './GroupDialogs';
 import { PersonDialog } from './PersonDialog';
 import { RequestDialog } from './RequestDialog';
 import { ChannelsDialog } from './ChannelsDialog';
+import { useSecureScreen, useUnreadTitle } from '../hooks/useWindowEffects';
+import { totalUnread, whatsNewPending } from '../lib/insightInputs';
+import { SealedBadge, WhatsNewBanner } from './Insights';
 import { AlertIcon, ArrowLeftIcon, LoaderIcon, PinIcon, RefreshIcon, SettingsIcon, ShieldIcon, UserIcon, XIcon } from './Icons';
 
 interface Row {
@@ -202,9 +206,9 @@ export function ChatLayout({
 
   const hits = useMemo(() => (engine && query.trim().length >= 2 ? engine.search(query) : []), [engine, query, state?.messages]);
 
-  useEffect(() => {
-    document.title = 'DuoCord';
-  }, []);
+  const [updated] = useState(() => whatsNewPending(config.appVersion));
+  useUnreadTitle(state ? totalUnread(state) : 0);
+  useSecureScreen(state?.prefs?.secureScreen === true);
 
   if (fatal) return <Splash danger title="DuoCord could not start" text={fatal} />;
   if (!state || state.phase === 'starting') return <Splash title="DuoCord" text="Opening your chats…" />;
@@ -327,6 +331,7 @@ export function ChatLayout({
           </div>
         ) : hasChats ? (
           <>
+          {updated ? <WhatsNewBanner engine={engine} /> : null}
           <FilterPills value={filter} onChange={setFilter} unread={rows.reduce((n, r) => n + (r.unread > 0 ? 1 : 0), 0)} />
           <nav className="chat-list" aria-label="Chats">
             {rows.filter((r) => prefs.archived.includes(r.id) === showArchived).filter((r) => (filter === 'unread' ? r.unread > 0 : filter === 'groups' ? r.isGroup : true)).map((row) => (
@@ -381,7 +386,10 @@ export function ChatLayout({
               <div className="chat-header-identity">
                 <Avatar name={current.name} size={40} group={!person} />
                 <div>
-                  <h2>{current.name}</h2>
+                  <h2>
+                    {current.name}
+                    <SealedBadge engine={engine} kind={person ? 'direct' : group ? 'group' : 'channel'} />
+                  </h2>
                   <p className="muted small" title={person?.path?.detail}>
                     <span
                       className={`status-dot ${(person ? person.conn === 'connected' : (group?.connected ?? 0) > 0) ? 'live' : ''}`}

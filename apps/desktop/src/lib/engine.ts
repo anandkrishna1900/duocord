@@ -256,9 +256,11 @@ export interface PrefsView {
   muteUntil: Record<string, number>;
   /** No notifications between two times of day, in minutes after midnight. */
   quiet: { enabled: boolean; from: number; to: number };
+  /** Hide the app from screenshots and screen recording (applied per device). */
+  secureScreen: boolean;
 }
 
-export const NO_PREFS: PrefsView = { pins: [], archived: [], muteUntil: {}, quiet: { enabled: false, from: 22 * 60, to: 7 * 60 } };
+export const NO_PREFS: PrefsView = { pins: [], archived: [], muteUntil: {}, quiet: { enabled: false, from: 22 * 60, to: 7 * 60 }, secureScreen: false };
 
 /** A mute with no end (small enough for JavaScript to hold exactly). */
 export const MUTE_FOREVER = 9_000_000_000_000_000;

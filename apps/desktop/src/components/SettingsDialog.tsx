@@ -17,6 +17,7 @@ import { NetworkTransparency } from './NetworkTransparency';
 import { StorageByChat } from './StorageByChat';
 import { NO_PREFS } from '../lib/engine';
 import { formatBytes } from '../lib/format';
+import { DeliveryHealth, DevicesStrip, SupportTools, WhatsNew } from './Insights';
 import { AlertIcon, CheckIcon, KeyIcon, TrashIcon } from './Icons';
 
 export type SettingsSection = 'profile' | 'devices' | 'appearance' | 'notifications' | 'connection' | 'security' | 'backup' | 'about';
@@ -356,6 +357,7 @@ export function SettingsDialog({
 
         {section === 'devices' ? (
           <section className="settings-section">
+            <DevicesStrip engine={engine} state={state} />
             {state.devices && state.devices.length > 0 ? (
               <ul className="device-list" aria-label="Your devices">
                 {state.devices.map((d) => (
@@ -503,7 +505,8 @@ export function SettingsDialog({
                 </label>
               </div>
             ) : null}
-            {isTauri() ? <BackgroundToggles /> : null}
+            {isTauri() ? <div id="keep-running"><BackgroundToggles /></div> : null}
+            <DeliveryHealth engine={engine} state={state} notificationsEnabled={settings.notificationsEnabled} go={setSection} />
           </section>
         ) : null}
 
@@ -535,6 +538,14 @@ export function SettingsDialog({
           <section className="settings-section">
             <PrivacyCheckup engine={engine} settings={settings} state={state} go={setSection} />
             <AppLockControl />
+            {engine?.setSecureScreen ? (
+              <Toggle
+                label="Hide this app from screenshots and screen recording"
+                description="Other programs that capture the screen see a blank window. It applies on every device of the account."
+                checked={(state.prefs ?? NO_PREFS).secureScreen}
+                onChange={(on) => engine.setSecureScreen!(on)}
+              />
+            ) : null}
             <Toggle
               label="Stay group-only with people I meet in groups"
               description="You still read and reply in the groups you share, but nobody you only know through a group can message you directly, and you cannot message them, unless you swap invites yourselves. It applies to people you meet from now on and to the ones you already have."
@@ -618,6 +629,8 @@ export function SettingsDialog({
 
         {section === 'about' ? (
           <section className="settings-section">
+            <WhatsNew engine={engine} />
+            <SupportTools engine={engine} />
             <StorageByChat state={state} engine={engine} />
             {state.usage ? (
               <div className="card-box">

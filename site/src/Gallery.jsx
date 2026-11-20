@@ -26,7 +26,7 @@ export function PhoneFrame({ src, alt, w, h }) {
  * list that auto-plays (each chapter has a progress line; hover, focus, a tap or leaving the screen pauses it). Tap the
  * stage to open the lightbox: a native <dialog> (focus trap, Esc, inert page behind it) with arrows, swipe, zoom to natural
  * size and focus returned to where you came from. Plain CSS, no library; honours prefers-reduced-motion.
- * Pattern references: Magic UI (device frames), React Bits (Stack, stepper), Untitled UI (lightbox), Jitter (progress lines).
+ * Pattern references: Magic UI (device frames), Untitled UI (lightbox), Jitter (progress lines).
  */
 export const SHOTS = [
   { src: 'group-chat-dark.webp', w: 1280, h: 800, phone: false, title: 'A group chat', note: 'Everyone in the group is connected directly. Messages, photos, files and voice notes, end-to-end encrypted.' },
@@ -43,7 +43,8 @@ export function openShot(src, from) {
   window.dispatchEvent(new CustomEvent('privcord:open-shot', { detail: { src, from } }));
 }
 
-export default function Gallery({ asset }) {
+export default function Gallery({ asset, footer, level = 'h2' }) {
+  const H = level;
   const dialogRef = useRef(null);
   const showRef = useRef(null);
   const opener = useRef(null);
@@ -142,7 +143,7 @@ export default function Gallery({ asset }) {
     <section className="screens" id="screens" aria-labelledby="screens-h">
       <div className="wrap">
         <p className="eyebrow">Screens</p>
-        <h1 id="screens-h">Take a look around</h1>
+        <H id="screens-h">Take a look around</H>
         <p className="sub">Real screenshots, no mock-ups. Pick a screen. Click or tap the picture to open it bigger.</p>
 
         <div
@@ -199,6 +200,7 @@ export default function Gallery({ asset }) {
             <p className="stage-cap"><strong>{now.title}</strong> {now.note}</p>
           </div>
         </div>
+        {footer}
       </div>
 
       <dialog

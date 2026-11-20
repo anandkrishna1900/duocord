@@ -9,6 +9,7 @@ const PAGES = {
   compare: ['How PrivCord compares', 'PrivCord next to Signal, Session and Briar: accounts, servers, Bluetooth and audits.'],
   faq: ['Questions people ask: PrivCord', 'Accounts, servers, offline use, platforms, lost phones, licence and audits.'],
   download: ['Get PrivCord for Windows and Android', 'Download PrivCord for Windows or Android. Free.'],
+  about: ['About the maker: PrivCord', 'Who builds PrivCord, where to find them, and how the project is run.'],
 };
 const dist = new URL('../dist/', import.meta.url);
 const home = readFileSync(new URL('index.html', dist), 'utf8');

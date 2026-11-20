@@ -1,6 +1,7 @@
 import Gallery, { openShot, WindowFrame, PhoneFrame } from './Gallery.jsx';
+import { Icon, P, FEATURES, STEPS, FAQ, COMPARE } from './data.jsx';
+import { FeaturesPage, HowPage, ScreensPage, ComparePage, FaqPage, DownloadPage, AboutPage } from './Pages.jsx';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
-// Components below are from React Bits (https://reactbits.dev, MIT + Commons Clause), copied into src/rb. See THIRD_PARTY.md.
 import DotGrid from './rb/DotGrid.jsx';
 import SplitText from './rb/SplitText.jsx';
 import ShinyText from './rb/ShinyText.jsx';
@@ -41,75 +42,8 @@ function useOnScreen(ref, page) {
   return on;
 }
 
-const Icon = ({ d }) => (
-  <svg viewBox="0 0 24 24" aria-hidden="true" className="ic">
-    {d}
-  </svg>
-);
-const P = {
-  lock: <><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></>,
-  qr: <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M20 20h-3v-3" /></>,
-  users: <><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0" /><circle cx="17" cy="9" r="2.5" /><path d="M17 14a5 5 0 0 1 5 5" /></>,
-  laptop: <><rect x="4" y="5" width="16" height="11" rx="2" /><path d="M2 20h20" /></>,
-  clip: <path d="M21 11.5l-8.6 8.6a5 5 0 0 1-7-7L14 4.5a3.4 3.4 0 0 1 5 5l-8.6 8.6a1.8 1.8 0 0 1-2.5-2.5L15 9" />,
-  bt: <path d="M7 7l10 10-5 5V2l5 5L7 17" />,
-  key: <><circle cx="8" cy="15" r="4" /><path d="M11 12l9-9M16 7l3 3M14 9l2 2" /></>,
-  clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
-  pal: <><circle cx="12" cy="12" r="9" /><circle cx="8" cy="10" r="1" /><circle cx="12" cy="7.5" r="1" /><circle cx="16" cy="10" r="1" /></>,
-  globe: <><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18" /></>,
-  mon: <><rect x="3" y="4" width="18" height="12" rx="2" /><path d="M8 20h8M12 16v4" /></>,
-  ph: <><rect x="7" y="2" width="10" height="20" rx="2" /><path d="M11 18h2" /></>,
-};
-
-const FEATURES = [
-  { cls: 'f-wide', i: 'lock', t: 'Direct, end-to-end encrypted chats', p: "Messages are encrypted on your device and go straight to your friend's over WebRTC. The handshake mixes ML-KEM-768 with P-256, so it is built to hold up against future quantum computers too. Optional relays only ever see sealed blobs." },
-  { cls: 'f-wide', i: 'key', t: 'You hold the keys', p: 'A 12-word recovery phrase is your account. Lock the app with Windows Hello or your fingerprint, make passphrase-locked backups, and wipe everything in one tap.' },
-  { cls: '', i: 'qr', t: 'Add a friend in seconds', p: 'Show a QR code or read out six words. No long strings to copy.' },
-  { cls: '', i: 'users', t: 'Groups of up to 10', p: 'Add Ben, Ben adds Cat, and you and Cat connect automatically.' },
-  { cls: '', i: 'laptop', t: 'One account, many devices', p: 'Link your phone and PC with a QR code. The account key never leaves your first device.' },
-  { cls: 'f-wide', i: 'bt', t: 'Keeps going with no internet', tag: 'Android, experimental', p: 'An optional Bluetooth mesh passes sealed messages through nearby phones, up to 7 hops. So far tested in simulation, not on real radios.' },
-  { cls: 'f-wide', i: 'clip', t: 'Files, photos, voice notes', p: "Up to 8 MB, sent straight to the other device with no upload to anyone's server." },
-  { cls: '', i: 'clock', t: 'Send later', p: 'Write now, schedule it for the time you pick.' },
-  { cls: '', i: 'pal', t: '16 themes', p: 'Midnight, AMOLED, Nord, Dracula, Blossom and more, on both apps.' },
-  { cls: '', i: 'globe', t: 'Public channels', p: 'Join rooms like #general with no account. Messages are signed, but anyone who knows the name can read them.' },
-];
-
-const STEPS = [
-  ['Install and write down 12 words', 'That recovery phrase is your account. It is never stored anywhere else, so keep it safe: the same words restore you on a new device.'],
-  ['Add a friend', "Show your QR code or six words. They scan or type them, you tap Add. Both of you now have each other's keys pinned."],
-  ['Chat', 'Messages go device to device. If your friend is offline, they wait and send when you reconnect.'],
-];
-
-const FAQ = [
-  ['Does PrivCord need a phone number, email or account?', 'No. Your identity is a 12-word recovery phrase that you hold. There is nothing to sign up for.'],
-  ['Is PrivCord end-to-end encrypted?', 'Yes. Messages are encrypted on your device and only the friend they are meant for can open them. Every link is authenticated against the keys you pinned when you added the friend, and the key exchange uses a post-quantum hybrid (ML-KEM-768 with P-256).'],
-  ['Is it really serverless?', 'Not completely, and it says so. To find a friend across the internet it uses optional signaling relays (public Nostr relays or your own), STUN, and on strict networks TURN. None of them can read your messages, though they can see connection metadata such as your IP address. You can run your own, or use none on a local network or over Bluetooth.'],
-  ['Can I use it without internet?', 'On Android, an optional Bluetooth mesh carries sealed messages through nearby phones, and linked devices on the same Wi-Fi sync directly. The mesh is experimental and has only been tested in simulation, not on real radios.'],
-  ['Which platforms are supported?', 'Windows and Android today. There is no iPhone, macOS or Linux app yet.'],
-  ['What if I lose my phone?', 'Remove the device from another device of yours: it takes effect in 24 hours (any device can cancel it), or at once with your recovery phrase. Then restore your account on a new device with the 12 words.'],
-  ['Is PrivCord open source?', 'The full source is public and free for personal, educational and research use. The PC-NC license does not allow commercial use without written permission, so it is source-available rather than OSI open source.'],
-  ['Has it been independently audited?', 'Not yet. The protocol is covered by tests, shared test vectors and fuzzing in CI, and the security policy is in the repository. Please read the known limitations before relying on it.'],
-  ['Is PrivCord a Signal, Session or Briar alternative?', 'It covers similar ground (private, encrypted chat) with a different design: no phone number, device-to-device links instead of a central server, and an offline Bluetooth mesh.'],
-];
-
-const COMPARE = [
-  ['Phone number or email needed', 'No', 'Phone number', 'No', 'No'],
-  ['Messages go through company servers', 'No (device to device; optional relays see only sealed blobs)', 'Yes', 'Yes (a decentralized node network)', 'No (Tor, Wi-Fi or Bluetooth)'],
-  ['Works over Bluetooth with no internet', 'Yes (Android mesh, experimental)', 'No', 'No', 'Yes'],
-  ['One account on several devices', 'Yes', 'Yes', 'Limited', 'Limited'],
-  ['Independently audited', 'No, not yet', 'Yes', 'Yes', 'Yes'],
-];
-
-const NAV = [['features', 'Features'], ['how', 'How it works'], ['screens', 'Screens'], ['compare', 'Compare'], ['faq', 'FAQ']];
-const TITLES = { home: 'PrivCord: private encrypted messenger with no phone number or account', features: 'Features: PrivCord', how: 'How it works: PrivCord', screens: 'Screens: PrivCord', compare: 'How PrivCord compares', faq: 'Questions people ask: PrivCord', download: 'Get PrivCord for Windows and Android' };
-const DOORS = [
-  ['features', 'Features', 'Encryption, groups, many devices, files, Bluetooth with no internet.'],
-  ['how', 'How it works', 'Three steps from install to your first message.'],
-  ['screens', 'Screens', 'Real screenshots of both apps.'],
-  ['compare', 'How it compares', 'Next to Signal, Session and Briar, honestly.'],
-  ['faq', 'Questions', 'Accounts, servers, audits, losing your phone.'],
-  ['download', 'Download', 'Windows and Android.'],
-];
+const NAV = [['features', 'Features'], ['how', 'How it works'], ['screens', 'Screens'], ['compare', 'Compare'], ['faq', 'FAQ'], ['about', 'About']];
+const TITLES = { home: 'PrivCord: private encrypted messenger with no phone number or account', features: 'Features: PrivCord', how: 'How it works: PrivCord', screens: 'Screens: PrivCord', compare: 'How PrivCord compares', faq: 'Questions people ask: PrivCord', download: 'Get PrivCord for Windows and Android', about: 'About the maker: PrivCord' };
 // Real addresses: /features/, /how/, ... Each is also a pre-built HTML file (scripts/pages.mjs), so a link, a refresh or a search
 // engine lands on the right page; inside the site, clicks switch pages without reloading. ROOT is wherever the site lives
 // (the domain root, or /PrivCord/ on a project page), worked out from the address we were opened at.
@@ -268,26 +202,11 @@ export default function App() {
             </div>
           </section>
 
-          {/* ---------- home: a short taste, then doors to the other pages ---------- */}
-          <section className="doors" aria-labelledby="doors-h">
-            <div className="wrap">
-              <h2 id="doors-h">Find what you came for</h2>
-              <ul className="door-grid">
-                {DOORS.map(([to, t, p]) => (
-                  <li key={to}><Go className="door" to={to}><strong>{t}</strong><span>{p}</span><b aria-hidden="true">→</b></Go></li>
-                ))}
-              </ul>
-            </div>
-          </section>
-            </>
-          )}
-          {route === 'features' && (
-            <>
 {/* ---------- features ---------- */}
           <section id="features" className="features">
             <div className="wrap">
               <div className="sec-head">
-                {reduce ? <h1>Everything a chat app needs, nothing that watches you</h1> : <ScrollFloat containerClassName="sf" textClassName="sf-text" splitBy="words" stagger={0.06}>Everything a chat app needs, nothing that watches you</ScrollFloat>}
+                {reduce ? <h2>Everything a chat app needs, nothing that watches you</h2> : <ScrollFloat containerClassName="sf" textClassName="sf-text" splitBy="words" stagger={0.06}>Everything a chat app needs, nothing that watches you</ScrollFloat>}
                 <p className="sub">Built for people who want private conversations without handing over an identity.</p>
               </div>
               <div className="bento">
@@ -300,18 +219,15 @@ export default function App() {
                   </Anim>
                 ))}
               </div>
+              <p className="more-row"><Go className="more" to="features">See every feature in detail →</Go></p>
             </div>
           </section>
 
-            </>
-          )}
-          {route === 'how' && (
-            <>
 {/* ---------- how it works: sticky stacking cards on paper ---------- */}
           <section id="how" className="how">
             <div className="wrap how-grid">
               <div className="how-lhs">
-                <h1>Up and running in three steps</h1>
+                <h2>Up and running in three steps</h2>
                 <p className="sub">No sign-up form. Your identity is made on your device.</p>
               </div>
               <ol className="stack">
@@ -322,24 +238,17 @@ export default function App() {
                   </li>
                 ))}
               </ol>
+              <p className="more-row"><Go className="more" to="how">How it works, in detail →</Go></p>
             </div>
           </section>
 
-            </>
-          )}
-          {route === 'screens' && (
-            <>
 {/* ---------- screens: a rail of real screenshots and a lightbox ---------- */}
-          <Gallery asset={asset} />
+          <Gallery asset={asset} footer={<p className="more-row"><Go className="more" to="screens">All screens, with notes →</Go></p>} />
 
-            </>
-          )}
-          {route === 'compare' && (
-            <>
 {/* ---------- compare (paper) ---------- */}
           <section id="compare" className="compare">
             <div className="wrap">
-              <h1>How PrivCord compares</h1>
+              <h2>How PrivCord compares</h2>
               <p className="sub">A short, good-faith summary. It can go out of date, so check each project for its current state.</p>
               <Fade blur duration={1} className="tablewrap-wrap">
                 <div className="tablewrap">
@@ -350,36 +259,30 @@ export default function App() {
                 </div>
               </Fade>
               <p className="fine">PrivCord is a young project by one maintainer. If you need a battle-tested, audited messenger today, use one of the audited ones.</p>
+              <p className="more-row"><Go className="more" to="compare">The full comparison →</Go></p>
             </div>
           </section>
 
-            </>
-          )}
-          {route === 'faq' && (
-            <>
 {/* ---------- faq ---------- */}
           <section id="faq" className="faq-sec">
             <div className="wrap">
-              <h1>Questions people ask</h1>
+              <h2>Questions people ask</h2>
               <div className="faq">
-                {FAQ.map(([q, a], n) => (
+                {FAQ.slice(0, 5).map(([q, a], n) => (
                   <Anim key={q} distance={30} duration={0.6} delay={Math.min(n, 3) * 0.05}>
                     <details><summary>{q}</summary><p>{a}</p></details>
                   </Anim>
                 ))}
               </div>
+              <p className="more-row"><Go className="more" to="faq">All questions →</Go></p>
             </div>
           </section>
 
-            </>
-          )}
-          {route === 'download' && (
-            <>
 {/* ---------- download: yellow ---------- */}
           <section id="download" className="download" ref={dlRef}>
             {!reduce && <div className="dl-bg" aria-hidden="true"><DotGrid dotSize={4} gap={22} baseColor="#2b2b2b" activeColor={YELLOW} proximity={150} shockRadius={340} shockStrength={5} glow={0} paused={!dlOn} /></div>}
             <div className="wrap">
-              <h1>Get PrivCord</h1>
+              <h2>Get PrivCord</h2>
               <p className="sub">Free. Pick your platform.</p>
               <div className="dl">
                 <div className="dl-row">
@@ -392,15 +295,23 @@ export default function App() {
                 </div>
               </div>
               <p className="warn"><strong>Heads up:</strong> the Windows installer is not code-signed yet, so Windows SmartScreen will warn you: choose <em>More info</em>, then <em>Run anyway</em>. On Android you need to allow installing apps from this source. Windows will also ask to allow the firewall the first time, which lets PrivCord find friends on your local network.</p>
+              <p className="more-row"><Go className="more" to="download">Install notes →</Go></p>
             </div>
           </section>
             </>
           )}
+          {route === 'features' && <FeaturesPage Go={Go} />}
+          {route === 'how' && <HowPage Go={Go} />}
+          {route === 'screens' && <ScreensPage Go={Go} asset={asset} />}
+          {route === 'compare' && <ComparePage Go={Go} />}
+          {route === 'faq' && <FaqPage Go={Go} />}
+          {route === 'download' && <DownloadPage Go={Go} repo={REPO} reduce={reduce} dlRef={dlRef} dlOn={dlOn} />}
+          {route === 'about' && <AboutPage Go={Go} repo={REPO} />}
         </main>
 
         <footer>
           <div className="wrap foot">
-            <div>© 2026 PrivCord · <a href={`${REPO}/blob/main/LICENSE`}>PC-NC licence (source-available)</a> · Fonts: Bricolage Grotesque, Figtree (OFL) · Motion components: <a href="https://reactbits.dev">React Bits</a></div>
+            <div>© 2026 PrivCord · <a href={`${REPO}/blob/main/LICENSE`}>PC-NC licence (source-available)</a> · Fonts: Bricolage Grotesque, Figtree (OFL)</div>
             <nav aria-label="Footer">
               <a href={REPO}>GitHub</a>
               <a href={`${REPO}/blob/main/SECURITY.md`}>Security</a>

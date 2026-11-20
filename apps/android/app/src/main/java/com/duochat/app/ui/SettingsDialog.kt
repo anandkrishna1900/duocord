@@ -123,7 +123,12 @@ fun SettingsDialog(
     // A full page, not a floating box: settings are long, and a page reads calmer than a card over the chats.
     Dialog(
         onDismissRequest = onDismiss,
-        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
+        properties = androidx.compose.ui.window.DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false,
+            // This page is its own window: it needs the screen-privacy flag too.
+            securePolicy = if (state.prefs.secureScreen) androidx.compose.ui.window.SecureFlagPolicy.SecureOn else androidx.compose.ui.window.SecureFlagPolicy.Inherit,
+        ),
     ) {
         Surface(
             modifier = Modifier.fillMaxSize(),

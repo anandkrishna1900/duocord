@@ -142,7 +142,7 @@ export default function Gallery({ asset }) {
     <section className="screens" id="screens" aria-labelledby="screens-h">
       <div className="wrap">
         <p className="eyebrow">Screens</p>
-        <h2 id="screens-h">Take a look around</h2>
+        <h1 id="screens-h">Take a look around</h1>
         <p className="sub">Real screenshots, no mock-ups. Pick a screen. Click or tap the picture to open it bigger.</p>
 
         <div

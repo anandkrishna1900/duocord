@@ -28,8 +28,24 @@ header.top .wrap { display: flex; align-items: center; gap: 24px; height: 66px; 
 .brand { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 800; font-size: 21px; letter-spacing: -.02em; text-decoration: none; }
 .brand img { width: 30px; height: 30px; border-radius: 8px; }
 nav.links { margin-left: auto; display: flex; align-items: center; gap: 26px; font-size: 15px; font-weight: 600; color: var(--on-ink-soft); }
-nav.links a { text-decoration: none; } nav.links a:hover { color: var(--yellow); }
-@media (max-width: 720px) { nav.links a:not(.btn) { display: none; } }
+nav.links a { text-decoration: none; } nav.links a:hover, nav.links a[aria-current="page"] { color: var(--yellow); }
+@media (max-width: 860px) { nav.links a:not(.btn) { display: none; } }
+.mnav { display: none; position: relative; }
+.mnav summary { list-style: none; cursor: pointer; padding: 9px 16px; border: 1px solid var(--line-ink2); border-radius: 999px; font: 700 15px/1 'Figtree', sans-serif; color: var(--on-ink); }
+.mnav summary::-webkit-details-marker { display: none; } .mnav summary::after { content: none; }
+.mnav[open] summary { background: var(--bone); color: var(--ink); border-color: var(--bone); }
+.mnav-panel { position: absolute; right: 0; top: calc(100% + 10px); z-index: 45; min-width: 220px; display: grid; padding: 8px; border: 1px solid var(--line-ink2); border-radius: 16px; background: var(--ink2); box-shadow: 0 20px 50px rgba(0,0,0,.6); }
+.mnav-panel a { padding: 13px 14px; border-radius: 10px; text-decoration: none; font-weight: 700; } .mnav-panel a:hover, .mnav-panel a[aria-current="page"] { background: var(--ink3); color: var(--yellow); }
+@media (max-width: 860px) { .mnav { display: block; } header.top .wrap { gap: 12px; } nav.links { gap: 12px; }  }
+.doors { padding: 84px 0 96px; background: var(--ink); }
+.door-grid { list-style: none; margin: 32px 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.door { position: relative; display: grid; gap: 6px; height: 100%; padding: 24px 56px 24px 24px; border: 1px solid var(--line-ink2); border-radius: 16px; background: var(--ink2); text-decoration: none; transition: border-color .15s, transform .15s, background .15s; }
+.door strong { font: 800 1.25rem/1.2 var(--display); letter-spacing: -.02em; } .door span { color: var(--on-ink-soft); font-size: .98rem; line-height: 1.5; }
+.door b { position: absolute; right: 22px; top: 22px; color: var(--yellow); font-size: 1.3rem; transition: transform .15s; }
+.door:hover { border-color: var(--yellow); transform: translateY(-3px); } .door:hover b { transform: translateX(4px); }
+@media (max-width: 900px) { .door-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } } @media (max-width: 560px) { .door-grid { grid-template-columns: minmax(0, 1fr); } .doors { padding: 60px 0 68px; } }
+@media (prefers-reduced-motion: reduce) { .door, .door b { transition: none; } .door:hover { transform: none; } }
+main:focus { outline: none; }
 
 .btn { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 24px; border-radius: 10px; font-weight: 800; text-decoration: none; border: 2px solid transparent; cursor: pointer; transition: background .15s, color .15s, border-color .15s; }
 .btn.primary { background: var(--yellow); color: var(--ink); } .btn.primary:hover { background: var(--bone); }
@@ -63,7 +79,7 @@ nav.links a { text-decoration: none; } nav.links a:hover { color: var(--yellow);
 
 section { position: relative; }
 .features, .how, .compare, .faq-sec, .download { padding: 104px 0; }
-h2 { font-size: clamp(2rem, 4.4vw, 3.5rem); letter-spacing: -.035em; line-height: 1.04; margin: 0 0 16px; font-weight: 800; text-wrap: balance; }
+h2, section:not(.hero) h1 { font-size: clamp(2rem, 4.4vw, 3.5rem); letter-spacing: -.035em; line-height: 1.04; margin: 0 0 16px; font-weight: 800; text-wrap: balance; }
 .sf, .sf-text { font-family: var(--display); font-weight: 800; letter-spacing: -.035em; }
 .sf { margin: 0 0 16px; } .sf-text { font-size: clamp(2rem, 4.4vw, 3.5rem); line-height: 1.04; }
 .sub { color: var(--on-ink-soft); max-width: 58ch; margin: 0; }

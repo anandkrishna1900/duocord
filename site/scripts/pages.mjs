@@ -9,6 +9,7 @@ const PAGES = {
   compare: ['How PrivCord compares', 'PrivCord next to Signal, Session and Briar: accounts, servers, Bluetooth and audits.'],
   faq: ['Questions people ask: PrivCord', 'Accounts, servers, offline use, platforms, lost phones, licence and audits.'],
   download: ['Get PrivCord for Windows and Android', 'Download PrivCord for Windows or Android. Free.'],
+  donate: ['Support PrivCord: donate', 'PrivCord is free, with no ads and no tracking. Donate with PayPal if it is useful to you.'],
   about: ['About the maker: PrivCord', 'Who builds PrivCord, where to find them, and how the project is run.'],
 };
 const dist = new URL('../dist/', import.meta.url);
@@ -23,7 +24,11 @@ for (const [slug, [title, desc]] of Object.entries(PAGES)) {
     .replace(/(<meta property="og:title" content=")[^"]*"/, `$1${title}"`)
     .replace(/(<meta property="og:description" content=")[^"]*"/, `$1${desc}"`)
     .replace(/(<link rel="canonical" href=")__SITE_URL__\/"/, `$1__SITE_URL__/${slug}/"`)
-    .replace(/(<meta property="og:url" content=")__SITE_URL__\/"/, `$1__SITE_URL__/${slug}/"`);
+    .replace(/(<meta property="og:url" content=")__SITE_URL__\/"/, `$1__SITE_URL__/${slug}/"`)
+    .replace(/(<meta name="twitter:title" content=")[^"]*"/, `$1${title}"`)
+    .replace(/(<meta name="twitter:description" content=")[^"]*"/, `$1${desc}"`)
+    .replace(/<noscript>[\s\S]*?<\/noscript>/, `<noscript><h1>${title}</h1><p>${desc}</p><p><a href="../">PrivCord home</a> · <a href="../features/">Features</a> · <a href="../how/">How it works</a> · <a href="../faq/">FAQ</a> · <a href="../download/">Download</a></p></noscript>`)
+    .replace('</head>', `<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"PrivCord","item":"__SITE_URL__/"},{"@type":"ListItem","position":2,"name":"${title.replace(/"/g, '')}","item":"__SITE_URL__/${slug}/"}]}</script>\n</head>`);
   mkdirSync(new URL(`${slug}/`, dist), { recursive: true });
   writeFileSync(new URL(`${slug}/index.html`, dist), h);
 }

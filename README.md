@@ -10,6 +10,13 @@
 ![End-to-end encrypted](https://img.shields.io/badge/chats-end--to--end%20encrypted-brightgreen)
 ![License: PC-NC](https://img.shields.io/badge/license-PC--NC%20(source--available)-lightgrey)
 
+**Website: [PrivCord, the private messenger with no account and no phone number](https://raiden6767.github.io/PrivCord/)**
+ · [Features](https://raiden6767.github.io/PrivCord/features/)
+ · [How it works](https://raiden6767.github.io/PrivCord/how/)
+ · [FAQ](https://raiden6767.github.io/PrivCord/faq/)
+ · [Download for Windows and Android](https://raiden6767.github.io/PrivCord/download/)
+ · [Support PrivCord](https://raiden6767.github.io/PrivCord/donate/)
+
 **PrivCord is a secure, peer-to-peer messaging app for Windows and Android.** Chats are end-to-end encrypted and go
 **straight from device to device** over WebRTC or Bluetooth, so there is **no account to create, no phone number or
 email to hand over, and no company server that can read, store or sell your messages**. Add friends with a QR code

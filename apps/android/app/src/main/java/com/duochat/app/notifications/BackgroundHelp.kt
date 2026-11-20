@@ -12,7 +12,7 @@ object BackgroundHelp {
     fun batteryUnrestricted(context: Context): Boolean =
         context.getSystemService(PowerManager::class.java)?.isIgnoringBatteryOptimizations(context.packageName) == true
 
-    /** Android's own one-tap "Let DuoCord run in the background?" prompt (falls back to the list of apps). */
+    /** Android's own one-tap "Let PrivCord run in the background?" prompt (falls back to the list of apps). */
     fun askBatteryUnrestricted(context: Context) {
         val direct = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}"))
         val list = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)

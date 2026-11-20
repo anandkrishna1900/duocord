@@ -2,7 +2,7 @@
 //! when `engine.ts` is rewired onto the engine (docs/rust/M7_DESKTOP_PLAN.md).
 //!
 //! The page owns WebRTC. The relay sockets are the shell's own (`privcord_desktop_host::native_signaling`), so messages,
-//! sync and notifications go on with the window closed and DuoCord in the tray.
+//! sync and notifications go on with the window closed and PrivCord in the tray.
 //!
 //! (Earlier the page owned the relay sockets too.) It tells the engine what happened (`engine_invoke("link_up", ..)`,
 //! `"frame_received"`, `"signal_blob"`) and listens for what the engine wants done, as Tauri events:
@@ -153,7 +153,7 @@ pub fn engine_network(
     }
     apply_network(&app, &saved);
     // Started at sign-in: the page was only needed to start the engine. Now that the relays are set up, its window
-    // goes, and DuoCord sits in the tray with only Rust running.
+    // goes, and PrivCord sits in the tray with only Rust running.
     if std::env::args().any(|a| a == crate::HIDDEN_ARG)
         && !HIDDEN_START_DONE.swap(true, Ordering::Relaxed)
     {
@@ -174,7 +174,7 @@ fn saved_network(app: &AppHandle) -> Option<Value> {
     serde_json::from_str(&text).ok()
 }
 
-/// The window is gone (DuoCord stays in the tray): its WebRTC links went with it.
+/// The window is gone (PrivCord stays in the tray): its WebRTC links went with it.
 pub fn page_closed(app: &AppHandle) {
     let peers: Vec<String> = LINKED
         .lock()
@@ -254,7 +254,7 @@ impl NotifierCallbacks for PageNotifier {
             return;
         }
         let body = if saved.get("previews").and_then(Value::as_bool) == Some(false) {
-            "Open DuoCord to read it.".to_owned()
+            "Open PrivCord to read it.".to_owned()
         } else {
             preview
         };

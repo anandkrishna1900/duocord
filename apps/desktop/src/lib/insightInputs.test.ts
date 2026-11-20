@@ -22,11 +22,11 @@ describe('insightInputs', () => {
     expect(totalUnread({ contacts: [{ unread: 2 }], groups: [{ unread: 1 }], channels: [{ unread: 4 }] } as never)).toBe(7);
   });
   it('titles', () => {
-    expect(titleFor(0)).toBe('DuoCord');
-    expect(titleFor(3)).toBe('(3) DuoCord');
-    expect(titleFor(250)).toBe('(99+) DuoCord');
-    expect(tooltipFor(0)).toBe('DuoCord');
-    expect(tooltipFor(4)).toBe('DuoCord, 4 unread');
+    expect(titleFor(0)).toBe('PrivCord');
+    expect(titleFor(3)).toBe('(3) PrivCord');
+    expect(titleFor(250)).toBe('(99+) PrivCord');
+    expect(tooltipFor(0)).toBe('PrivCord');
+    expect(tooltipFor(4)).toBe('PrivCord, 4 unread');
     expect(badgeText(0)).toBe('');
     expect(badgeText(9)).toBe('9');
     expect(badgeText(10)).toBe('9+');

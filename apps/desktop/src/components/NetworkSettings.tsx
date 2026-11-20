@@ -82,7 +82,7 @@ export function NetworkSettings({ engine, state }: { engine: ChatEngineApi | nul
 
     const relayList = lines(relays);
     const badRelays = relayList.filter((u) => !isWsUrl(u));
-    if (badRelays.length > 0) errors.push(`Invalid DuoCord relay URL: ${badRelays[0]}`);
+    if (badRelays.length > 0) errors.push(`Invalid PrivCord relay URL: ${badRelays[0]}`);
     for (const u of relayList) signaling.push({ kind: 'relay', url: u });
 
     if (forceRelay && turnList.length === 0 && !(BUILTIN_TURN && builtinTurn)) {
@@ -138,7 +138,7 @@ export function NetworkSettings({ engine, state }: { engine: ChatEngineApi | nul
       <header>
         <h3>Network & Communication Mode</h3>
         <p className="muted">
-          DuoCord operates peer-to-peer without central accounts. Select your preferred transport mode below.
+          PrivCord operates peer-to-peer without central accounts. Select your preferred transport mode below.
         </p>
       </header>
 
@@ -179,7 +179,7 @@ export function NetworkSettings({ engine, state }: { engine: ChatEngineApi | nul
         <textarea rows={3} value={nostr} onChange={(e) => setNostr(e.target.value)} placeholder="wss://relay.example" />
       </label>
       <label className="field">
-        <span>Signaling: your own DuoCord relay (optional, one per line)</span>
+        <span>Signaling: your own PrivCord relay (optional, one per line)</span>
         <textarea rows={2} value={relays} onChange={(e) => setRelays(e.target.value)} placeholder="wss://my-relay.example.org" />
       </label>
       <p className="muted small">
@@ -230,7 +230,7 @@ export function NetworkSettings({ engine, state }: { engine: ChatEngineApi | nul
       />
       {BUILTIN_TURN ? (
         <Toggle
-          label="DuoCord relay when a direct link fails"
+          label="PrivCord relay when a direct link fails"
           hint="Some networks block direct connections. The relay then passes the encrypted traffic on; it cannot read it."
           checked={builtinTurn}
           onChange={setBuiltinTurn}
@@ -244,10 +244,10 @@ export function NetworkSettings({ engine, state }: { engine: ChatEngineApi | nul
       />
       <Toggle
         label="Private mode (Tor)"
-        hint="Connects to the relays through Tor (the Tor service must be running on port 9050) and makes no direct connections, so neither friends nor relays see your IP address. Messages arrive through the relays, more slowly. DuoCord restarts to apply this."
+        hint="Connects to the relays through Tor (the Tor service must be running on port 9050) and makes no direct connections, so neither friends nor relays see your IP address. Messages arrive through the relays, more slowly. PrivCord restarts to apply this."
         checked={torModeActive()}
         onChange={(on) => {
-          if (!window.confirm(on ? 'Turn on private mode? DuoCord will restart.' : 'Turn off private mode? DuoCord will restart.')) return;
+          if (!window.confirm(on ? 'Turn on private mode? PrivCord will restart.' : 'Turn off private mode? PrivCord will restart.')) return;
           setTorMode(on).catch((e: unknown) => setProblems([`Could not change private mode: ${String((e as Error)?.message ?? e)}`]));
         }}
       />

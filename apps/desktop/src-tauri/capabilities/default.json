@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "DuoCord desktop capability: notifications and the main window (the Rust engine keeps its own database).",
+  "description": "PrivCord desktop capability: notifications and the main window (the Rust engine keeps its own database).",
   "windows": ["main", "quick"],
   "permissions": [
     "core:default",

@@ -412,7 +412,7 @@ private fun RootScreen(viewModel: AppViewModel) {
     if (!locked) crash?.let { notice ->
         androidx.compose.material3.AlertDialog(
             onDismissRequest = viewModel::dismissCrash,
-            title = { androidx.compose.material3.Text(if (notice.survived) "DuoCord hit an error" else "DuoCord closed unexpectedly") },
+            title = { androidx.compose.material3.Text(if (notice.survived) "PrivCord hit an error" else "PrivCord closed unexpectedly") },
             text = {
                 androidx.compose.foundation.layout.Column {
                     androidx.compose.material3.Text(
@@ -437,7 +437,7 @@ private fun RootScreen(viewModel: AppViewModel) {
             confirmButton = {
                 androidx.compose.material3.TextButton(onClick = {
                     val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
-                    clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("DuoCord crash", notice.details))
+                    clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("PrivCord crash", notice.details))
                     viewModel.dismissCrash()
                 }) { androidx.compose.material3.Text("Copy details") }
             },

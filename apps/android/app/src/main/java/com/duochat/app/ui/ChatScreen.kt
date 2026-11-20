@@ -909,7 +909,7 @@ private fun MessageBubble(
                     text = { Text("Copy message") },
                     leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp)) },
                     onClick = {
-                        copySensitive(context, "DuoCord message", message.text)
+                        copySensitive(context, "PrivCord message", message.text)
                         menuOpen = false
                         // Android 13 and later confirm copies themselves; a second message would only repeat it.
                         if (android.os.Build.VERSION.SDK_INT < 33) Toast.makeText(context, "Message copied", Toast.LENGTH_SHORT).show()

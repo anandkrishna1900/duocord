@@ -39,7 +39,7 @@ export function NetworkTransparency({ engine }: { engine: ChatEngineApi | null }
         <strong>What this app connects to</strong>
       </div>
       {rows.length === 0 ? (
-        <p className="muted small">Nothing. In this mode DuoCord only uses Bluetooth and the local network.</p>
+        <p className="muted small">Nothing. In this mode PrivCord only uses Bluetooth and the local network.</p>
       ) : (
         <ul className="host-list">
           {rows.map((r) => (

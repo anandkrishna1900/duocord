@@ -607,7 +607,7 @@ class BleTransport(
                 val tx = service?.getCharacteristic(BleConstants.TX_UUID)
                 val cccd = tx?.getDescriptor(BleConstants.CCCD_UUID)
                 if (status != BluetoothGatt.GATT_SUCCESS || rx == null || tx == null || cccd == null) {
-                    fail("The nearby device is not a DuoCord Bluetooth peer.")
+                    fail("The nearby device is not a PrivCord Bluetooth peer.")
                     gatt.disconnect()
                     return@post
                 }

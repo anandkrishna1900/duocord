@@ -259,9 +259,9 @@ export function ChatLayout({
   useUnreadTitle(state ? totalUnread(state) : 0);
   useSecureScreen(state?.prefs?.secureScreen === true);
 
-  if (fatal) return <Splash danger title="DuoCord could not start" text={fatal} />;
-  if (!state || state.phase === 'starting') return <Splash title="DuoCord" text="Opening your chats…" />;
-  if (state.phase === 'error') return <Splash danger title="DuoCord could not start" text={state.error ?? 'Unknown error.'} />;
+  if (fatal) return <Splash danger title="PrivCord could not start" text={fatal} />;
+  if (!state || state.phase === 'starting') return <Splash title="PrivCord" text="Opening your chats…" />;
+  if (state.phase === 'error') return <Splash danger title="PrivCord could not start" text={state.error ?? 'Unknown error.'} />;
 
   const person = state.contacts.find((c) => c.uid === selected) ?? null;
   const group = state.groups.find((g) => g.groupId === selected) ?? null;
@@ -292,7 +292,7 @@ export function ChatLayout({
       <aside className="sidebar">
         <header className="sidebar-head">
           <BrandMark size={30} />
-          <h1>DuoCord</h1>
+          <h1>PrivCord</h1>
           <button type="button" className="icon-button" aria-label="Settings" title="Settings" onClick={() => setDialog('settings')}>
             <SettingsIcon size={18} />
           </button>

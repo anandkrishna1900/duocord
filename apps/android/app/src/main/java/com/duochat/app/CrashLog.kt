@@ -35,7 +35,7 @@ object CrashLog {
             val uptime = if (!fatal) -1L else if (Build.VERSION.SDK_INT >= 24) SystemClock.elapsedRealtime() - Process.getStartElapsedRealtime() else -1L
             file(context).writeText(
                 "uptimeMs=$uptime${if (fatal) "" else ";survived"}\n" +
-                    "DuoCord ${BuildConfig.VERSION_NAME} · Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) · " +
+                    "PrivCord ${BuildConfig.VERSION_NAME} · Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) · " +
                     "${Build.MANUFACTURER} ${Build.MODEL} · $where\n\n" +
                     error.stackTraceToString().take(24_000),
             )
@@ -69,7 +69,7 @@ object CrashLog {
             }.orEmpty()
             file(context).writeText(
                 "uptimeMs=0\n" +
-                    "DuoCord ${BuildConfig.VERSION_NAME} · Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) · " +
+                    "PrivCord ${BuildConfig.VERSION_NAME} · Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) · " +
                     "${Build.MANUFACTURER} ${Build.MODEL} · ${if (native) "native crash" else "crash"}\n\n" +
                     "${info.description.orEmpty()}\n\n" + readable.take(20_000),
             )

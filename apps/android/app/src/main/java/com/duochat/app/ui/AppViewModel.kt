@@ -218,13 +218,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun togglePin(conversationId: String) {
-        updateSettings { copy(pinned = com.duochat.app.data.togglePin(pinned, conversationId)) }
+        viewModelScope.launch { engine?.togglePin(conversationId) }
     }
 
-    fun toggleMute(conversationId: String) {
-        updateSettings {
-            copy(mutedChats = if (conversationId in mutedChats) mutedChats - conversationId else mutedChats + conversationId)
-        }
+    fun setArchived(conversationId: String, archived: Boolean) {
+        viewModelScope.launch { engine?.setArchived(conversationId, archived) }
+    }
+
+    fun setMuteUntil(conversationId: String, untilMs: Long) {
+        viewModelScope.launch { engine?.setMuteUntil(conversationId, untilMs) }
+    }
+
+    fun setQuietHours(enabled: Boolean, from: Int, to: Int) {
+        viewModelScope.launch { engine?.setQuietHours(enabled, from, to) }
+    }
+
+    fun quickSendTimes(onResult: (List<Pair<String, Long>>) -> Unit) {
+        viewModelScope.launch { onResult(engine?.quickSendTimes().orEmpty()) }
     }
 
     fun ownCard(): String = runCatching { engine?.ownCard() }.getOrNull().orEmpty()

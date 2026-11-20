@@ -203,7 +203,32 @@ data class ManualState(
     val peerName: String? = null,
 )
 
+/** No notifications between two times of day (minutes after midnight). */
+data class QuietHoursPref(val enabled: Boolean = false, val from: Int = 22 * 60, val to: Int = 7 * 60)
+
+/** Preferences that follow the person to every device; the shared engine holds and syncs them. */
+data class Prefs(
+    val pins: List<String> = emptyList(),
+    val archived: List<String> = emptyList(),
+    /** Conversation id to the time (ms) its notifications are off until. */
+    val muteUntil: Map<String, Long> = emptyMap(),
+    val quiet: QuietHoursPref = QuietHoursPref(),
+)
+
+/** A mute with no end (the engine's value). */
+const val MUTE_FOREVER = 9_000_000_000_000_000L
+
+fun parsePrefs(json: String): Prefs = runCatching {
+    val o = org.json.JSONObject(json)
+    fun list(key: String) = o.optJSONArray(key)?.let { a -> (0 until a.length()).map { a.getString(it) } } ?: emptyList()
+    val mute = o.optJSONObject("mute_until")?.let { m -> m.keys().asSequence().associateWith { m.getLong(it) } } ?: emptyMap()
+    val q = o.optJSONObject("quiet")
+    Prefs(list("pins"), list("archived"), mute, QuietHoursPref(q?.optBoolean("enabled") ?: false, q?.optInt("from", 1320) ?: 1320, q?.optInt("to", 420) ?: 420))
+}.getOrDefault(Prefs())
+
 data class ChatState(
+    /** Pins, archive, mutes and quiet hours (from the engine). */
+    val prefs: Prefs = Prefs(),
     val phase: EnginePhase = EnginePhase.STARTING,
     val uid: String = "",
     val contacts: List<ContactView> = emptyList(),

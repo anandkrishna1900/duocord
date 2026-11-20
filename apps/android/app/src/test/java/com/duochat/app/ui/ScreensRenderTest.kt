@@ -114,9 +114,9 @@ open class ScreensRenderTest {
         ) {
             DuoChatTheme(AppSettings(theme = "dark")) {
                 ChatScreen(
-                    state = groupState, conversationId = "g1", muted = false, onBack = {},
+                    state = groupState, conversationId = "g1", muteUntil = 0L, archived = false, onBack = {},
                     onSend = { _, _, _ -> }, onSendFile = { _, _, _, _, _ -> }, loadFile = { null },
-                    onRetry = ::noop1, onClearNotice = {}, onOpenDetails = {}, onVerify = {}, onToggleMute = {},
+                    onRetry = ::noop1, onClearNotice = {}, onOpenDetails = {}, onVerify = {}, onMuteUntil = {}, onSetArchived = {},
                     onClearChat = {}, onConnectBluetooth = {}, onLeaveChannel = {}, onMuteSender = ::noop1,
                 )
             }
@@ -145,9 +145,9 @@ open class ScreensRenderTest {
         ) {
             DuoChatTheme(AppSettings(theme = "dark")) {
                 ChatScreen(
-                    state = state.copy(messages = emptyMap()), conversationId = ann, muted = false, onBack = {},
+                    state = state.copy(messages = emptyMap()), conversationId = ann, muteUntil = 0L, archived = false, onBack = {},
                     onSend = { _, _, _ -> }, onSendFile = { _, _, _, _, _ -> }, loadFile = { null },
-                    onRetry = ::noop1, onClearNotice = {}, onOpenDetails = {}, onVerify = {}, onToggleMute = {},
+                    onRetry = ::noop1, onClearNotice = {}, onOpenDetails = {}, onVerify = {}, onMuteUntil = {}, onSetArchived = {},
                     onClearChat = {}, onConnectBluetooth = {}, onLeaveChannel = {}, onMuteSender = ::noop1,
                 )
             }
@@ -257,9 +257,9 @@ open class ScreensRenderTest {
     private fun chatInner(settings: AppSettings) {
         DuoChatTheme(settings) {
             ChatScreen(
-                state = state, conversationId = ann, muted = false, onBack = {},
+                state = state, conversationId = ann, muteUntil = 0L, archived = false, onBack = {},
                 onSend = { _, _, _ -> }, onSendFile = { _, _, _, _, _ -> }, loadFile = { null },
-                onRetry = ::noop1, onClearNotice = {}, onOpenDetails = {}, onVerify = {}, onToggleMute = {},
+                onRetry = ::noop1, onClearNotice = {}, onOpenDetails = {}, onVerify = {}, onMuteUntil = {}, onSetArchived = {},
                 onClearChat = {}, onConnectBluetooth = {}, onLeaveChannel = {}, onMuteSender = ::noop1,
             )
         }

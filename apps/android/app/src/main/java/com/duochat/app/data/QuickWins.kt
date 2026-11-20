@@ -1,16 +1,10 @@
 package com.duochat.app.data
 
-const val MAX_PINS = 3
-
 /** Pinned chats first (in the order they were pinned), then everything else as given. */
 fun <T> withPinsFirst(rows: List<T>, pinned: List<String>, id: (T) -> String): List<T> {
     val pins = pinned.mapNotNull { p -> rows.firstOrNull { id(it) == p } }
     return pins + rows.filter { id(it) !in pinned }
 }
-
-/** Pin or unpin: at most [MAX_PINS], the oldest pin drops off when a fourth is added. */
-fun togglePin(pinned: List<String>, id: String): List<String> =
-    if (id in pinned) pinned - id else (pinned + id).takeLast(MAX_PINS)
 
 /** One internet host this phone may contact, and why. */
 data class HostRow(val host: String, val why: String)
@@ -60,13 +54,6 @@ fun privacyCheckup(
         CheckupItem("panic", "Panic wipe ready", panicWipe, if (panicWipe) "Triple-tap the Chats title to erase this phone." else "Optional: a one-gesture wipe for emergencies."),
         CheckupItem("devices", "No forgotten devices", staleDevices == 0, if (staleDevices == 0) "Every linked device was seen recently." else "$staleDevices linked device${if (staleDevices == 1) "" else "s"} not seen for 90 days. Remove ${if (staleDevices == 1) "it" else "them"} if lost."),
     )
-}
-
-/** No notifications between two times of day (minutes after midnight); the window may cross midnight. */
-fun inQuietHours(enabled: Boolean, fromMin: Int, toMin: Int, hour: Int, minute: Int): Boolean {
-    if (!enabled || fromMin == toMin) return false
-    val t = hour * 60 + minute
-    return if (fromMin < toMin) t in fromMin until toMin else t >= fromMin || t < toMin
 }
 
 fun minutesLabel(m: Int): String = "%02d:%02d".format(m / 60, m % 60)

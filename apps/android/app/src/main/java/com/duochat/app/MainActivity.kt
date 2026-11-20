@@ -258,7 +258,8 @@ private fun RootScreen(viewModel: AppViewModel) {
                     ChatScreen(
                         state = state,
                         conversationId = openChatId,
-                        muted = openChatId in settings.mutedChats,
+                        muteUntil = state.prefs.muteUntil[openChatId] ?: 0L,
+                        archived = openChatId in state.prefs.archived,
                         onBack = back,
                         onSend = { text, replyToId, done -> viewModel.send(openChatId, text, replyToId, done) },
                         onSchedule = { text, at, done -> viewModel.scheduleMessage(openChatId, text, at, done) },
@@ -269,7 +270,9 @@ private fun RootScreen(viewModel: AppViewModel) {
                         onClearNotice = viewModel::clearNotice,
                         onOpenDetails = { if (isGroup) route = "group:$openChatId" else friendDialog = openChatId },
                         onVerify = { friendDialog = openChatId },
-                        onToggleMute = { viewModel.toggleMute(openChatId) },
+                        onMuteUntil = { until -> viewModel.setMuteUntil(openChatId, until) },
+                        onSetArchived = { a -> viewModel.setArchived(openChatId, a); if (a) route = HOME },
+                        quickTimes = viewModel::quickSendTimes,
                         onClearChat = { viewModel.clearChat(openChatId) },
                         onLeaveChannel = { viewModel.leaveChannel(openChatId); route = HOME },
                         onMuteSender = viewModel::muteSender,
@@ -288,7 +291,8 @@ private fun RootScreen(viewModel: AppViewModel) {
                 else -> HomeScreen(
                     state = state,
                     onOpenChat = { route = "chat:${it.id}" },
-                    pinned = settings.pinned,
+                    pinned = state.prefs.pins,
+                    archived = state.prefs.archived,
                     onTogglePin = viewModel::togglePin,
                     onAddFriend = { route = "add" },
                     onNewGroup = { route = "newgroup" },
@@ -339,6 +343,7 @@ private fun RootScreen(viewModel: AppViewModel) {
                     onDismiss = { settingsOpen = false },
                     onRequestNotifications = requestNotifications,
                     onUpdateSettings = viewModel::updateSettings,
+                    onSetQuietHours = viewModel::setQuietHours,
                     onClearLocalData = viewModel::clearLocalData,
                     onDeleteMessages = { ids -> ids.forEach { viewModel.deleteMessage(it, false) } },
                     onOpenManual = {

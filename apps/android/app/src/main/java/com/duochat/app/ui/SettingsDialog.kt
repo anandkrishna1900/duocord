@@ -82,6 +82,7 @@ fun SettingsDialog(
     onUpdateSettings: (AppSettings.() -> AppSettings) -> Unit,
     onClearLocalData: ((Result<Unit>) -> Unit) -> Unit,
     onDeleteMessages: (List<String>) -> Unit = {},
+    onSetQuietHours: (Boolean, Int, Int) -> Unit = { _, _, _ -> },
     onOpenManual: () -> Unit,
     onOpenNuke: () -> Unit,
     onBluetoothPermissionResult: () -> Unit = {},
@@ -300,23 +301,24 @@ SectionTitle("Appearance")
                     settings.notificationPreviews,
                     enabled = settings.notificationsEnabled,
                 ) { onUpdateSettings { copy(notificationPreviews = it) } }
+                val quiet = state.prefs.quiet
                 ToggleRow(
                     "Quiet hours",
-                    "No notifications between these times. Messages still arrive and wait in the chat.",
-                    settings.quietEnabled,
+                    "No notifications between these times, on all your devices. Messages still arrive and wait in the chat.",
+                    quiet.enabled,
                     enabled = settings.notificationsEnabled,
-                ) { onUpdateSettings { copy(quietEnabled = it) } }
-                if (settings.quietEnabled && settings.notificationsEnabled) {
+                ) { onSetQuietHours(it, quiet.from, quiet.to) }
+                if (quiet.enabled && settings.notificationsEnabled) {
                     val ctx = LocalContext.current
                     fun pick(initial: Int, set: (Int) -> Unit) {
                         android.app.TimePickerDialog(ctx, { _, h, m -> set(h * 60 + m) }, initial / 60, initial % 60, true).show()
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { pick(settings.quietFrom) { v -> onUpdateSettings { copy(quietFrom = v) } } }) {
-                            Text("From ${com.duochat.app.data.minutesLabel(settings.quietFrom)}")
+                        OutlinedButton(onClick = { pick(quiet.from) { v -> onSetQuietHours(true, v, quiet.to) } }) {
+                            Text("From ${com.duochat.app.data.minutesLabel(quiet.from)}")
                         }
-                        OutlinedButton(onClick = { pick(settings.quietTo) { v -> onUpdateSettings { copy(quietTo = v) } } }) {
-                            Text("Until ${com.duochat.app.data.minutesLabel(settings.quietTo)}")
+                        OutlinedButton(onClick = { pick(quiet.to) { v -> onSetQuietHours(true, quiet.from, v) } }) {
+                            Text("Until ${com.duochat.app.data.minutesLabel(quiet.to)}")
                         }
                     }
                 }

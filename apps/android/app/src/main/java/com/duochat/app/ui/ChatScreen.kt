@@ -148,7 +148,8 @@ import java.util.Locale
 fun ChatScreen(
     state: ChatState,
     conversationId: String,
-    muted: Boolean,
+    muteUntil: Long,
+    archived: Boolean,
     onBack: () -> Unit,
     onSend: (String, String?, (Result<Unit>) -> Unit) -> Unit,
     onSendFile: (String, String, ByteArray, String?, (Result<Unit>) -> Unit) -> Unit,
@@ -159,7 +160,9 @@ fun ChatScreen(
     onClearNotice: () -> Unit,
     onOpenDetails: () -> Unit,
     onVerify: () -> Unit,
-    onToggleMute: () -> Unit,
+    onMuteUntil: (Long) -> Unit,
+    onSetArchived: (Boolean) -> Unit,
+    quickTimes: ((List<Pair<String, Long>>) -> Unit) -> Unit = { it(emptyList()) },
     onClearChat: () -> Unit,
     onConnectBluetooth: () -> Unit,
     onLeaveChannel: () -> Unit,
@@ -244,9 +247,26 @@ fun ChatScreen(
                                 DropdownMenuItem(text = { Text("Check it's really them") }, onClick = { menuOpen = false; onVerify() })
                             }
                             DropdownMenuItem(
-                                text = { Text(if (muted) "Unmute notifications" else "Mute notifications") },
-                                onClick = { menuOpen = false; onToggleMute() },
+                                text = { Text(if (archived) "Bring back to chats" else "Archive chat") },
+                                onClick = { menuOpen = false; onSetArchived(!archived) },
                             )
+                            if (muteUntil > System.currentTimeMillis()) {
+                                DropdownMenuItem(text = { Text("Turn notifications back on") }, onClick = { menuOpen = false; onMuteUntil(0L) })
+                            } else {
+                                val now = System.currentTimeMillis()
+                                val tomorrow = java.util.Calendar.getInstance().apply {
+                                    add(java.util.Calendar.DAY_OF_YEAR, 1); set(java.util.Calendar.HOUR_OF_DAY, 8); set(java.util.Calendar.MINUTE, 0)
+                                    set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+                                }.timeInMillis
+                                listOf(
+                                    "Mute for 1 hour" to now + 3_600_000L,
+                                    "Mute for 8 hours" to now + 8 * 3_600_000L,
+                                    "Mute until tomorrow" to tomorrow,
+                                    "Mute until I turn it on" to com.duochat.app.data.MUTE_FOREVER,
+                                ).forEach { (label, until) ->
+                                    DropdownMenuItem(text = { Text(label) }, onClick = { menuOpen = false; onMuteUntil(until) })
+                                }
+                            }
                             if (friend != null && friend.link != LinkStatus.CONNECTED) {
                                 DropdownMenuItem(
                                     text = { Text("Connect over Bluetooth") },
@@ -284,6 +304,7 @@ fun ChatScreen(
                     onCancelReply = { replyingTo = null },
                     scheduled = state.scheduled.filter { it.target == conversationId },
                     onSchedule = onSchedule,
+                    quickTimes = quickTimes,
                     onCancelScheduled = onCancelScheduled,
                     onSend = { text, done ->
                         onSend(text, replyingTo?.messageId) { r ->
@@ -1096,6 +1117,7 @@ private fun Composer(
     onSendFile: (String, String, ByteArray, (Result<Unit>) -> Unit) -> Unit,
     scheduled: List<com.duochat.app.data.ScheduledMessage> = emptyList(),
     onSchedule: (String, Long, (Result<Unit>) -> Unit) -> Unit = { _, _, done -> done(Result.failure(IllegalStateException("Not available."))) },
+    quickTimes: ((List<Pair<String, Long>>) -> Unit) -> Unit = { it(emptyList()) },
     onCancelScheduled: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -1116,7 +1138,7 @@ private fun Composer(
         }
     }
 
-    // Send later: pick a day, then a time (the system's own pickers).
+    // The system's own date and time pickers.
     fun pickTimeAndSchedule() {
         val now = java.util.Calendar.getInstance()
         android.app.DatePickerDialog(context, { _, y, m, d ->
@@ -1127,6 +1149,29 @@ private fun Composer(
                 }
             }, now.get(java.util.Calendar.HOUR_OF_DAY), now.get(java.util.Calendar.MINUTE), android.text.format.DateFormat.is24HourFormat(context)).show()
         }, now.get(java.util.Calendar.YEAR), now.get(java.util.Calendar.MONTH), now.get(java.util.Calendar.DAY_OF_MONTH)).show()
+    }
+
+    // Send later: ready-made times from the engine (in an hour, this evening, tomorrow morning), or pick a day and time.
+    var quickChoices by remember { mutableStateOf<List<Pair<String, Long>>?>(null) }
+    quickChoices?.let { choices ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { quickChoices = null },
+            title = { Text("Send later") },
+            text = {
+                Column {
+                    choices.forEach { (label, at) ->
+                        TextButton(onClick = {
+                            quickChoices = null
+                            onSchedule(text, at) { result ->
+                                result.onSuccess { text = ""; error = null }.onFailure { error = it.message ?: "Could not schedule that." }
+                            }
+                        }) { Text(label + " · " + android.text.format.DateFormat.getTimeFormat(context).format(java.util.Date(at))) }
+                    }
+                    TextButton(onClick = { quickChoices = null; pickTimeAndSchedule() }) { Text("Pick a date and time…") }
+                }
+            },
+            confirmButton = { TextButton(onClick = { quickChoices = null }) { Text("Cancel") } },
+        )
     }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris: List<Uri> ->
@@ -1328,7 +1373,7 @@ private fun Composer(
                     ),
                 )
                 if (!isChannel && text.isNotBlank()) Box(Modifier.height(56.dp), contentAlignment = Alignment.Center) {
-                    IconButton(onClick = { pickTimeAndSchedule() }, enabled = canSend, modifier = Modifier.size(48.dp)) {
+                    IconButton(onClick = { quickTimes { list -> if (list.isEmpty()) pickTimeAndSchedule() else quickChoices = list } }, enabled = canSend, modifier = Modifier.size(48.dp)) {
                         Icon(Icons.Filled.Schedule, contentDescription = "Send later", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }

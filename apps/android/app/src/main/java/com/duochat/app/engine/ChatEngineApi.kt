@@ -61,6 +61,15 @@ interface ChatEngineApi {
     suspend fun confirmDeviceLink(accept: Boolean): Result<Unit>
     fun cancelDeviceLink()
 
+    /** Pins, archive, mutes and quiet hours live in the shared engine and follow the person to every device. */
+    suspend fun togglePin(conversationId: String): Result<Unit>
+    suspend fun setArchived(conversationId: String, archived: Boolean): Result<Unit>
+    /** Turn a chat's notifications off until a time in ms (0 turns them on again). */
+    suspend fun setMuteUntil(conversationId: String, untilMs: Long): Result<Unit>
+    suspend fun setQuietHours(enabled: Boolean, from: Int, to: Int): Result<Unit>
+    /** Ready-made times for "send later" in the person's own time zone: label and time in ms. */
+    suspend fun quickSendTimes(): List<Pair<String, Long>>
+
     /** Scheduled send: a message to go out at [at] (milliseconds); kept on this phone, sent by it. */
     suspend fun scheduleMessage(conversationId: String, text: String, at: Long): Result<Unit>
     suspend fun cancelScheduled(id: String): Result<Unit>

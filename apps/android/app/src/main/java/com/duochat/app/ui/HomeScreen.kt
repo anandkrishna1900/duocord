@@ -102,11 +102,13 @@ fun HomeScreen(
     onRecreateGroup: (String) -> Unit = {},
     onDismissOldGroup: (String) -> Unit = {},
     pinned: List<String> = emptyList(),
+    archived: List<String> = emptyList(),
     onTogglePin: (String) -> Unit = {},
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     var filter by rememberSaveable { mutableStateOf(Filter.ALL) }
     var sheetOpen by remember { mutableStateOf(false) }
+    var showArchived by rememberSaveable { mutableStateOf(false) }
     val searching = query.trim().length >= 2
     val hits = remember(query, state.messages) { if (searching) onSearch(query) else emptyList() }
     val listState = rememberLazyListState()
@@ -120,7 +122,7 @@ fun HomeScreen(
             Filter.ALL -> state.chats
             Filter.PEOPLE -> state.chats.filter { !it.isGroup }
             Filter.GROUPS -> state.chats.filter { it.isGroup }
-        },
+        }.filter { (it.id in archived) == showArchived },
         pinned,
     ) { it.id }
 
@@ -221,6 +223,12 @@ fun HomeScreen(
                             )
                             .riseIn(play = introPlaying && index < 10, delayMillis = 60 + index * 40),
                     ) { ChatRow(chat, pinned = chat.id in pinned, onLongClick = { onTogglePin(chat.id) }) { onOpenChat(chat) } }
+                }
+                if (archived.isNotEmpty() || showArchived) item(key = "archived-toggle") {
+                    androidx.compose.material3.TextButton(
+                        onClick = { showArchived = !showArchived },
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                    ) { Text(if (showArchived) "Back to chats" else "Archived (${archived.size})") }
                 }
             }
         }

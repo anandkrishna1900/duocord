@@ -15,14 +15,6 @@ class QuickWinsTest {
     }
 
     @Test
-    fun `at most three pins, the oldest drops off`() {
-        var p = emptyList<String>()
-        for (id in listOf("a", "b", "c", "d")) p = togglePin(p, id)
-        assertEquals(listOf("b", "c", "d"), p)
-        assertEquals(listOf("b", "d"), togglePin(p, "c"))
-    }
-
-    @Test
     fun `network hosts list relays and STUN, nothing in Bluetooth-only mode`() {
         val hosts = networkHosts(NetworkConfig()).map { it.host }
         assertTrue(hosts.any { it.contains("relay.damus.io") })
@@ -46,14 +38,7 @@ class QuickWinsTest {
 
 class QuickWins2Test {
     @Test
-    fun `quiet hours cross midnight and stay off when disabled or empty`() {
-        assertTrue(inQuietHours(true, 22 * 60, 7 * 60, 23, 0))
-        assertTrue(inQuietHours(true, 22 * 60, 7 * 60, 3, 0))
-        assertFalse(inQuietHours(true, 22 * 60, 7 * 60, 7, 0))
-        assertFalse(inQuietHours(true, 22 * 60, 7 * 60, 12, 0))
-        assertTrue(inQuietHours(true, 13 * 60, 14 * 60, 13, 30))
-        assertFalse(inQuietHours(false, 22 * 60, 7 * 60, 23, 0))
-        assertFalse(inQuietHours(true, 480, 480, 8, 0))
+    fun `time of day is shown as HH_MM`() {
         assertEquals("07:05", minutesLabel(7 * 60 + 5))
     }
 

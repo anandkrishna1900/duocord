@@ -230,3 +230,27 @@ footer nav { display: flex; gap: 22px; flex-wrap: wrap; } footer a { text-decora
   html { scroll-behavior: auto; }
   .progress, .stack-card, .screen { animation: none !important; }
 }
+
+/* menu pages: deeper than the home sections */
+.page-head { padding: 72px 0 20px; background: var(--ink); }
+.page-head .lead { margin: 14px 0 0; }
+.page-sec { padding: 36px 0 28px; background: var(--ink); }
+.group-h { display: flex; align-items: center; gap: 12px; margin: 0 0 22px; font-size: clamp(1.5rem, 3vw, 2.1rem); }
+.group-h .ic { width: 30px; height: 30px; }
+.fgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 760px) { .fgrid { grid-template-columns: minmax(0, 1fr); } }
+.fcard.plain h3 { margin: 0 0 8px; font-size: 1.15rem; letter-spacing: -.01em; } .fcard.plain p { margin: 0; color: var(--on-ink-soft); } .fcard.plain a { color: var(--yellow); }
+.plainlist { margin: 0 0 18px; padding-left: 1.2em; color: var(--on-ink-soft); } .plainlist li { margin: 6px 0; } .plainlist.links { list-style: none; padding: 0; } .plainlist a { color: var(--yellow); }
+.longsteps { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.longsteps li { display: grid; grid-template-columns: auto 1fr; gap: 18px; padding: 20px 22px; border: 1px solid var(--line-ink2); border-radius: 16px; background: var(--ink2); }
+.longsteps b { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: var(--yellow); color: var(--ink); font: 800 1.3rem/1 var(--display); }
+.longsteps h3 { margin: 2px 0 6px; font-size: 1.2rem; } .longsteps p { margin: 0; color: var(--on-ink-soft); max-width: 70ch; }
+.page-sec .tablewrap { margin-top: 0; } .page-sec .fine { margin-top: 14px; color: var(--on-ink-muted); font-size: .95rem; max-width: 70ch; }
+.page-sec .sub { margin-top: 10px; }
+.page-dl { padding-bottom: 28px; } .page-dl h1 { margin: 6px 0 8px; }
+.page-next { padding: 28px 0 84px; background: var(--ink); } .page-next ul { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 12px; }
+.more { display: inline-block; padding: 12px 18px; border: 1px solid var(--line-ink2); border-radius: 999px; color: var(--on-ink); font-weight: 700; text-decoration: none; transition: background .15s, color .15s, border-color .15s; }
+.more:hover { background: var(--yellow); color: var(--ink); border-color: var(--yellow); }
+.more-row { margin: 26px 0 0; }
+.paper .more, .how .more, .compare .more, .statement .more { border-color: var(--line-bone2); color: var(--ink); } .how .more:hover, .compare .more:hover { background: var(--ink); color: var(--bone); border-color: var(--ink); }
+@media (prefers-reduced-motion: reduce) { .more { transition: none; } }

@@ -43,7 +43,8 @@ export function openShot(src, from) {
   window.dispatchEvent(new CustomEvent('privcord:open-shot', { detail: { src, from } }));
 }
 
-export default function Gallery({ asset }) {
+export default function Gallery({ asset, footer, level = 'h2' }) {
+  const H = level;
   const dialogRef = useRef(null);
   const showRef = useRef(null);
   const opener = useRef(null);
@@ -142,7 +143,7 @@ export default function Gallery({ asset }) {
     <section className="screens" id="screens" aria-labelledby="screens-h">
       <div className="wrap">
         <p className="eyebrow">Screens</p>
-        <h1 id="screens-h">Take a look around</h1>
+        <H id="screens-h">Take a look around</H>
         <p className="sub">Real screenshots, no mock-ups. Pick a screen. Click or tap the picture to open it bigger.</p>
 
         <div
@@ -199,6 +200,7 @@ export default function Gallery({ asset }) {
             <p className="stage-cap"><strong>{now.title}</strong> {now.note}</p>
           </div>
         </div>
+        {footer}
       </div>
 
       <dialog

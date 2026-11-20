@@ -11,6 +11,7 @@ import { Modal } from './Modal';
 import { NetworkSettings } from './NetworkSettings';
 import { DeviceLinkDialog } from './DeviceLinkDialog';
 import { DeviceRow } from './DeviceRow';
+import { AutoBackupControl } from './AutoBackupControl';
 import { AlertIcon, CheckIcon, KeyIcon, TrashIcon } from './Icons';
 
 export type SettingsSection = 'profile' | 'devices' | 'appearance' | 'connection' | 'security' | 'about';
@@ -183,6 +184,7 @@ function BackupControl({ engine }: { engine: ChatEngineApi | null }) {
           {message.text}
         </p>
       ) : null}
+      {isTauri() ? <AutoBackupControl pass={pass} /> : null}
     </div>
   );
 }

@@ -277,7 +277,7 @@ struct Running {
 #[derive(Default)]
 pub struct EngineState(Mutex<Option<Running>>);
 
-fn running(state: &State<'_, EngineState>) -> Result<Arc<DesktopHost>, String> {
+pub(crate) fn running(state: &State<'_, EngineState>) -> Result<Arc<DesktopHost>, String> {
     state
         .0
         .lock()
@@ -347,6 +347,8 @@ pub async fn engine_start(app: AppHandle, state: State<'_, EngineState>) -> Resu
         let _ = host.start_lan(privcord_desktop_host::lan::LanConfig::default());
     }
     let stop = Arc::new(AtomicBool::new(false));
+    // Weekly backups into the folder the person chose, while the engine runs (window open or not).
+    crate::autobackup::start(app.clone(), host.clone(), stop.clone());
     // Engine events are forwarded to the page until the engine is stopped.
     let (pump_host, pump_stop, pump_app) = (host.clone(), stop.clone(), app);
     std::thread::spawn(move || {
@@ -441,6 +443,7 @@ pub async fn engine_erase(app: AppHandle, state: State<'_, EngineState>) -> Resu
     engine_stop(state).await?;
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     erase_engine_files(&dir)?;
+    crate::autobackup::erase(&app);
     KeyringSecure.delete_identity();
     if KeyringSecure.load_identity().is_some() {
         return Err("the identity is still in the system credential store".to_owned());

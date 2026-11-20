@@ -1,4 +1,6 @@
 #[cfg(desktop)]
+mod autobackup;
+#[cfg(desktop)]
 mod ble;
 #[cfg(desktop)]
 mod engine_host;
@@ -257,7 +259,11 @@ pub fn run() {
         engine_host::engine_erase,
         engine_host::engine_signal_status,
         engine_host::engine_signal_online,
-        engine_host::engine_network
+        engine_host::engine_network,
+        autobackup::auto_backup_status,
+        autobackup::auto_backup_enable,
+        autobackup::auto_backup_disable,
+        autobackup::auto_backup_now
     ]);
     #[cfg(not(desktop))]
     let builder = builder.invoke_handler(tauri::generate_handler![

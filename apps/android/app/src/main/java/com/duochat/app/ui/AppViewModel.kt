@@ -229,10 +229,42 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         runCatching { if (on) com.duochat.app.notifications.DuoBackgroundService.start(app) else com.duochat.app.notifications.DuoBackgroundService.stop(app) }
     }
 
-    fun toggleMute(conversationId: String) {
-        updateSettings {
-            copy(mutedChats = if (conversationId in mutedChats) mutedChats - conversationId else mutedChats + conversationId)
-        }
+    fun togglePin(conversationId: String) {
+        viewModelScope.launch { engine?.togglePin(conversationId) }
+    }
+
+    fun setSilent(conversationId: String, silent: Boolean) {
+        viewModelScope.launch { engine?.setSilent(conversationId, silent) }
+    }
+
+    suspend fun messageReceiptsJson(messageId: String): String = engine?.messageReceiptsJson(messageId) ?: "[]"
+
+    fun setArchived(conversationId: String, archived: Boolean) {
+        viewModelScope.launch { engine?.setArchived(conversationId, archived) }
+    }
+
+    fun setMuteUntil(conversationId: String, untilMs: Long) {
+        viewModelScope.launch { engine?.setMuteUntil(conversationId, untilMs) }
+    }
+
+    fun setQuietHours(enabled: Boolean, from: Int, to: Int) {
+        viewModelScope.launch { engine?.setQuietHours(enabled, from, to) }
+    }
+
+    suspend fun insight(name: String, inputJson: String): String = engine?.insight(name, inputJson) ?: "[]"
+
+    suspend fun diagnosticsJson(appJson: String): String = engine?.diagnosticsJson(appJson) ?: "{}"
+
+    suspend fun selfTestJson(): String = engine?.selfTestJson() ?: "[]"
+
+    fun setSecureScreen(on: Boolean) {
+        viewModelScope.launch { engine?.setSecureScreen(on) }
+    }
+
+    suspend fun storageByChatJson(): String = engine?.storageByChatJson() ?: "[]"
+
+    fun quickSendTimes(onResult: (List<Pair<String, Long>>) -> Unit) {
+        viewModelScope.launch { onResult(engine?.quickSendTimes().orEmpty()) }
     }
 
     fun ownCard(): String = runCatching { engine?.ownCard() }.getOrNull().orEmpty()

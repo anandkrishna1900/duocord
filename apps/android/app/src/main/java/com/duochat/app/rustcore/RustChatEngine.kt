@@ -91,7 +91,9 @@ class RustChatEngine(
     private val conversationId: String,
     private val networkConfig: () -> NetworkConfig,
     private val ownName: () -> String,
-    private val isMuted: (String) -> Boolean,
+    /** Chats this phone had muted before mutes moved into the shared engine; moved once, then cleared. */
+    private val legacyMuted: () -> Set<String> = { emptySet() },
+    private val clearLegacyMuted: () -> Unit = {},
     private val onNotify: (IncomingNotice) -> Unit,
     initialGroupOnly: Boolean,
 ) : ChatEngineApi {
@@ -114,6 +116,9 @@ class RustChatEngine(
     private var refreshJob: Job? = null
     private val refreshRequests = Channel<Unit>(Channel.CONFLATED)
     private var last: SnapshotDto? = null
+    private var prefs: com.duochat.app.data.Prefs = com.duochat.app.data.Prefs()
+    private var meshHops: Map<String, Int> = emptyMap()
+    private var zoneSent: Int? = null
     private var notice: String? = null
     private var groupOnly = initialGroupOnly
     private val secure = KeystoreSecureStore(app, "main")
@@ -340,7 +345,7 @@ class RustChatEngine(
     }
 
     private val notifier = object : NotifierCallbacks {
-        override fun messageReceived(conversation: String, sender: String, preview: String) {}
+        override fun messageReceived(conversation: String, sender: String, preview: String, silent: Boolean) {}
     }
 
     // ------------------------------------------------------------------ lifecycle
@@ -352,6 +357,9 @@ class RustChatEngine(
             }
             engine = started
             applyOwnName()
+            migrateLegacyMutes(started)
+            sendZone(started)
+            loadPrefs(started)
             val snapshot = withContext(Dispatchers.IO) { started.snapshot() }
             last = snapshot
             if (snapshot.ownUid == null) {
@@ -465,8 +473,30 @@ class RustChatEngine(
         refreshRequests.trySend(Unit)
     }
 
+    /** The engine keeps quiet in quiet hours in the person's own time, so it needs the zone (and its daylight saving). */
+    private fun sendZone(e: PrivcordEngine) {
+        val minutes = java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 60_000
+        if (minutes != zoneSent) {
+            runCatching { e.setUtcOffsetMinutes(minutes) }
+            zoneSent = minutes
+        }
+    }
+
+    private fun loadPrefs(e: PrivcordEngine) {
+        runCatching { prefs = com.duochat.app.data.parsePrefs(e.prefsJson()) }
+        runCatching { meshHops = com.duochat.app.data.parseMeshHops(e.meshHopsJson()) }
+    }
+
+    private suspend fun migrateLegacyMutes(e: PrivcordEngine) {
+        val old = legacyMuted()
+        if (old.isEmpty()) return
+        withContext(Dispatchers.IO) { old.forEach { runCatching { e.setMuteUntil(it, com.duochat.app.data.MUTE_FOREVER) } } }
+        clearLegacyMuted()
+    }
+
     private suspend fun refreshNow() {
         val e = engine ?: return
+        withContext(Dispatchers.IO) { sendZone(e); loadPrefs(e) }
         val snapshot = runCatching { withContext(Dispatchers.IO) { e.snapshot() } }.getOrNull() ?: return
         last = snapshot
         if (snapshot.ownUid != null) {
@@ -530,14 +560,13 @@ class RustChatEngine(
 
     private fun notifyIncoming(conversation: String, messageId: String) {
         if (visible && openChat == conversation) return
-        if (isMuted(conversation)) return
         scope.launch {
             val snapshot = last ?: return@launch
             val message = snapshot.conversations.firstOrNull { it.id == conversation }?.messages?.firstOrNull { it.id == messageId }
             val title = snapshot.contacts.firstOrNull { it.uid == conversation }?.displayName
                 ?: snapshot.groups.firstOrNull { it.id == conversation }?.name ?: "New message"
             val body = message?.let { if (it.isFile) filePreviewText(it.text) else it.text } ?: "New message"
-            onNotify(IncomingNotice(messageId, conversation, title, body))
+            onNotify(IncomingNotice(messageId, conversation, title, body, silent = conversation in prefs.silentChats))
         }
     }
 
@@ -1007,7 +1036,7 @@ class RustChatEngine(
 
         _state.update {
             it.copy(
-                contacts = contacts, groups = groups, chats = summaries, messages = shaped,
+                prefs = prefs, meshHops = meshHops, contacts = contacts, groups = groups, chats = summaries, messages = shaped,
                 queuedCount = s.queued.toInt(), groupOnly = groupOnly,
                 channels = s.channels.map { name ->
                     ChannelView("chan:$name", name, s.conversations.firstOrNull { c -> c.id == "chan:$name" }?.unread?.toInt() ?: 0, online)
@@ -1253,6 +1282,34 @@ class RustChatEngine(
     }
 
     override suspend fun cancelScheduled(id: String): Result<Unit> = call { cancelScheduled(id) }
+
+    override suspend fun togglePin(conversationId: String): Result<Unit> = call { togglePin(conversationId) }.also { requestRefresh() }
+    override suspend fun setArchived(conversationId: String, archived: Boolean): Result<Unit> = call { setArchived(conversationId, archived) }.also { requestRefresh() }
+    override suspend fun setMuteUntil(conversationId: String, untilMs: Long): Result<Unit> = call { setMuteUntil(conversationId, untilMs) }.also { requestRefresh() }
+    override suspend fun setQuietHours(enabled: Boolean, from: Int, to: Int): Result<Unit> = call { setQuietHours(enabled, from.toUShort(), to.toUShort()) }.also { requestRefresh() }
+
+    override suspend fun setSilent(conversationId: String, silent: Boolean): Result<Unit> = call { setSilent(conversationId, silent) }.also { requestRefresh() }
+    override suspend fun messageReceiptsJson(messageId: String): String = call { messageReceiptsJson(messageId) }.getOrDefault("[]")
+    override suspend fun meshHopsJson(): String = call { meshHopsJson() }.getOrDefault("{}")
+
+    override suspend fun insight(name: String, inputJson: String): String =
+        call { insight(name, inputJson) }.getOrDefault("[]")
+
+    override suspend fun diagnosticsJson(appJson: String): String = call { diagnosticsJson(appJson) }.getOrDefault("{}")
+
+    override suspend fun selfTestJson(): String = call { selfTestJson() }.getOrDefault("[]")
+
+    override suspend fun setSecureScreen(on: Boolean) { call { setSecureScreen(on) }.also { requestRefresh() } }
+
+    override suspend fun storageByChatJson(): String = call { storageByChatJson() }.getOrDefault("[]")
+
+    override suspend fun quickSendTimes(): List<Pair<String, Long>> = withContext(Dispatchers.IO) {
+        val e = engine ?: return@withContext emptyList()
+        runCatching {
+            val a = org.json.JSONArray(e.quickSendTimesJson())
+            (0 until a.length()).map { a.getJSONObject(it).let { o -> o.getString("label") to o.getLong("at") } }
+        }.getOrDefault(emptyList())
+    }
 
     override suspend fun deviceRemoval(action: com.duochat.app.data.DeviceRemoval): Result<Unit> = call {
         when (action) {

@@ -250,7 +250,29 @@ export interface DeviceLinkState {
   name?: string;
 }
 
+/** Preferences that follow the person to every device (the engine holds and syncs them). */
+export interface PrefsView {
+  /** Conversation ids in the order pinned (at most 3). */
+  pins: string[];
+  archived: string[];
+  /** Conversation id to the time (ms) its notifications are off until. */
+  muteUntil: Record<string, number>;
+  /** No notifications between two times of day, in minutes after midnight. */
+  quiet: { enabled: boolean; from: number; to: number };
+  /** Hide the app from screenshots and screen recording (applied per device). */
+  secureScreen: boolean;
+  /** Chats that notify without a sound. */
+  silentChats: string[];
+}
+
+export const NO_PREFS: PrefsView = { pins: [], archived: [], muteUntil: {}, quiet: { enabled: false, from: 22 * 60, to: 7 * 60 }, secureScreen: false, silentChats: [] };
+
+/** A mute with no end (small enough for JavaScript to hold exactly). */
+export const MUTE_FOREVER = 9_000_000_000_000_000;
+
 export interface ChatState {
+  /** Pins, archive, mutes and quiet hours (from the engine). */
+  prefs?: PrefsView;
   /** The account's devices, and whether this one holds the account key (hosted engine only). */
   devices?: DeviceInfo[];
   holdsAccountKey?: boolean;
@@ -288,7 +310,7 @@ export interface EngineDeps {
   context: string;
   store: LocalStore;
   /** `title` is already worded for the user ("Sam" or "Sam in Trip"). */
-  onNotify: (message: StoredMessage, title: string) => void;
+  onNotify: (message: StoredMessage, title: string, silent?: boolean) => void;
 }
 
 /* ============================== internals ============================== */
@@ -374,6 +396,64 @@ export class ChatEngine implements ChatEngineApi {
 
   /* ---------------- plumbing ---------------- */
 
+  /*
+   * Pins, archive, mutes and quiet hours. The packaged app gets these from the Rust engine, which syncs them to every device;
+   * this browser-only engine (development and the end-to-end suite) keeps them in local storage with the same rules.
+   */
+  private prefs: PrefsView = loadDevPrefs();
+
+  private savePrefs(next: PrefsView): void {
+    this.prefs = next;
+    try {
+      localStorage.setItem(DEV_PREFS_KEY, JSON.stringify(next));
+    } catch {
+      /* no storage */
+    }
+    this.emit();
+  }
+
+  /** Same rules as the Rust engine's `quick_times` (this browser-only engine is for development and tests). */
+  async quickTimes(): Promise<{ label: string; at: number }[]> {
+    const now = Date.now();
+    const hour = new Date(now + 3_600_000);
+    hour.setMinutes(Math.ceil((hour.getMinutes() + 0.001) / 5) * 5, 0, 0);
+    const evening = new Date(now);
+    evening.setHours(18, 0, 0, 0);
+    const morning = new Date(now);
+    morning.setDate(morning.getDate() + 1);
+    morning.setHours(8, 0, 0, 0);
+    const out = [{ label: 'In an hour', at: hour.getTime() }];
+    if (evening.getTime() - now >= 1_800_000) out.push({ label: 'This evening', at: evening.getTime() });
+    out.push({ label: 'Tomorrow morning', at: morning.getTime() });
+    return out;
+  }
+
+  togglePin(conversation: string): void {
+    const pins = this.prefs.pins.includes(conversation) ? this.prefs.pins.filter((p) => p !== conversation) : [...this.prefs.pins, conversation].slice(-3);
+    this.savePrefs({ ...this.prefs, pins });
+  }
+
+  setArchived(conversation: string, archived: boolean): void {
+    const rest = this.prefs.archived.filter((c) => c !== conversation);
+    this.savePrefs({ ...this.prefs, archived: archived ? [...rest, conversation] : rest });
+  }
+
+  setMuteUntil(conversation: string, untilMs: number): void {
+    const muteUntil = { ...this.prefs.muteUntil };
+    if (untilMs > Date.now()) muteUntil[conversation] = untilMs;
+    else delete muteUntil[conversation];
+    this.savePrefs({ ...this.prefs, muteUntil });
+  }
+
+  setSilent(conversation: string, silent: boolean): void {
+    const rest = this.prefs.silentChats.filter((c) => c !== conversation);
+    this.savePrefs({ ...this.prefs, silentChats: silent ? [...rest, conversation] : rest });
+  }
+
+  setQuietHours(enabled: boolean, from: number, to: number): void {
+    this.savePrefs({ ...this.prefs, quiet: { enabled, from: from % 1440, to: to % 1440 } });
+  }
+
   getState(): ChatState {
     return this.state;
   }
@@ -420,7 +500,7 @@ export class ChatEngine implements ChatEngineApi {
   }
 
   private emit(patch: Partial<ChatState> = {}): void {
-    this.state = { ...this.build(), ...patch, notice: patch.notice !== undefined ? patch.notice : this.state.notice, error: patch.error !== undefined ? patch.error : this.state.error };
+    this.state = { ...this.build(), prefs: this.prefs, ...patch, notice: patch.notice !== undefined ? patch.notice : this.state.notice, error: patch.error !== undefined ? patch.error : this.state.error };
     for (const listener of this.listeners) listener(this.state);
   }
 
@@ -1451,7 +1531,7 @@ export class ChatEngine implements ChatEngineApi {
       if (this.active === convId && this.visible) message.readAt = Date.now();
       this.msgs.set(message.messageId, message);
       void this.deps.store.putMessage(message).catch(() => undefined);
-      if (!(this.active === convId && this.visible)) this.deps.onNotify(message, title);
+      if (!(this.active === convId && this.visible)) this.deps.onNotify(message, title, this.prefs.silentChats.includes(convId));
     }
     this.sendFrame(from, { v: 1, kind: 'ack', messageId: message.messageId, state: 'DELIVERED', at: Date.now() });
     if (!exists && this.contacts.has(convId) && this.active === convId && this.visible) this.markRead(convId);
@@ -2215,4 +2295,16 @@ function errorMessage(error: unknown): string {
 function decodeCardSync(text: string): ContactCard {
   const json = atob(text.slice('DUOID1:'.length).replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil((text.length - 7) / 4) * 4, '='));
   return JSON.parse(new TextDecoder().decode(Uint8Array.from(json, (c) => c.charCodeAt(0)))) as ContactCard;
+}
+
+const DEV_PREFS_KEY = 'duochat.devprefs.v1';
+
+function loadDevPrefs(): PrefsView {
+  try {
+    const raw = JSON.parse(localStorage.getItem(DEV_PREFS_KEY) ?? 'null') as Partial<PrefsView> | null;
+    if (raw && Array.isArray(raw.pins)) return { ...NO_PREFS, ...raw, pins: raw.pins.slice(-3) };
+  } catch {
+    /* no storage, or a damaged value */
+  }
+  return NO_PREFS;
 }

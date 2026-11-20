@@ -58,7 +58,8 @@ object EngineHost {
             conversationId = com.duochat.app.AppConfig.conversationId,
             networkConfig = { settings.settings.value.network },
             ownName = { settings.settings.value.displayName },
-            isMuted = { id -> id in settings.settings.value.mutedChats },
+            legacyMuted = { settings.settings.value.mutedChats },
+            clearLegacyMuted = { settings.update { copy(mutedChats = emptySet()) } },
             onNotify = { notice -> com.duochat.app.notifications.DuoNotifications.showNotice(app, notice, settings.settings.value) },
             initialGroupOnly = s.groupOnly,
         )

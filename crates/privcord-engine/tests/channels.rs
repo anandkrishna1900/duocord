@@ -222,3 +222,51 @@ fn a_channel_also_travels_through_the_signaling_service() {
         .is_err());
     assert!(channel_texts(&lonely, "general").is_empty());
 }
+
+#[test]
+fn mesh_hops_are_remembered_per_channel_and_a_direct_link_to_the_writer_clears_them() {
+    use privcord_domain::state::ConnectionPath;
+    let clock = FakeClock::at(1_700_000_000_000);
+    let (mut a, mut b, mut c) = (
+        node("alice", &clock),
+        node("bob", &clock),
+        node("carol", &clock),
+    );
+    for n in [&mut a, &mut b, &mut c] {
+        n.core.join_channel("town").unwrap();
+    }
+    a.core.send_channel_message("town", "hello").unwrap();
+    a.core.mesh_link_up("bob-phone").unwrap();
+    let sent = a.transport.drain_raw();
+    assert!(b.core.mesh_hops().is_empty());
+    // From a neighbour: one hop.
+    b.core.mesh_frame("alice-phone", &sent[0].1);
+    assert_eq!(b.core.mesh_hops().get("chan:town"), Some(&1));
+    // Passed on twice before it reached Carol: three hops (the writer sends at 7, each forwarder takes one off).
+    let mut v: serde_json::Value = serde_json::from_str(&sent[0].1).unwrap();
+    v["ttl"] = serde_json::json!(5);
+    c.core.mesh_frame("dave-phone", &v.to_string());
+    assert_eq!(c.core.mesh_hops().get("chan:town"), Some(&3));
+    // Memory only: a restart forgets it.
+    assert!(start(
+        "bob",
+        b.storage.clone(),
+        b.secure.clone(),
+        clock.clone(),
+        false
+    )
+    .core
+    .mesh_hops()
+    .is_empty());
+    // A direct link to the writer clears it.
+    let (card, uid) = (
+        a.core.own_card(Some("Alice")).unwrap(),
+        a.core.own_uid().unwrap().clone(),
+    );
+    c.core
+        .add_contact(&card, privcord_domain::privacy::ContactTrust::Verified)
+        .unwrap();
+    c.core.link_up(&uid, ConnectionPath::DirectLan).unwrap();
+    assert!(c.core.mesh_hops().is_empty());
+    assert_eq!(b.core.mesh_hops().len(), 1, "other engines are untouched");
+}

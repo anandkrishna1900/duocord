@@ -5,6 +5,13 @@
 import type { FileMeta, LocalStore } from './localDb';
 import type { ChatState, SearchHit } from './engine';
 
+export interface DeviceReceipt {
+  deviceId: string;
+  deviceName: string | null;
+  state: 'delivered' | 'read' | 'waiting';
+  at: number;
+}
+
 export type SendResult = { ok: true } | { ok: false; error: string };
 
 export interface ChatEngineApi {
@@ -52,6 +59,31 @@ export interface ChatEngineApi {
   renameGroup(groupId: string, name: string): Promise<void>;
 
   /** Linking another device of the account (hosted engine only). */
+  /** Preferences held by the engine and synced to every device of the account. */
+  /** Ready-made times for "send later" in the person's own time: in an hour, this evening, tomorrow morning. */
+  quickTimes?(): Promise<{ label: string; at: number }[]>;
+  /** Small pure answers computed once in the shared engine (`checkup`, `hosts`): JSON in, JSON out. */
+  insight?(name: string, input: unknown): Promise<unknown>;
+  /** What each chat takes on this device (the shared engine counts it). */
+  storageByChat?(): Promise<Array<{ id: string; messages: number; files: number; bytes: number; fileBytes: number; fileIds: string[] }>>;
+  /** A counts-only report of this install (the engine builds it from `app`); pretty JSON text. */
+  diagnostics?(app: unknown): Promise<string>;
+  /** The engine's own checks, each with a verdict. */
+  selfTest?(): Promise<Array<{ name: string; ok: boolean; detail: string }>>;
+  /** Hide the app from screenshots and recording (a preference that follows the account). */
+  setSecureScreen?(on: boolean): void;
+  togglePin?(conversation: string): void;
+  setArchived?(conversation: string, archived: boolean): void;
+  /** Turn a chat's notifications off until a time in ms (0 turns them on again). */
+  setMuteUntil?(conversation: string, untilMs: number): void;
+  /** Notify without a sound for a chat (a preference that follows the account). */
+  setSilent?(conversation: string, silent: boolean): void;
+  /** Per-device receipts of one of our messages: one line per device of the person (the engine builds them). */
+  messageReceipts?(messageId: string): Promise<DeviceReceipt[]>;
+  /** How many nearby hops each chat's messages take over the Bluetooth/Wi-Fi mesh, by conversation id. */
+  meshHops?(): Promise<Record<string, number>>;
+  setQuietHours?(enabled: boolean, from: number, to: number): void;
+
   startDeviceLink?(): Promise<string>;
   joinDeviceLink?(code: string, name: string): Promise<void>;
   confirmDeviceLink?(accept: boolean): Promise<void>;

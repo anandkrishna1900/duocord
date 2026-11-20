@@ -25,7 +25,7 @@ object RustEngineProbe {
     }
 
     private object NoNotifier : NotifierCallbacks {
-        override fun messageReceived(conversation: String, sender: String, preview: String) {}
+        override fun messageReceived(conversation: String, sender: String, preview: String, silent: Boolean) {}
     }
 
     /** "ok", or "failed at <step>: <error>". Blocking: call it off the main thread. */

@@ -995,9 +995,11 @@ await scenario(20, 'delete for everyone, reactions, search, backup and restore, 
   await A.page.click('button[aria-label="Record a voice note"]');
   await sleep(1500);
   await A.page.click('button[aria-label="Stop and send the voice note"]');
-  await B.page.waitForSelector('.file-bubble audio.file-audio', { timeout: 30000 });
+  // The audio element is the player; once the waveform has been drawn the element is hidden and the waveform takes over.
+  await B.page.waitForSelector('.file-bubble audio.file-audio', { state: 'attached', timeout: 30000 });
   check((await A.page.locator('.file-bubble audio.file-audio').count()) >= 1, 'the sender sees the player too');
-  ctx.note('a recorded voice note arrives with an audio player');
+  await B.page.waitForSelector('.file-bubble audio.file-audio:not([hidden]), .file-bubble .waveform', { timeout: 30000 });
+  ctx.note('a recorded voice note arrives with an audio player (controls or waveform)');
 
   // --- backup and restore
   await A.page.click('button[aria-label="Settings"]');

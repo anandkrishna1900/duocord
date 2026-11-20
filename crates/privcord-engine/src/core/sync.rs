@@ -140,7 +140,9 @@ impl Storage for Recorder {
                 | StorageOp::SetReaction { .. }
                 | StorageOp::PutContact(_) => true,
                 StorageOp::SetKv { key, .. } => {
-                    key == super::social::KV_MUTED || key == super::KV_GROUPS
+                    key == super::social::KV_MUTED
+                        || key == super::KV_GROUPS
+                        || key.starts_with(super::prefs::PREFIX)
                 }
                 // A message read here, or one of ours delivered or read there (the engine decides below which).
                 StorageOp::SetDelivery {
@@ -603,6 +605,12 @@ impl Core {
                         }
                         items.push((KIND_GROUP, json!({ "id": id, "events": events })));
                     }
+                }
+                StorageOp::SetKv { key, value } if key.starts_with(super::prefs::PREFIX) => {
+                    // "pref.pins.v1" travels as the setting "pref.pins".
+                    let name = key.strip_suffix(".v1").unwrap_or(&key).to_owned();
+                    let v: Value = serde_json::from_slice(&value).unwrap_or(Value::Null);
+                    items.push((kind::SETTING, json!({ "key": name, "value": v })));
                 }
                 StorageOp::SetKv { value, .. } => {
                     let list: Value = serde_json::from_slice(&value).unwrap_or(json!([]));
@@ -1136,6 +1144,20 @@ impl Core {
                 value: list,
             });
         }
+        let p = &self.prefs;
+        for (key, value) in [
+            (super::prefs::KV_PINS, serde_json::json!(p.pins)),
+            (super::prefs::KV_ARCHIVED, serde_json::json!(p.archived)),
+            (super::prefs::KV_MUTE_UNTIL, serde_json::json!(p.mute_until)),
+            (super::prefs::KV_QUIET, serde_json::json!(p.quiet)),
+            (super::prefs::KV_SECURE, serde_json::json!(p.secure_screen)),
+            (super::prefs::KV_SILENT, serde_json::json!(p.silent_chats)),
+        ] {
+            ops.push(StorageOp::SetKv {
+                key: format!("{key}.v1"),
+                value: serde_json::to_vec(&value).unwrap_or_default(),
+            });
+        }
         self.recorder.push(ops);
         let _ = self.ports.storage.apply(&[StorageOp::SetKv {
             key: KV_BACKFILLED.into(),
@@ -1503,6 +1525,7 @@ impl Core {
         // File messages whose bytes come separately.
         let mut with_media: Vec<Value> = Vec::new();
         let mut muted: Option<Value> = None;
+        let mut pref_settings: BTreeSet<String> = BTreeSet::new();
         let mut groups: Vec<(String, Vec<Value>)> = Vec::new();
         for e in entries {
             match e.kind.as_str() {
@@ -1535,6 +1558,16 @@ impl Core {
                 kind::SEEN | kind::TICK => {
                     if let Some(id) = e.body.get("target").and_then(Value::as_str) {
                         touched.insert(id.to_owned());
+                    }
+                }
+                kind::SETTING
+                    if e.body
+                        .get("key")
+                        .and_then(Value::as_str)
+                        .is_some_and(|k| k.starts_with(super::prefs::PREFIX)) =>
+                {
+                    if let Some(k) = e.body.get("key").and_then(Value::as_str) {
+                        pref_settings.insert(k.to_owned());
                     }
                 }
                 kind::SETTING
@@ -1683,6 +1716,17 @@ impl Core {
                 key: super::social::KV_MUTED.into(),
                 value: serde_json::to_vec(&list).unwrap_or_default(),
             });
+        }
+        // Preferences: the merged value of each setting that arrived (last writer wins).
+        if let Some(s) = self.sync.as_ref() {
+            for key in &pref_settings {
+                if let Some(v) = s.replica.state().setting(key) {
+                    ops.push(StorageOp::SetKv {
+                        key: format!("{key}.v1"),
+                        value: serde_json::to_vec(v).unwrap_or_default(),
+                    });
+                }
+            }
         }
         // One at a time: a reaction to a message this device never got must not stop the rest.
         for op in ops {

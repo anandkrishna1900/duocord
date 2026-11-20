@@ -148,7 +148,11 @@ import java.util.Locale
 fun ChatScreen(
     state: ChatState,
     conversationId: String,
-    muted: Boolean,
+    muteUntil: Long,
+    archived: Boolean,
+    silent: Boolean = false,
+    onSetSilent: (Boolean) -> Unit = {},
+    loadReceipts: suspend (String) -> String = { "[]" },
     onBack: () -> Unit,
     onSend: (String, String?, (Result<Unit>) -> Unit) -> Unit,
     onSendFile: (String, String, ByteArray, String?, (Result<Unit>) -> Unit) -> Unit,
@@ -159,7 +163,9 @@ fun ChatScreen(
     onClearNotice: () -> Unit,
     onOpenDetails: () -> Unit,
     onVerify: () -> Unit,
-    onToggleMute: () -> Unit,
+    onMuteUntil: (Long) -> Unit,
+    onSetArchived: (Boolean) -> Unit,
+    quickTimes: ((List<Pair<String, Long>>) -> Unit) -> Unit = { it(emptyList()) },
     onClearChat: () -> Unit,
     onConnectBluetooth: () -> Unit,
     onLeaveChannel: () -> Unit,
@@ -168,6 +174,7 @@ fun ChatScreen(
     onReact: (String, String) -> Unit = { _, _ -> },
     onEnableStoreForward: () -> Unit = {},
     onOpenConnectionSettings: () -> Unit = {},
+    insight: suspend (String, String) -> String = { _, _ -> "[]" },
 ) {
     val friend: ContactView? = state.contacts.firstOrNull { it.uid == conversationId }
     val group: GroupView? = state.groups.firstOrNull { it.groupId == conversationId }
@@ -177,6 +184,12 @@ fun ChatScreen(
     val canWrite = state.phase == EnginePhase.READY && (friend != null || group?.iAmMember == true || channel != null)
     var menuOpen by remember { mutableStateOf(false) }
     var clearConfirm by remember { mutableStateOf(false) }
+    var sealedOpen by remember { mutableStateOf(false) }
+    var detailsFor by remember { mutableStateOf<ChatMessage?>(null) }
+    // "Sent. Undo": for a few seconds after sending, the message can be taken back from everyone.
+    val snackbarHost = remember { androidx.compose.material3.SnackbarHostState() }
+    val undoScope = rememberCoroutineScope()
+    val latestMessages by androidx.compose.runtime.rememberUpdatedState(messages)
     var replyingTo by remember(conversationId) { mutableStateOf<ChatMessage?>(null) }
     val directBlocked = friend != null && !friend.direct
 
@@ -193,6 +206,7 @@ fun ChatScreen(
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { androidx.compose.material3.SnackbarHost(snackbarHost) },
         topBar = {
             TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
@@ -208,7 +222,11 @@ fun ChatScreen(
                         InitialsAvatar(title.removePrefix("# "), 40, group = group != null || channel != null)
                         Spacer(Modifier.width(12.dp))
                         Column {
-                            Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                                Spacer(Modifier.width(6.dp))
+                                SealedChip(onClick = { sealedOpen = true })
+                            }
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(
                                     Modifier.size(7.dp).clip(CircleShape)
@@ -238,8 +256,29 @@ fun ChatScreen(
                                 DropdownMenuItem(text = { Text("Check it's really them") }, onClick = { menuOpen = false; onVerify() })
                             }
                             DropdownMenuItem(
-                                text = { Text(if (muted) "Unmute notifications" else "Mute notifications") },
-                                onClick = { menuOpen = false; onToggleMute() },
+                                text = { Text(if (archived) "Bring back to chats" else "Archive chat") },
+                                onClick = { menuOpen = false; onSetArchived(!archived) },
+                            )
+                            if (muteUntil > System.currentTimeMillis()) {
+                                DropdownMenuItem(text = { Text("Turn notifications back on") }, onClick = { menuOpen = false; onMuteUntil(0L) })
+                            } else {
+                                val now = System.currentTimeMillis()
+                                val tomorrow = java.util.Calendar.getInstance().apply {
+                                    add(java.util.Calendar.DAY_OF_YEAR, 1); set(java.util.Calendar.HOUR_OF_DAY, 8); set(java.util.Calendar.MINUTE, 0)
+                                    set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+                                }.timeInMillis
+                                listOf(
+                                    "Mute for 1 hour" to now + 3_600_000L,
+                                    "Mute for 8 hours" to now + 8 * 3_600_000L,
+                                    "Mute until tomorrow" to tomorrow,
+                                    "Mute until I turn it on" to com.duochat.app.data.MUTE_FOREVER,
+                                ).forEach { (label, until) ->
+                                    DropdownMenuItem(text = { Text(label) }, onClick = { menuOpen = false; onMuteUntil(until) })
+                                }
+                            }
+                            DropdownMenuItem(
+                                text = { Text(if (silent) "Notifications with sound" else "Silent notifications") },
+                                onClick = { menuOpen = false; onSetSilent(!silent) },
                             )
                             if (friend != null && friend.link != LinkStatus.CONNECTED) {
                                 DropdownMenuItem(
@@ -278,8 +317,23 @@ fun ChatScreen(
                     onCancelReply = { replyingTo = null },
                     scheduled = state.scheduled.filter { it.target == conversationId },
                     onSchedule = onSchedule,
+                    quickTimes = quickTimes,
                     onCancelScheduled = onCancelScheduled,
-                    onSend = { text, done -> onSend(text, replyingTo?.messageId) { r -> if (r.isSuccess) replyingTo = null; done(r) } },
+                    onSend = { text, done ->
+                        onSend(text, replyingTo?.messageId) { r ->
+                            if (r.isSuccess) {
+                                replyingTo = null
+                                snackbarHost.currentSnackbarData?.dismiss()
+                                undoScope.launch {
+                                    val answer = snackbarHost.showSnackbar("Sent", actionLabel = "Undo", duration = androidx.compose.material3.SnackbarDuration.Short)
+                                    if (answer == androidx.compose.material3.SnackbarResult.ActionPerformed) {
+                                        latestMessages.lastOrNull { it.senderId == state.uid && it.text == text }?.let { onDeleteMessage(it.messageId, true) }
+                                    }
+                                }
+                            }
+                            done(r)
+                        }
+                    },
                     onSendFile = { name, mime, bytes, done -> onSendFile(name, mime, bytes, replyingTo?.messageId) { r -> if (r.isSuccess) replyingTo = null; done(r) } },
                 )
             } else if (group != null) {
@@ -299,6 +353,47 @@ fun ChatScreen(
             state.error?.let { Banner(Icons.Filled.ErrorOutline, it, MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.onErrorContainer, onDismiss = onClearNotice) }
             state.notice?.let {
                 Banner(Icons.Filled.Shield, it, MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.onPrimaryContainer, onDismiss = onClearNotice)
+            }
+            if (friend != null && friend.link == LinkStatus.CONNECTED && friend.path == com.duochat.app.data.ConnectionPath.BLUETOOTH) {
+                Banner(
+                    Icons.Filled.Shield,
+                    "Nearby mode: no internet needed. This chat is going over Bluetooth ${com.duochat.app.data.hopsWords(state.meshHops[conversationId])} to ${friend.name}'s phone.",
+                    MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            detailsFor?.let { m ->
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { detailsFor = null },
+                    title = { Text("Delivery details") },
+                    text = {
+                        Column {
+                            Text("Sent " + java.text.DateFormat.getDateTimeInstance().format(java.util.Date(m.clientCreatedAt)), style = MaterialTheme.typography.bodySmall)
+                            Spacer(Modifier.height(8.dp))
+                            Text(com.duochat.app.data.deliveryWords(m.deliveryState), style = MaterialTheme.typography.titleMedium)
+                            if (m.totalRecipients > 1) Text("Delivered to ${m.deliveredTo} of ${m.totalRecipients} people", style = MaterialTheme.typography.bodyMedium)
+                            friend?.path?.let { Text("Right now this chat is ${it.label.lowercase()}.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                            val receipts by produceState(emptyList<com.duochat.app.data.Receipt>(), m.messageId) {
+                                value = withContext(Dispatchers.IO) { com.duochat.app.data.parseReceipts(loadReceipts(m.messageId)) }
+                            }
+                            if (receipts.isNotEmpty()) {
+                                Spacer(Modifier.height(8.dp))
+                                val timeFormat = java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT)
+                                receipts.forEach { r ->
+                                    Text(
+                                        com.duochat.app.data.receiptLine(r) { at -> timeFormat.format(java.util.Date(at)) },
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                "Messages are end-to-end encrypted on every route. A person with several devices gets the message on each; the first one to receive it counts.",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    },
+                    confirmButton = { TextButton(onClick = { detailsFor = null }) { Text("Close") } },
+                )
             }
             if (channel != null) {
                 Banner(
@@ -344,6 +439,7 @@ fun ChatScreen(
                 onRetry = onRetry,
                 onReply = { replyingTo = it },
                 onDelete = onDeleteMessage,
+                onDetails = { detailsFor = it },
                 onReact = onReact,
                 loadFile = loadFile,
                 transfers = state.transfers,
@@ -359,6 +455,23 @@ fun ChatScreen(
             text = { Text("The messages are deleted from this phone only. $title keeps their copy.") },
             confirmButton = { TextButton(onClick = { clearConfirm = false; onClearChat() }) { Text("Clear") } },
             dismissButton = { TextButton(onClick = { clearConfirm = false }) { Text("Cancel") } },
+        )
+    }
+    if (sealedOpen) {
+        val kind = if (channel != null) "channel" else if (group != null) "group" else "direct"
+        val note by produceState<com.duochat.app.data.SecurityNote?>(null, kind) {
+            value = com.duochat.app.data.parseSecurityNote(insight("chat_security", com.duochat.app.data.jsonString(kind)))
+        }
+        AlertDialog(
+            onDismissRequest = { sealedOpen = false },
+            icon = { Icon(Icons.Filled.Lock, contentDescription = null) },
+            title = { Text(note?.headline ?: "Sealed chat") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    note?.lines?.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                }
+            },
+            confirmButton = { TextButton(onClick = { sealedOpen = false }) { Text("OK") } },
         )
     }
 }
@@ -403,6 +516,7 @@ private fun MessageList(
     onRetry: (String) -> Unit,
     onReply: (ChatMessage) -> Unit,
     onDelete: (String, Boolean) -> Unit,
+    onDetails: (ChatMessage) -> Unit = {},
     onReact: (String, String) -> Unit,
     loadFile: suspend (String) -> Pair<FileMeta, ByteArray>?,
     transfers: Map<String, Float>,
@@ -524,6 +638,7 @@ private fun MessageList(
                         onRetry = onRetry,
                         onReply = onReply,
                         onDelete = onDelete,
+                        onDetails = onDetails,
                         onReact = onReact,
                         selfUid = selfUid,
                         loadFile = loadFile,
@@ -591,6 +706,7 @@ private fun MessageBubble(
     onRetry: (String) -> Unit,
     onReply: (ChatMessage) -> Unit,
     onDelete: (String, Boolean) -> Unit,
+    onDetails: (ChatMessage) -> Unit = {},
     onReact: (String, String) -> Unit,
     selfUid: String,
     loadFile: suspend (String) -> Pair<FileMeta, ByteArray>?,
@@ -777,6 +893,10 @@ private fun MessageBubble(
                     text = { Text("Mute this person") },
                     onClick = { menuOpen = false; onMute(message.senderId) },
                 )
+                if (own && !message.deleted) DropdownMenuItem(
+                    text = { Text("Delivery details") },
+                    onClick = { menuOpen = false; onDetails(message) },
+                )
                 if (!message.deleted) DropdownMenuItem(
                     text = { Text("Delete for me") },
                     onClick = { menuOpen = false; onDelete(message.messageId, false) },
@@ -929,7 +1049,15 @@ private fun FileContent(
             }
         }
         if (progress != null) {
-            LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().padding(top = 6.dp), color = color, trackColor = color.copy(alpha = 0.2f))
+            val percent = (progress * 100).toInt().coerceIn(0, 100)
+            Box(Modifier.padding(top = 6.dp).size(36.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier.fillMaxSize().semantics { contentDescription = "Transfer $percent percent" },
+                    color = color, trackColor = color.copy(alpha = 0.2f), strokeWidth = 3.dp,
+                )
+                Text("$percent", style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp), color = color)
+            }
         }
     }
     if (viewing) PhotoViewer(
@@ -1040,6 +1168,7 @@ private fun Composer(
     onSendFile: (String, String, ByteArray, (Result<Unit>) -> Unit) -> Unit,
     scheduled: List<com.duochat.app.data.ScheduledMessage> = emptyList(),
     onSchedule: (String, Long, (Result<Unit>) -> Unit) -> Unit = { _, _, done -> done(Result.failure(IllegalStateException("Not available."))) },
+    quickTimes: ((List<Pair<String, Long>>) -> Unit) -> Unit = { it(emptyList()) },
     onCancelScheduled: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -1060,7 +1189,7 @@ private fun Composer(
         }
     }
 
-    // Send later: pick a day, then a time (the system's own pickers).
+    // The system's own date and time pickers.
     fun pickTimeAndSchedule() {
         val now = java.util.Calendar.getInstance()
         android.app.DatePickerDialog(context, { _, y, m, d ->
@@ -1071,6 +1200,29 @@ private fun Composer(
                 }
             }, now.get(java.util.Calendar.HOUR_OF_DAY), now.get(java.util.Calendar.MINUTE), android.text.format.DateFormat.is24HourFormat(context)).show()
         }, now.get(java.util.Calendar.YEAR), now.get(java.util.Calendar.MONTH), now.get(java.util.Calendar.DAY_OF_MONTH)).show()
+    }
+
+    // Send later: ready-made times from the engine (in an hour, this evening, tomorrow morning), or pick a day and time.
+    var quickChoices by remember { mutableStateOf<List<Pair<String, Long>>?>(null) }
+    quickChoices?.let { choices ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { quickChoices = null },
+            title = { Text("Send later") },
+            text = {
+                Column {
+                    choices.forEach { (label, at) ->
+                        TextButton(onClick = {
+                            quickChoices = null
+                            onSchedule(text, at) { result ->
+                                result.onSuccess { text = ""; error = null }.onFailure { error = it.message ?: "Could not schedule that." }
+                            }
+                        }) { Text(label + " · " + android.text.format.DateFormat.getTimeFormat(context).format(java.util.Date(at))) }
+                    }
+                    TextButton(onClick = { quickChoices = null; pickTimeAndSchedule() }) { Text("Pick a date and time…") }
+                }
+            },
+            confirmButton = { TextButton(onClick = { quickChoices = null }) { Text("Cancel") } },
+        )
     }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris: List<Uri> ->
@@ -1272,7 +1424,7 @@ private fun Composer(
                     ),
                 )
                 if (!isChannel && text.isNotBlank()) Box(Modifier.height(56.dp), contentAlignment = Alignment.Center) {
-                    IconButton(onClick = { pickTimeAndSchedule() }, enabled = canSend, modifier = Modifier.size(48.dp)) {
+                    IconButton(onClick = { quickTimes { list -> if (list.isEmpty()) pickTimeAndSchedule() else quickChoices = list } }, enabled = canSend, modifier = Modifier.size(48.dp)) {
                         Icon(Icons.Filled.Schedule, contentDescription = "Send later", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
@@ -1462,6 +1614,11 @@ private fun decodeUpright(bytes: ByteArray, maxSide: Int): androidx.compose.ui.g
     return android.graphics.Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true).asImageBitmap()
 }
 
+private const val WAVE_BARS = 48
+
+/** Bar heights by message id, so a bubble scrolled back into view does not decode its voice note again. */
+private val waveformCache = java.util.concurrent.ConcurrentHashMap<String, FloatArray>()
+
 /** The voice note playing right now, if any (weak: a released player is simply gone). */
 private var nowPlaying: java.lang.ref.WeakReference<androidx.media3.exoplayer.ExoPlayer>? = null
 
@@ -1483,6 +1640,12 @@ private fun VoiceNote(messageId: String, arrived: Boolean, size: Int, color: Col
     var isPlaying by remember { mutableStateOf(false) }
     var position by remember { mutableStateOf(0L) }
     var duration by remember { mutableStateOf(0L) }
+    var speed by remember { mutableStateOf(1f) }
+    // Bar heights from the real audio, decoded once per message; null (not decodable yet or at all) keeps the plain bar.
+    val peaks by produceState<FloatArray?>(waveformCache[messageId], file) {
+        val f = file ?: return@produceState
+        if (value == null) value = WaveformDecoder.peaks(f, WAVE_BARS)?.also { waveformCache[messageId] = it }
+    }
     androidx.compose.runtime.DisposableEffect(file) {
         // Capture the file this effect is for. Reading `file` inside onDispose saw the NEW file when the key changed
         // (null -> file), so the decrypted voice note was deleted the moment it was written: "can't be played".
@@ -1514,6 +1677,7 @@ private fun VoiceNote(messageId: String, arrived: Boolean, size: Int, color: Col
                 }
             })
             p.setMediaItem(androidx.media3.common.MediaItem.fromUri(android.net.Uri.fromFile(f)))
+            p.setPlaybackSpeed(speed)
             p.prepare()
             player = p
         }
@@ -1541,17 +1705,54 @@ private fun VoiceNote(messageId: String, arrived: Boolean, size: Int, color: Col
         }
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            LinearProgressIndicator(
-                progress = { if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f },
-                modifier = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape),
-                color = color, trackColor = color.copy(alpha = 0.22f), drawStopIndicator = {},
-            )
+            val bars = peaks
+            if (bars != null) {
+                androidx.compose.foundation.Canvas(
+                    Modifier.fillMaxWidth().height(28.dp).semantics { contentDescription = "Voice note waveform" },
+                ) {
+                    val played = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
+                    val slot = this.size.width / bars.size
+                    val barWidth = slot * 0.6f
+                    bars.forEachIndexed { i, v ->
+                        val h = (this.size.height * v).coerceAtLeast(3.dp.toPx())
+                        drawRoundRect(
+                            color = if ((i + 0.5f) / bars.size <= played) color else color.copy(alpha = 0.35f),
+                            topLeft = androidx.compose.ui.geometry.Offset(i * slot + (slot - barWidth) / 2, (this.size.height - h) / 2),
+                            size = androidx.compose.ui.geometry.Size(barWidth, h),
+                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(barWidth / 2),
+                        )
+                    }
+                }
+            } else {
+                LinearProgressIndicator(
+                    progress = { if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f },
+                    modifier = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape),
+                    color = color, trackColor = color.copy(alpha = 0.22f), drawStopIndicator = {},
+                )
+            }
             Spacer(Modifier.height(6.dp))
             val shown = if (isPlaying || position > 0) position else duration
-            Text(
-                if (shown > 0) "%d:%02d".format(shown / 60_000, (shown / 1000) % 60) else "Voice note \u00B7 ${formatBytes(size)}",
-                style = MaterialTheme.typography.labelSmall, color = color.copy(alpha = 0.8f),
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    if (shown > 0) "%d:%02d".format(shown / 60_000, (shown / 1000) % 60) else "Voice note \u00B7 ${formatBytes(size)}",
+                    style = MaterialTheme.typography.labelSmall, color = color.copy(alpha = 0.8f),
+                    modifier = Modifier.weight(1f),
+                )
+                // 1x -> 1.5x -> 2x -> 1x. ExoPlayer keeps the pitch when only the speed changes.
+                Surface(
+                    onClick = {
+                        speed = when (speed) { 1f -> 1.5f; 1.5f -> 2f; else -> 1f }
+                        player?.setPlaybackSpeed(speed)
+                    },
+                    shape = CircleShape, color = color.copy(alpha = 0.16f), contentColor = color,
+                ) {
+                    Text(
+                        (if (speed == 1.5f) "1.5" else speed.toInt().toString()) + "x",
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                    )
+                }
+            }
         }
     }
 }

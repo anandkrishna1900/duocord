@@ -242,6 +242,8 @@ pub enum Notification {
         conversation: ConversationId,
         sender: UserId,
         preview: String,
+        /// Show it without sound or vibration (the chat is set to silent).
+        silent: bool,
     },
 }
 

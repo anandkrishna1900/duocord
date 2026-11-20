@@ -12,7 +12,12 @@ import { NetworkSettings } from './NetworkSettings';
 import { DeviceLinkDialog } from './DeviceLinkDialog';
 import { DeviceRow } from './DeviceRow';
 import { AutoBackupControl } from './AutoBackupControl';
+import { LAST_BACKUP_KEY, PrivacyCheckup } from './PrivacyCheckup';
+import { NetworkTransparency } from './NetworkTransparency';
+import { StorageByChat } from './StorageByChat';
+import { NO_PREFS } from '../lib/engine';
 import { formatBytes } from '../lib/format';
+import { DeliveryHealth, DevicesStrip, SupportTools, WhatsNew } from './Insights';
 import { AlertIcon, CheckIcon, KeyIcon, TrashIcon } from './Icons';
 
 export type SettingsSection = 'profile' | 'devices' | 'appearance' | 'notifications' | 'connection' | 'security' | 'backup' | 'about';
@@ -124,6 +129,11 @@ function BackupControl({ engine }: { engine: ChatEngineApi | null }) {
       a.click();
       a.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      try {
+        localStorage.setItem(LAST_BACKUP_KEY, String(Date.now()));
+      } catch {
+        /* no storage */
+      }
       setMessage({ text: 'Backup saved. Keep the file and the passphrase safe: you need both, and nobody can recover the passphrase.', error: false });
     } catch (caught) {
       setMessage({ text: caught instanceof Error ? caught.message : 'Could not make the backup.', error: true });
@@ -278,6 +288,7 @@ export function SettingsDialog({
   const [displayName, setDisplayName] = useState(settings.displayName);
   const [saved, setSaved] = useState(false);
   const [linking, setLinking] = useState(false);
+  const quiet = (state.prefs ?? NO_PREFS).quiet;
 
   useEffect(() => {
     if (!open) return;
@@ -346,6 +357,7 @@ export function SettingsDialog({
 
         {section === 'devices' ? (
           <section className="settings-section">
+            <DevicesStrip engine={engine} state={state} />
             {state.devices && state.devices.length > 0 ? (
               <ul className="device-list" aria-label="Your devices">
                 {state.devices.map((d) => (
@@ -474,7 +486,27 @@ export function SettingsDialog({
               onChange={(value) => updateSettings({ notificationPreviews: value })}
               disabled={!settings.notificationsEnabled}
             />
-            {isTauri() ? <BackgroundToggles /> : null}
+            <Toggle
+              label="Quiet hours"
+              description="No notifications between these times, on all your devices. Messages still arrive and wait in the chat."
+              checked={quiet.enabled}
+              onChange={(value) => engine?.setQuietHours?.(value, quiet.from, quiet.to)}
+              disabled={!settings.notificationsEnabled}
+            />
+            {quiet.enabled ? (
+              <div className="quiet-times">
+                <label className="field">
+                  <span>From</span>
+                  <input type="time" value={minutesToTime(quiet.from)} onChange={(e) => e.target.value && engine?.setQuietHours?.(true, timeToMinutes(e.target.value), quiet.to)} />
+                </label>
+                <label className="field">
+                  <span>Until</span>
+                  <input type="time" value={minutesToTime(quiet.to)} onChange={(e) => e.target.value && engine?.setQuietHours?.(true, quiet.from, timeToMinutes(e.target.value))} />
+                </label>
+              </div>
+            ) : null}
+            {isTauri() ? <div id="keep-running"><BackgroundToggles /></div> : null}
+            <DeliveryHealth engine={engine} state={state} notificationsEnabled={settings.notificationsEnabled} go={setSection} />
           </section>
         ) : null}
 
@@ -494,6 +526,7 @@ export function SettingsDialog({
               Messages go straight from device to device. A device keeps at most {30} live connections, which
               is plenty for groups of a few dozen.
             </p>
+            <NetworkTransparency engine={engine} />
             <details className="advanced">
               <summary>Advanced</summary>
               <NetworkSettings engine={engine} state={state} />
@@ -503,7 +536,16 @@ export function SettingsDialog({
 
         {section === 'security' ? (
           <section className="settings-section">
+            <PrivacyCheckup engine={engine} settings={settings} state={state} go={setSection} />
             <AppLockControl />
+            {engine?.setSecureScreen ? (
+              <Toggle
+                label="Hide this app from screenshots and screen recording"
+                description="Other programs that capture the screen see a blank window. It applies on every device of the account."
+                checked={(state.prefs ?? NO_PREFS).secureScreen}
+                onChange={(on) => engine.setSecureScreen!(on)}
+              />
+            ) : null}
             <Toggle
               label="Stay group-only with people I meet in groups"
               description="You still read and reply in the groups you share, but nobody you only know through a group can message you directly, and you cannot message them, unless you swap invites yourselves. It applies to people you meet from now on and to the ones you already have."
@@ -587,6 +629,9 @@ export function SettingsDialog({
 
         {section === 'about' ? (
           <section className="settings-section">
+            <WhatsNew engine={engine} />
+            <SupportTools engine={engine} />
+            <StorageByChat state={state} engine={engine} />
             {state.usage ? (
               <div className="card-box">
                 <strong>On this device</strong>
@@ -646,3 +691,13 @@ export function SettingsDialog({
 }
 
 
+
+function minutesToTime(m: number): string {
+  const h = Math.floor(m / 60) % 24;
+  return `${String(h).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+}
+
+function timeToMinutes(t: string): number {
+  const [h, m] = t.split(':').map(Number);
+  return (h ?? 0) * 60 + (m ?? 0);
+}

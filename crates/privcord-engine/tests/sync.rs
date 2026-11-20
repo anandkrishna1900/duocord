@@ -1083,6 +1083,25 @@ fn a_linked_device_talks_to_a_friend_and_every_device_gets_the_answer() {
     assert!(laptop.texts().contains(&"hello Pat".to_owned()));
     fran.online(&mut relay);
     assert_eq!(delivery(&fran, "hello Pat"), DeliveryState::Delivered);
+
+    // Fran can see which of Pat's devices has it: each answered once.
+    let receipts = fran.core.message_receipts(&fran.message_id("hello Pat"));
+    let phone_id = phone.core.this_device_id().unwrap();
+    let laptop_id = laptop.core.this_device_id().unwrap();
+    let mut ids: Vec<&str> = receipts.iter().map(|r| r.device_id.as_str()).collect();
+    ids.sort_unstable();
+    let mut want = vec![phone_id, laptop_id];
+    want.sort_unstable();
+    assert_eq!(ids, want, "{receipts:?}");
+    assert!(receipts
+        .iter()
+        .all(|r| r.state == "delivered" && r.device_name.is_some() && r.at > 0));
+    // An unknown message has no receipts.
+    assert_eq!(
+        fran.core
+            .message_receipts(&MessageId::new("0".repeat(32)).unwrap()),
+        vec![]
+    );
 }
 
 /// Frames between two devices that are linked directly. `a_addr` is how `b` names `a`, `b_addr` how `a` names `b`.
@@ -2115,4 +2134,93 @@ fn a_scheduled_message_waits_goes_out_at_its_time_and_can_be_taken_back() {
             .sender_id,
         pat_uid
     );
+}
+
+#[test]
+fn pins_archive_mutes_and_quiet_hours_follow_the_person_to_every_device() {
+    let clock = FakeClock::at(1_700_000_000_000);
+    let now = 1_700_000_000_000_i64;
+    let mut relay = Relay::default();
+    let mut phone = Device::new("phone", &clock);
+    phone.core.create_identity().unwrap();
+    let mut laptop = link_laptop(&mut phone, &mut relay, &clock);
+    for _ in 0..2 {
+        laptop.online(&mut relay);
+        phone.online(&mut relay);
+    }
+    // Made on the laptop, seen on the phone.
+    laptop.core.toggle_pin("chat-a").unwrap();
+    laptop.core.toggle_pin("chat-b").unwrap();
+    laptop.core.set_archived("chat-c", true).unwrap();
+    laptop
+        .core
+        .set_mute_until("chat-d", now + 3_600_000)
+        .unwrap();
+    laptop.core.set_quiet_hours(true, 22 * 60, 7 * 60).unwrap();
+    laptop.core.set_secure_screen(true).unwrap();
+    laptop.core.set_silent("chat-e", true).unwrap();
+    for _ in 0..3 {
+        laptop.online(&mut relay);
+        phone.online(&mut relay);
+    }
+    let p = phone.core.prefs();
+    assert_eq!(p.pins, vec!["chat-a", "chat-b"]);
+    assert_eq!(p.archived, vec!["chat-c"]);
+    assert_eq!(p.mute_until.get("chat-d"), Some(&(now + 3_600_000)));
+    assert!(p.quiet.enabled && p.quiet.from == 22 * 60 && p.quiet.to == 7 * 60);
+    assert!(p.secure_screen, "the screen-privacy choice follows too");
+    assert_eq!(p.silent_chats, vec!["chat-e"], "silent chats follow too");
+    // 1_700_000_000_000 ms is 22:13 UTC, inside the 22:00 to 07:00 window; a zone 10 hours behind makes it midday.
+    assert!(!phone.core.should_notify("chat-x"), "quiet hours");
+    phone.core.set_utc_offset(-613);
+    assert!(phone.core.should_notify("chat-x"), "midday there");
+    assert!(
+        !phone.core.should_notify("chat-d"),
+        "muted for an hour, whatever the time"
+    );
+    // The mute runs out by itself.
+    clock.advance(2 * 3_600_000);
+    assert!(phone.core.should_notify("chat-d"));
+    assert!(phone.core.prefs().mute_until.is_empty());
+
+    // Made on the phone afterwards (the later write wins), seen on the laptop.
+    clock.advance(1000);
+    phone.core.toggle_pin("chat-a").unwrap();
+    phone.core.set_archived("chat-c", false).unwrap();
+    for _ in 0..3 {
+        phone.online(&mut relay);
+        laptop.online(&mut relay);
+    }
+    let l = laptop.core.prefs();
+    assert_eq!(l.pins, vec!["chat-b"]);
+    assert!(l.archived.is_empty());
+
+    // A device linked later gets them too.
+    let mut tablet = link_device(&mut phone, &mut relay, &clock, "tablet");
+    for _ in 0..4 {
+        tablet.online(&mut relay);
+        phone.online(&mut relay);
+        laptop.online(&mut relay);
+    }
+    assert_eq!(tablet.core.prefs().pins, vec!["chat-b"]);
+    assert_eq!(tablet.core.prefs().silent_chats, vec!["chat-e"]);
+    assert!(tablet.core.prefs().quiet.enabled);
+}
+
+#[test]
+fn preferences_survive_a_restart_and_a_fourth_pin_drops_the_oldest() {
+    let clock = FakeClock::at(1_700_000_000_000);
+    let storage = MemoryStorage::new();
+    let secure = MemorySecureStore::new();
+    let mut d = Device::on("solo", &clock, storage.clone(), secure.clone());
+    d.core.create_identity().unwrap();
+    for id in ["a", "b", "c", "d"] {
+        d.core.toggle_pin(id).unwrap();
+    }
+    d.core.set_quiet_hours(true, 60, 120).unwrap();
+    assert_eq!(d.core.prefs().pins, vec!["b", "c", "d"]);
+    drop(d);
+    let again = Device::on("solo", &clock, storage, secure);
+    assert_eq!(again.core.prefs().pins, vec!["b", "c", "d"]);
+    assert_eq!(again.core.prefs().quiet.from, 60);
 }

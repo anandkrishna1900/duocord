@@ -37,6 +37,11 @@ impl MeshPacket {
         format!("{}:{}", self.id, crate::files::sha256_b64(body.as_bytes()))
     }
 
+    /// Radio hops travelled when this packet reaches us (`ttl` is as received, before our own decrement).
+    pub fn hops(&self) -> u32 {
+        (MESH_MAX_TTL + 1).saturating_sub(self.ttl).max(1)
+    }
+
     pub fn new(blob: SealedBlob, ttl: u32) -> Self {
         Self {
             v: 1,
@@ -114,6 +119,9 @@ pub struct HandleResult {
     /// A blob this phone has not seen before: the caller tries to open it (direct message? joined channel?).
     pub accepted: Option<SealedBlob>,
     pub forward: Vec<Outgoing>,
+    /// Radio hops the accepted packet travelled to reach us: 1 from a direct neighbour (the writer sends at
+    /// `MESH_MAX_TTL`, every forwarder takes one off), at most `MESH_MAX_TTL`. 0 when nothing was accepted.
+    pub hops: u32,
 }
 
 #[derive(Debug)]
@@ -211,6 +219,7 @@ impl MeshNode {
             }));
         }
         HandleResult {
+            hops: packet.hops(),
             accepted: Some(packet.blob),
             forward,
         }

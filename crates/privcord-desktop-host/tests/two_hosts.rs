@@ -66,7 +66,7 @@ impl TransportCallbacks for Wire {
 
 struct Quiet;
 impl NotifierCallbacks for Quiet {
-    fn message_received(&self, _c: String, _s: String, _p: String) {}
+    fn message_received(&self, _c: String, _s: String, _p: String, _silent: bool) {}
 }
 
 struct Side {

@@ -142,6 +142,42 @@ pub enum Op {
         uid: UserId,
         muted: bool,
     },
+    TogglePin(String),
+    SetArchived {
+        id: String,
+        archived: bool,
+    },
+    SetMuteUntil {
+        id: String,
+        until_ms: i64,
+    },
+    SetSilent {
+        id: String,
+        silent: bool,
+    },
+    SetQuietHours {
+        enabled: bool,
+        from: u16,
+        to: u16,
+    },
+    /// The account's synced preferences, as JSON.
+    Prefs,
+    /// Per-device receipts of one message, as JSON.
+    MessageReceipts(MessageId),
+    /// Radio hops of the latest mesh message per channel, as JSON.
+    MeshHops,
+    ShouldNotify(String),
+    /// The person's time zone, minutes east of UTC.
+    SetUtcOffset(i32),
+    /// Ready-made times for "send later", as JSON.
+    QuickTimes,
+    /// What each chat takes on this device, as JSON.
+    StorageByChat,
+    SetSecureScreen(bool),
+    /// A report with counts only (no content), given what the app says about itself, as JSON.
+    Diagnostics(String),
+    /// A quick check that the engine works, as JSON.
+    SelfTest,
     RenameContact {
         uid: UserId,
         name: String,
@@ -371,6 +407,44 @@ fn pump(core: &mut Core, cmd: Command) -> bool {
                 }
                 Op::React { id, emoji } => core.react(&id, &emoji).map(|()| Answer::Done),
                 Op::SetMuted { uid, muted } => core.set_muted(&uid, muted).map(|()| Answer::Done),
+                Op::TogglePin(id) => core.toggle_pin(&id).map(|()| Answer::Done),
+                Op::SetArchived { id, archived } => {
+                    core.set_archived(&id, archived).map(|()| Answer::Done)
+                }
+                Op::SetSilent { id, silent } => core.set_silent(&id, silent).map(|()| Answer::Done),
+                Op::SetMuteUntil { id, until_ms } => {
+                    core.set_mute_until(&id, until_ms).map(|()| Answer::Done)
+                }
+                Op::SetQuietHours { enabled, from, to } => core
+                    .set_quiet_hours(enabled, from, to)
+                    .map(|()| Answer::Done),
+                Op::MessageReceipts(id) => Ok(Answer::Text(
+                    serde_json::to_string(&core.message_receipts(&id)).unwrap_or_default(),
+                )),
+                Op::MeshHops => Ok(Answer::Text(
+                    serde_json::to_string(&core.mesh_hops()).unwrap_or_default(),
+                )),
+                Op::Prefs => Ok(Answer::Text(
+                    serde_json::to_string(&core.prefs()).unwrap_or_default(),
+                )),
+                Op::ShouldNotify(id) => Ok(Answer::Text(
+                    if core.should_notify(&id) { "1" } else { "0" }.into(),
+                )),
+                Op::SetSecureScreen(on) => core.set_secure_screen(on).map(|()| Answer::Done),
+                Op::Diagnostics(app) => Ok(Answer::Text(core.diagnostics(&app))),
+                Op::SelfTest => Ok(Answer::Text(
+                    serde_json::to_string(&core.self_test()).unwrap_or_default(),
+                )),
+                Op::StorageByChat => Ok(Answer::Text(
+                    serde_json::to_string(&core.storage_by_chat()).unwrap_or_default(),
+                )),
+                Op::QuickTimes => Ok(Answer::Text(
+                    serde_json::to_string(&core.quick_times()).unwrap_or_default(),
+                )),
+                Op::SetUtcOffset(minutes) => {
+                    core.set_utc_offset(minutes);
+                    Ok(Answer::Done)
+                }
                 Op::RetryMessage { id } => core.retry_message(&id).map(|()| Answer::Done),
                 Op::SetLinkPath { peer, path } => {
                     core.set_link_path(&peer, path);

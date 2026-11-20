@@ -281,7 +281,7 @@ fn two_engines_authenticate_and_exchange_messages_with_receipts() {
     assert_eq!(status(&a, &id), DeliveryState::Delivered);
     assert_eq!(a.core.snapshot().queued, 0, "the receipt clears the outbox");
     assert!(
-        matches!(b.notifier.taken().as_slice(), [Notification::MessageReceived { preview, .. }] if preview.starts_with("héllo"))
+        matches!(b.notifier.taken().as_slice(), [Notification::MessageReceived { preview, silent: false, .. }] if preview.starts_with("héllo"))
     );
 
     // A reply quotes the original, and reading is reported back.
@@ -1016,4 +1016,108 @@ fn retrying_a_message_queues_it_again_once_and_only_for_our_own_messages() {
         .core
         .retry_message(&privcord_domain::MessageId::new("nope").unwrap())
         .is_err());
+}
+
+#[test]
+fn the_engine_itself_keeps_quiet_for_a_muted_chat_and_in_quiet_hours() {
+    let (mut a, mut b, au, bu) = pair();
+    connect(&mut a, &mut b, &au, &bu);
+    let chat = au.as_str().to_owned();
+    // Heard normally.
+    a.core.send_message(&bu, "one", None).unwrap();
+    pump(&mut a, &mut b, &au, &bu);
+    assert_eq!(b.notifier.taken().len(), 1);
+
+    // Muted for an hour: nothing shown, and it comes back by itself.
+    let now = privcord_ports::Clock::now_ms(&*b.clock);
+    b.core.set_mute_until(&chat, now + 3_600_000).unwrap();
+    b.clock.advance(1000);
+    a.core.send_message(&bu, "two", None).unwrap();
+    pump(&mut a, &mut b, &au, &bu);
+    assert!(b.notifier.taken().is_empty(), "a muted chat stays quiet");
+    b.clock.advance(2 * 3_600_000);
+    a.core.send_message(&bu, "three", None).unwrap();
+    pump(&mut a, &mut b, &au, &bu);
+    assert_eq!(b.notifier.taken().len(), 1, "the mute ran out");
+
+    // Quiet hours in the person's own time: 1_700_000_000_000 ms is 22:13 UTC; with +1 hour it is 23:13 local.
+    b.core.set_quiet_hours(true, 22 * 60, 7 * 60).unwrap();
+    b.core.set_utc_offset(60);
+    b.clock.advance(1000);
+    a.core.send_message(&bu, "four", None).unwrap();
+    pump(&mut a, &mut b, &au, &bu);
+    assert!(b.notifier.taken().is_empty(), "inside quiet hours");
+    // Eight hours on it is morning there.
+    b.clock.advance(9 * 3_600_000);
+    a.core.send_message(&bu, "five", None).unwrap();
+    pump(&mut a, &mut b, &au, &bu);
+    assert_eq!(b.notifier.taken().len(), 1, "quiet hours are over");
+    // The messages themselves were all kept.
+    assert_eq!(texts(&b, &au).len(), 5);
+}
+
+#[test]
+fn storage_by_chat_counts_what_each_chat_holds_and_skips_what_was_deleted() {
+    let (mut a, mut b, au, bu) = pair();
+    connect(&mut a, &mut b, &au, &bu);
+    let keep = a.core.send_message(&bu, "hello", None).unwrap();
+    let gone = a.core.send_message(&bu, "to be removed", None).unwrap();
+    pump(&mut a, &mut b, &au, &bu);
+    let rows = a.core.storage_by_chat();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].id, bu.as_str());
+    assert_eq!(rows[0].messages, 2);
+    assert_eq!(
+        rows[0].bytes,
+        ("hello".len() + "to be removed".len()) as u64
+    );
+    a.core.delete_message(&gone, true).unwrap();
+    pump(&mut a, &mut b, &au, &bu);
+    let rows = a.core.storage_by_chat();
+    assert_eq!(
+        rows[0].messages, 1,
+        "a message deleted for everyone is free"
+    );
+    assert_eq!(rows[0].bytes, "hello".len() as u64);
+    let _ = keep;
+}
+
+#[test]
+fn the_diagnostics_report_holds_counts_and_never_content_and_the_self_test_passes() {
+    let (mut a, mut b, au, bu) = pair();
+    connect(&mut a, &mut b, &au, &bu);
+    a.core.send_message(&bu, "a secret sentence", None).unwrap();
+    pump(&mut a, &mut b, &au, &bu);
+    let report = a
+        .core
+        .diagnostics(r#"{"platform":"test","version":"1.2.3"}"#);
+    assert!(report.contains("\"contacts\": 1"));
+    assert!(report.contains("\"platform\": \"test\""));
+    assert!(!report.contains("secret sentence"), "no message text");
+    assert!(!report.contains(bu.as_str()), "no contact ids");
+    assert!(!report.contains(au.as_str()), "no own id");
+    let results = a.core.self_test();
+    assert!(results.iter().all(|r| r.ok), "{results:?}");
+    assert!(results.len() >= 4);
+}
+
+#[test]
+fn a_silent_chat_notifies_flagged_silent_and_a_muted_one_not_at_all() {
+    let (mut a, mut b, au, bu) = pair();
+    connect(&mut a, &mut b, &au, &bu);
+
+    // A silent chat still notifies, flagged silent; a muted one does not notify at all.
+    b.core.set_silent(au.as_ref(), true).unwrap();
+    a.core.send_message(&bu, "quiet one", None).unwrap();
+    pump(&mut a, &mut b, &au, &bu);
+    assert!(
+        matches!(b.notifier.taken().as_slice(), [Notification::MessageReceived { preview, silent: true, .. }] if preview == "quiet one")
+    );
+    b.core.set_silent(au.as_ref(), false).unwrap();
+    assert!(b.core.prefs().silent_chats.is_empty());
+    b.core.set_silent(au.as_ref(), true).unwrap();
+    b.core.set_mute_until(au.as_ref(), i64::MAX / 2).unwrap();
+    a.core.send_message(&bu, "muted one", None).unwrap();
+    pump(&mut a, &mut b, &au, &bu);
+    assert!(b.notifier.taken().is_empty());
 }

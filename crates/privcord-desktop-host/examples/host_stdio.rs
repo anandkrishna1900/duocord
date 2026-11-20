@@ -95,7 +95,13 @@ impl TransportCallbacks for Page {
 }
 
 impl NotifierCallbacks for Page {
-    fn message_received(&self, conversation: String, sender: String, preview: String) {
+    fn message_received(
+        &self,
+        conversation: String,
+        sender: String,
+        preview: String,
+        _silent: bool,
+    ) {
         event(
             "notify",
             json!({ "conversation": conversation, "sender": sender, "preview": preview }),

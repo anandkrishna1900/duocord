@@ -203,7 +203,36 @@ data class ManualState(
     val peerName: String? = null,
 )
 
+/** No notifications between two times of day (minutes after midnight). */
+data class QuietHoursPref(val enabled: Boolean = false, val from: Int = 22 * 60, val to: Int = 7 * 60)
+
+/** Preferences that follow the person to every device; the shared engine holds and syncs them. */
+data class Prefs(
+    val pins: List<String> = emptyList(),
+    val archived: List<String> = emptyList(),
+    /** Conversation id to the time (ms) its notifications are off until. */
+    val muteUntil: Map<String, Long> = emptyMap(),
+    val quiet: QuietHoursPref = QuietHoursPref(),
+    /** Hide this app from screenshots and the app switcher (follows the person to every device). */
+    val secureScreen: Boolean = false,
+    /** Chats whose notifications arrive without sound or vibration. */
+    val silentChats: List<String> = emptyList(),
+)
+
+/** A mute with no end (the engine's value). */
+const val MUTE_FOREVER = 9_000_000_000_000_000L
+
+fun parsePrefs(json: String): Prefs = runCatching {
+    val o = org.json.JSONObject(json)
+    fun list(key: String) = o.optJSONArray(key)?.let { a -> (0 until a.length()).map { a.getString(it) } } ?: emptyList()
+    val mute = o.optJSONObject("mute_until")?.let { m -> m.keys().asSequence().associateWith { m.getLong(it) } } ?: emptyMap()
+    val q = o.optJSONObject("quiet")
+    Prefs(list("pins"), list("archived"), mute, QuietHoursPref(q?.optBoolean("enabled") ?: false, q?.optInt("from", 1320) ?: 1320, q?.optInt("to", 420) ?: 420), o.optBoolean("secure_screen", false), list("silent_chats"))
+}.getOrDefault(Prefs())
+
 data class ChatState(
+    /** Pins, archive, mutes and quiet hours (from the engine). */
+    val prefs: Prefs = Prefs(),
     val phase: EnginePhase = EnginePhase.STARTING,
     val uid: String = "",
     val contacts: List<ContactView> = emptyList(),
@@ -220,6 +249,8 @@ data class ChatState(
     val manual: ManualState = ManualState(),
     /** 0..1 for files being sent or received, by message id. */
     val transfers: Map<String, Float> = emptyMap(),
+    /** Conversation id to how many nearby phones its Bluetooth route passes through (0 is direct). */
+    val meshHops: Map<String, Int> = emptyMap(),
     val groupOnly: Boolean = false,
     /** Our current six-word invite, if one is being shown. */
     val invite: ActiveInvite? = null,

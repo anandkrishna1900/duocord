@@ -2,6 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChatState, UiMessage } from '../lib/engine';
 import type { ChatEngineApi } from '../lib/engineApi';
 import type { AppSettings } from '../lib/settings';
+import { withPinsFirst } from '../lib/pins';
+import { MUTE_FOREVER, NO_PREFS } from '../lib/engine';
+import { deliveryRows } from '../lib/deliveryDetails';
+import { config } from '../config';
+import { Modal } from './Modal';
 import { LOCAL_ID } from '../lib/identity';
 import { formatTime } from '../lib/format';
 import { MAX_FILE_BYTES, formatBytes } from '@duochat/protocol';
@@ -19,7 +24,13 @@ import { GroupDetailsDialog, NewGroupDialog } from './GroupDialogs';
 import { PersonDialog } from './PersonDialog';
 import { RequestDialog } from './RequestDialog';
 import { ChannelsDialog } from './ChannelsDialog';
-import { AlertIcon, ArrowLeftIcon, LoaderIcon, RefreshIcon, SettingsIcon, ShieldIcon, UserIcon, XIcon } from './Icons';
+import { useSecureScreen, useUnreadTitle } from '../hooks/useWindowEffects';
+import { totalUnread, whatsNewPending } from '../lib/insightInputs';
+import { SealedBadge, WhatsNewBanner } from './Insights';
+import { DropSendDialog } from './DropSendDialog';
+import { nearbyText, receiptLine } from '../lib/receipts';
+import type { DeviceReceipt } from '../lib/engineApi';
+import { AlertIcon, ArrowLeftIcon, BellOffIcon, LoaderIcon, PinIcon, RefreshIcon, SettingsIcon, ShieldIcon, UserIcon, XIcon } from './Icons';
 
 interface Row {
   id: string;
@@ -74,6 +85,68 @@ export function ChatLayout({
   const [manualUid, setManualUid] = useState('');
   const [verifyUid, setVerifyUid] = useState<string | null>(null);
   const [replying, setReplying] = useState<UiMessage | null>(null);
+  const [detailsFor, setDetailsFor] = useState<UiMessage | null>(null);
+  const prefs = state?.prefs ?? NO_PREFS;
+  const [showArchived, setShowArchived] = useState(false);
+  /** The message just sent, for a few seconds: "Undo" takes it back from everyone. */
+  const [undo, setUndo] = useState<{ conv: string; text: string } | null>(null);
+  useEffect(() => {
+    if (!undo) return;
+    const t = window.setTimeout(() => setUndo(null), 6000);
+    return () => window.clearTimeout(t);
+  }, [undo]);
+  const undoSend = () => {
+    if (!undo || !state) return;
+    const mine = [...(state.messages[undo.conv] ?? [])].reverse().find((m) => m.own && m.text === undo.text);
+    if (mine) engine?.deleteMessage(mine.messageId, true);
+    setUndo(null);
+  };
+  /** Per-device receipts of the message in the details dialog (empty when the engine has none). */
+  const [receipts, setReceipts] = useState<DeviceReceipt[]>([]);
+  useEffect(() => {
+    setReceipts([]);
+    if (!detailsFor || !engine?.messageReceipts) return;
+    let live = true;
+    void engine.messageReceipts(detailsFor.messageId).then((r) => live && setReceipts(r), () => undefined);
+    return () => {
+      live = false;
+    };
+  }, [engine, detailsFor]);
+  /** Nearby hops per chat, asked of the engine while a Bluetooth banner is on screen. */
+  const [hops, setHops] = useState<Record<string, number>>({});
+  const nearbyNow = !!selected && !!state?.contacts.some((c) => c.uid === selected && c.conn === 'connected' && (c.path?.kind === 'bluetooth' || c.via === 'ble'));
+  useEffect(() => {
+    if (!nearbyNow || !engine?.meshHops) return;
+    let live = true;
+    const ask = () => void engine.meshHops!().then((h) => live && setHops(h), () => undefined);
+    ask();
+    const t = window.setInterval(ask, 5000);
+    return () => {
+      live = false;
+      window.clearInterval(t);
+    };
+  }, [engine, nearbyNow]);
+  /** Files dropped on the window while no chat is open: who should get them. */
+  const [dropped, setDropped] = useState<File[]>([]);
+  useEffect(() => {
+    if (selected) return;
+    const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes('Files');
+    const over = (e: DragEvent) => {
+      if (hasFiles(e)) e.preventDefault();
+    };
+    const drop = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      const files = Array.from(e.dataTransfer?.files ?? []);
+      if (files.length > 0) setDropped(files);
+    };
+    window.addEventListener('dragover', over);
+    window.addEventListener('drop', drop);
+    return () => {
+      window.removeEventListener('dragover', over);
+      window.removeEventListener('drop', drop);
+    };
+  }, [selected]);
   const [query, setQuery] = useState('');
   const [focusId, setFocusId] = useState<string | null>(null);
   const [legacyError, setError] = useState<string | null>(null);
@@ -177,14 +250,14 @@ export function ChatLayout({
         online: g.connected > 0,
       })),
     ];
-    return list.sort((a, b) => b.at - a.at || a.name.localeCompare(b.name));
+    return withPinsFirst(list.sort((a, b) => b.at - a.at || a.name.localeCompare(b.name)), state?.prefs?.pins ?? []);
   }, [state]);
 
   const hits = useMemo(() => (engine && query.trim().length >= 2 ? engine.search(query) : []), [engine, query, state?.messages]);
 
-  useEffect(() => {
-    document.title = 'DuoCord';
-  }, []);
+  const [updated] = useState(() => whatsNewPending(config.appVersion));
+  useUnreadTitle(state ? totalUnread(state) : 0);
+  useSecureScreen(state?.prefs?.secureScreen === true);
 
   if (fatal) return <Splash danger title="DuoCord could not start" text={fatal} />;
   if (!state || state.phase === 'starting') return <Splash title="DuoCord" text="Opening your chats…" />;
@@ -307,19 +380,26 @@ export function ChatLayout({
           </div>
         ) : hasChats ? (
           <>
+          {updated ? <WhatsNewBanner engine={engine} /> : null}
           <FilterPills value={filter} onChange={setFilter} unread={rows.reduce((n, r) => n + (r.unread > 0 ? 1 : 0), 0)} />
           <nav className="chat-list" aria-label="Chats">
-            {rows.filter((r) => (filter === 'unread' ? r.unread > 0 : filter === 'groups' ? r.isGroup : true)).map((row) => (
+            {rows.filter((r) => prefs.archived.includes(r.id) === showArchived).filter((r) => (filter === 'unread' ? r.unread > 0 : filter === 'groups' ? r.isGroup : true)).map((row) => (
               <button
                 key={row.id}
                 type="button"
                 className={`chat-row ${row.id === selected ? 'active' : ''}`}
                 onClick={() => open(row.id)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  engine?.togglePin?.(row.id);
+                }}
               >
                 <Avatar name={row.name} size={46} online={row.online} group={row.isGroup} />
                 <span className="chat-row-main">
                   <span className="chat-row-top">
                     <strong>{row.name}</strong>
+                    {prefs.pins.includes(row.id) ? <PinIcon size={13} className="chat-row-pin" aria-label="Pinned" /> : null}
+                    {prefs.silentChats.includes(row.id) ? <BellOffIcon size={13} className="chat-row-pin" aria-label="Silent notifications" /> : null}
                     {row.at ? <span className="muted small">{formatTime(row.at)}</span> : null}
                   </span>
                   <span className="chat-row-bottom">
@@ -329,6 +409,11 @@ export function ChatLayout({
                 </span>
               </button>
             ))}
+            {prefs.archived.length > 0 || showArchived ? (
+              <button type="button" className="button ghost small archived-toggle" onClick={() => setShowArchived(!showArchived)}>
+                {showArchived ? 'Back to chats' : `Archived (${prefs.archived.length})`}
+              </button>
+            ) : null}
             {rows.length > 0 && !rows.some((r) => (filter === 'unread' ? r.unread > 0 : filter === 'groups' ? r.isGroup : true)) ? (
               <p className="muted small chat-list-none">{filter === 'unread' ? 'You are all caught up.' : 'No groups yet.'}</p>
             ) : null}
@@ -351,8 +436,11 @@ export function ChatLayout({
               <div className="chat-header-identity">
                 <Avatar name={current.name} size={40} group={!person} />
                 <div>
-                  <h2>{current.name}</h2>
-                  <p className="muted small">
+                  <h2>
+                    {current.name}
+                    <SealedBadge engine={engine} kind={person ? 'direct' : group ? 'group' : 'channel'} />
+                  </h2>
+                  <p className="muted small" title={person?.path?.detail}>
                     <span
                       className={`status-dot ${(person ? person.conn === 'connected' : (group?.connected ?? 0) > 0) ? 'live' : ''}`}
                       aria-hidden="true"
@@ -374,6 +462,52 @@ export function ChatLayout({
                 </button>
                 {menuOpen ? (
                   <div className="menu" role="menu">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        engine?.togglePin?.(selected!);
+                      }}
+                    >
+                      {prefs.pins.includes(selected!) ? 'Unpin from top' : 'Pin to top'}
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        engine?.setArchived?.(selected!, !prefs.archived.includes(selected!));
+                        if (!prefs.archived.includes(selected!)) setSelected(null);
+                      }}
+                    >
+                      {prefs.archived.includes(selected!) ? 'Bring back to chats' : 'Archive chat'}
+                    </button>
+                    {(prefs.muteUntil[selected!] ?? 0) > Date.now() ? (
+                      <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); engine?.setMuteUntil?.(selected!, 0); }}>
+                        Turn notifications back on
+                      </button>
+                    ) : (
+                      <>
+                        {muteChoices().map((m) => (
+                          <button key={m.label} type="button" role="menuitem" onClick={() => { setMenuOpen(false); engine?.setMuteUntil?.(selected!, m.until); }}>
+                            {m.label}
+                          </button>
+                        ))}
+                      </>
+                    )}
+                    {engine?.setSilent ? (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setMenuOpen(false);
+                          engine.setSilent!(selected!, !prefs.silentChats.includes(selected!));
+                        }}
+                      >
+                        {prefs.silentChats.includes(selected!) ? 'Notifications with sound' : 'Silent notifications'}
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       role="menuitem"
@@ -405,6 +539,12 @@ export function ChatLayout({
                 ) : null}
               </div>
             </header>
+
+            {person && person.conn === 'connected' && (person.path?.kind === 'bluetooth' || person.via === 'ble') ? (
+              <div className="banner nearby" role="status">
+                {nearbyText(person.name, hops[person.uid])}
+              </div>
+            ) : null}
 
             {state.error ? (
               <div className="banner error" role="alert">
@@ -465,20 +605,67 @@ export function ChatLayout({
               onRetry={(id) => void engine?.retry(id)}
               onReact={(id, emoji) => engine?.react(id, emoji)}
               onDelete={(id, everyone) => engine?.deleteMessage(id, everyone)}
+              onDetails={setDetailsFor}
               focusId={focusId}
               onFocused={() => setFocusId(null)}
               onReply={setReplying}
               loadFile={loadFile}
             />
 
+            <Modal open={detailsFor !== null} onClose={() => setDetailsFor(null)} title="Delivery details">
+              {detailsFor ? (
+                <div className="delivery-details">
+                  <p className="muted small">Sent {new Date(detailsFor.clientCreatedAt).toLocaleString()}</p>
+                  <ul className="host-list">
+                    {deliveryRows(
+                      detailsFor.recipients,
+                      detailsFor.deliveryState,
+                      (uid) => state.contacts.find((c) => c.uid === uid)?.name ?? group?.members.find((m) => m.uid === uid)?.name ?? 'Someone',
+                    ).map((r) => (
+                      <li key={r.name}>
+                        <strong>{r.name}</strong>
+                        <span className="muted small">{r.status}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  {receipts.length > 0 ? (
+                    <>
+                      <h3 className="small receipts-title">Devices</h3>
+                      <ul className="host-list receipts-list">
+                        {receipts.map((r) => (
+                          <li key={r.deviceId}>
+                            <span className="muted small">{receiptLine(r, formatTime)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  ) : null}
+                  <p className="muted small">
+                    {person?.path ? `Right now this chat is ${person.path.label.toLowerCase()}. ` : ''}
+                    Messages are end-to-end encrypted on every route. A person with several devices gets the message on each; the first one to receive it counts.
+                  </p>
+                </div>
+              ) : null}
+            </Modal>
+
             {readOnly ? (
               <div className="composer-note">{group!.status === 'removed' ? 'You were removed from this group.' : 'You left this group.'}</div>
             ) : (
+              <>
+              {undo && undo.conv === selected ? (
+                <div className="undo-bar" role="status">
+                  <span>Sent.</span>
+                  <button type="button" onClick={undoSend}>
+                    Undo
+                  </button>
+                </div>
+              ) : null}
               <Composer
                 key={selected}
                 disabled={state.phase !== 'ready'}
                 placeholder={group ? `Message ${group.name}` : `Message ${current.name}`}
                 isChannel={channel !== null}
+                quickTimes={engine?.quickTimes ? () => engine.quickTimes!() : undefined}
                 onSchedule={engine?.scheduleMessage ? (text, at) => engine.scheduleMessage!(selected!, text, at) : undefined}
                 scheduled={(state.scheduled ?? []).filter((m) => m.target === selected)}
                 onCancelScheduled={(id) => void engine?.cancelScheduled?.(id)}
@@ -486,7 +673,10 @@ export function ChatLayout({
                 onCancelReply={() => setReplying(null)}
                 onSend={async (text) => {
                   const r = (await engine?.send(selected!, text, replying?.messageId)) ?? { ok: false as const, error: 'Not ready.' };
-                  if (r.ok) setReplying(null);
+                  if (r.ok) {
+                    setReplying(null);
+                    setUndo({ conv: selected!, text });
+                  }
                   return r;
                 }}
                 onSendFile={async (file) => {
@@ -497,6 +687,7 @@ export function ChatLayout({
                   return r;
                 }}
               />
+              </>
             )}
           </>
         ) : (
@@ -529,6 +720,9 @@ export function ChatLayout({
         )}
       </main>
 
+      {dropped.length > 0 ? (
+        <DropSendDialog files={dropped} state={state} engine={engine} onClose={() => setDropped([])} onSent={(id) => { setDropped([]); open(id); }} />
+      ) : null}
       <RequestDialog requests={state.requests} engine={engine} onAdded={open} />
       <ChannelsDialog
         open={dialog === 'channels'}
@@ -593,4 +787,17 @@ export function ChatLayout({
       <RecoveryDialog open={dialog === 'recovery'} onClose={() => setDialog(null)} mode="restore" onIdentityReady={() => window.location.reload()} />
     </div>
   );
+}
+
+/** "Mute for": an hour, eight hours, until tomorrow morning, or until switched back on. */
+function muteChoices(now = Date.now()): { label: string; until: number }[] {
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(8, 0, 0, 0);
+  return [
+    { label: 'Mute for 1 hour', until: now + 3_600_000 },
+    { label: 'Mute for 8 hours', until: now + 8 * 3_600_000 },
+    { label: 'Mute until tomorrow', until: tomorrow.getTime() },
+    { label: 'Mute until I turn it on', until: MUTE_FOREVER },
+  ];
 }

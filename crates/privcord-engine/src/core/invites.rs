@@ -508,7 +508,7 @@ impl Core {
         };
         // A message in a public channel we joined, carried by the signaling service.
         if self.channels.values().any(|k| k.mailbox == mailbox) {
-            self.accept_channel_blob(&blob);
+            self.accept_channel_blob(&blob, None);
             return;
         }
         // Someone answered our words.

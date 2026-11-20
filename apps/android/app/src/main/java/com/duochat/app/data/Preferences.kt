@@ -31,8 +31,12 @@ data class AppSettings(
     val panicWipe: Boolean = false,
     /** Ask for fingerprint, face or the screen-lock PIN/pattern/password to open the app (when the phone has one). */
     val appLock: Boolean = true,
-    /** Conversation ids (contact uid / group id) whose notifications are muted. */
+    /** Old per-phone mutes. They are moved into the shared engine once (muted with no end) and then cleared. */
     val mutedChats: Set<String> = emptySet(),
+    /** When a backup was last made (milliseconds), or 0. Only used by the privacy checkup. */
+    val lastBackupAt: Long = 0L,
+    /** The app version whose "What's new" was last shown (empty before the first run). */
+    val lastSeenVersion: String = "",
     val network: NetworkConfig = NetworkConfig(),
 )
 
@@ -69,6 +73,8 @@ class SettingsRepository(context: Context) {
             .putBoolean("panicWipe", next.panicWipe)
             .putBoolean("appLock", next.appLock)
             .putStringSet("mutedChats", next.mutedChats)
+            .putLong("lastBackupAt", next.lastBackupAt)
+            .putString("lastSeenVersion", next.lastSeenVersion)
             .putString("network", next.network.toJson())
             .apply()
     }
@@ -90,6 +96,8 @@ class SettingsRepository(context: Context) {
             panicWipe = prefs.getBoolean("panicWipe", false),
             appLock = prefs.getBoolean("appLock", true),
             mutedChats = prefs.getStringSet("mutedChats", emptySet())?.toSet() ?: emptySet(),
+            lastBackupAt = prefs.getLong("lastBackupAt", 0L),
+            lastSeenVersion = prefs.getString("lastSeenVersion", "") ?: "",
             network = NetworkConfig.fromJson(
                 prefs.getString("network", null),
                 fallback = AppConfig.defaultNetworkConfig(),

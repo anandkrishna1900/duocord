@@ -2,6 +2,7 @@ package com.duochat.app.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,7 +38,9 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.Settings
@@ -99,10 +102,17 @@ fun HomeScreen(
     onOpenConversation: (String) -> Unit = {},
     onRecreateGroup: (String) -> Unit = {},
     onDismissOldGroup: (String) -> Unit = {},
+    whatsNew: com.duochat.app.data.WhatsNew? = null,
+    onDismissWhatsNew: () -> Unit = {},
+    pinned: List<String> = emptyList(),
+    archived: List<String> = emptyList(),
+    onTogglePin: (String) -> Unit = {},
+    silentChats: List<String> = emptyList(),
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     var filter by rememberSaveable { mutableStateOf(Filter.ALL) }
     var sheetOpen by remember { mutableStateOf(false) }
+    var showArchived by rememberSaveable { mutableStateOf(false) }
     val searching = query.trim().length >= 2
     val hits = remember(query, state.messages) { if (searching) onSearch(query) else emptyList() }
     val listState = rememberLazyListState()
@@ -111,11 +121,14 @@ fun HomeScreen(
     val showFilters = state.chats.any { it.isGroup } && state.chats.any { !it.isGroup }
     // With the chips hidden (only people, or only groups), a filter picked earlier must not hide chats with no way back.
     val active = if (showFilters) filter else Filter.ALL
-    val chats = when (active) {
-        Filter.ALL -> state.chats
-        Filter.PEOPLE -> state.chats.filter { !it.isGroup }
-        Filter.GROUPS -> state.chats.filter { it.isGroup }
-    }
+    val chats = com.duochat.app.data.withPinsFirst(
+        when (active) {
+            Filter.ALL -> state.chats
+            Filter.PEOPLE -> state.chats.filter { !it.isGroup }
+            Filter.GROUPS -> state.chats.filter { it.isGroup }
+        }.filter { (it.id in archived) == showArchived },
+        pinned,
+    ) { it.id }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -138,6 +151,7 @@ fun HomeScreen(
         Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).statusBarsPadding().imePadding()) {
             Header(onOpenSettings = onOpenSettings, onPanic = onPanic)
             state.notice?.let { Notice(it, onClearNotice) }
+            whatsNew?.let { n -> Notice("What's new in ${n.version}: " + n.lines.joinToString(" \u00B7 "), onDismissWhatsNew) }
             state.legacyGroups.forEach { g -> OldGroup(g, onRecreate = { onRecreateGroup(g.oldId) }, onDismiss = { onDismissOldGroup(g.oldId) }) }
             if (state.chats.isEmpty()) {
                 EmptyHome(onAddFriend, onChannels)
@@ -213,7 +227,13 @@ fun HomeScreen(
                                 fadeOutSpec = androidx.compose.animation.core.tween(Motion.SMALL_OUT),
                             )
                             .riseIn(play = introPlaying && index < 10, delayMillis = 60 + index * 40),
-                    ) { ChatRow(chat) { onOpenChat(chat) } }
+                    ) { ChatRow(chat, pinned = chat.id in pinned, silent = chat.id in silentChats, onLongClick = { onTogglePin(chat.id) }) { onOpenChat(chat) } }
+                }
+                if (archived.isNotEmpty() || showArchived) item(key = "archived-toggle") {
+                    androidx.compose.material3.TextButton(
+                        onClick = { showArchived = !showArchived },
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                    ) { Text(if (showArchived) "Back to chats" else "Archived (${archived.size})") }
                 }
             }
         }
@@ -402,11 +422,14 @@ private fun SheetAction(icon: ImageVector, title: String, detail: String, enable
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun ChatRow(chat: ChatSummary, onClick: () -> Unit) {
+private fun ChatRow(chat: ChatSummary, pinned: Boolean = false, silent: Boolean = false, onLongClick: () -> Unit = {}, onClick: () -> Unit) {
     val unread = chat.unread > 0
     Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 10.dp),
+        modifier = Modifier.fillMaxWidth()
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(horizontal = 20.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         InitialsAvatar(name = chat.title, size = 54, online = chat.link == LinkStatus.CONNECTED, group = chat.isGroup)
@@ -418,6 +441,20 @@ private fun ChatRow(chat: ChatSummary, onClick: () -> Unit) {
                     fontWeight = if (unread) FontWeight.Bold else FontWeight.SemiBold,
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
                 )
+                if (silent) {
+                    Spacer(Modifier.width(6.dp))
+                    androidx.compose.material3.Icon(
+                        Icons.Filled.NotificationsOff, contentDescription = "Silent notifications",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp),
+                    )
+                }
+                if (pinned) {
+                    Spacer(Modifier.width(6.dp))
+                    androidx.compose.material3.Icon(
+                        androidx.compose.material.icons.Icons.Filled.PushPin, contentDescription = "Pinned",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp),
+                    )
+                }
                 if (chat.lastAt > 0 && chat.lastText != null) {
                     Spacer(Modifier.width(8.dp))
                     Text(

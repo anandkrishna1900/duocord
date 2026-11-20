@@ -131,6 +131,16 @@ fn number(args: &Value, key: &str) -> Result<u32, HostError> {
         .ok_or_else(|| format!("missing number argument `{key}`"))
 }
 
+fn big(args: &Value, key: &str) -> Result<i64, HostError> {
+    args.get(key)
+        .and_then(Value::as_i64)
+        .ok_or_else(|| format!("missing number argument `{key}`"))
+}
+
+fn minutes(args: &Value, key: &str) -> Result<u16, HostError> {
+    u16::try_from(number(args, key)?).map_err(|_| format!("missing number argument `{key}`"))
+}
+
 fn texts(args: &Value, key: &str) -> Result<Vec<String>, HostError> {
     args.get(key)
         .and_then(Value::as_array)
@@ -379,6 +389,64 @@ impl DesktopHost {
             "rename_contact" => unit(e.rename_contact(text(args, "uid")?, text(args, "name")?)),
             "remove_contact" => unit(e.remove_contact(text(args, "uid")?)),
             "set_muted" => unit(e.set_muted(text(args, "uid")?, flag(args, "muted")?)),
+            "toggle_pin" => unit(e.toggle_pin(text(args, "conversation")?)),
+            "set_archived" => {
+                unit(e.set_archived(text(args, "conversation")?, flag(args, "archived")?))
+            }
+            "set_silent" => unit(e.set_silent(text(args, "conversation")?, flag(args, "silent")?)),
+            "set_mute_until" => {
+                unit(e.set_mute_until(text(args, "conversation")?, big(args, "until_ms")?))
+            }
+            "set_quiet_hours" => unit(e.set_quiet_hours(
+                flag(args, "enabled")?,
+                minutes(args, "from")?,
+                minutes(args, "to")?,
+            )),
+            "prefs" => {
+                Ok(serde_json::from_str(&e.prefs_json().map_err(failed)?).unwrap_or(Value::Null))
+            }
+            "message_receipts" => Ok(serde_json::from_str(
+                &e.message_receipts_json(text(args, "message_id")?)
+                    .map_err(failed)?,
+            )
+            .unwrap_or(Value::Null)),
+            "mesh_hops" => {
+                Ok(serde_json::from_str(&e.mesh_hops_json().map_err(failed)?)
+                    .unwrap_or(Value::Null))
+            }
+            "set_secure_screen" => unit(e.set_secure_screen(flag(args, "on")?)),
+            "diagnostics" => Ok(json!(e
+                .diagnostics_json(text(args, "app")?)
+                .map_err(failed)?)),
+            "self_test" => {
+                Ok(serde_json::from_str(&e.self_test_json().map_err(failed)?)
+                    .unwrap_or(Value::Null))
+            }
+            "storage_by_chat" => Ok(serde_json::from_str(
+                &e.storage_by_chat_json().map_err(failed)?,
+            )
+            .unwrap_or(Value::Null)),
+            "insight" => {
+                let out = e
+                    .insight(text(args, "name")?, text(args, "input")?)
+                    .map_err(failed)?;
+                Ok(serde_json::from_str(&out).unwrap_or(Value::Null))
+            }
+            "quick_times" => Ok(
+                serde_json::from_str(&e.quick_send_times_json().map_err(failed)?)
+                    .unwrap_or(Value::Null),
+            ),
+            "set_utc_offset" => unit(
+                e.set_utc_offset_minutes(
+                    args.get("minutes")
+                        .and_then(Value::as_i64)
+                        .and_then(|m| i32::try_from(m).ok())
+                        .ok_or_else(|| "missing number argument `minutes`".to_owned())?,
+                ),
+            ),
+            "should_notify" => Ok(json!(e
+                .should_notify(text(args, "conversation")?)
+                .map_err(failed)?)),
             "set_group_only" => unit(e.set_group_only(flag(args, "value")?)),
             "set_store_forward" => unit(e.set_store_forward(flag(args, "value")?)),
             "accept_request" => Ok(json!(e

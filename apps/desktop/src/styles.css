@@ -3719,6 +3719,70 @@ input[type='checkbox'] {
   gap: 12px;
 }
 
+/* Privacy checkup, network list, pinned chats, undo bar */
+.checkup-score { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
+.checkup-bar { height: 6px; border-radius: 999px; background: var(--tonal); overflow: hidden; margin: 6px 0 10px; }
+.checkup-bar span { display: block; height: 100%; border-radius: inherit; background: var(--accent-fill); transition: width 0.4s ease; }
+.checkup-list, .host-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.checkup-list li { display: grid; grid-template-columns: 20px 1fr auto; gap: 10px; align-items: center; }
+.checkup-mark { display: grid; place-items: center; color: var(--muted); }
+.checkup-list li.ok .checkup-mark { color: var(--success); }
+.checkup-list li.todo .checkup-mark { color: var(--warning); }
+.checkup-text { display: grid; gap: 2px; min-width: 0; }
+.host-list li { display: grid; gap: 2px; }
+.host-list code { font-size: 0.85rem; word-break: break-all; }
+.chat-row-pin { color: var(--muted); flex-shrink: 0; }
+.undo-bar { display: flex; align-items: center; gap: 12px; margin: 0 14px 8px; padding: 10px 14px; border-radius: 14px; background: var(--ink); color: var(--on-ink); animation: polish-rise 0.2s ease-out both; }
+.undo-bar span { flex: 1; font-size: 0.9rem; }
+.undo-bar button { background: transparent; border: 0; color: inherit; font-weight: 700; cursor: pointer; padding: 4px 8px; border-radius: 8px; text-decoration: underline; }
+@media (prefers-reduced-motion: reduce) { .undo-bar { animation: none; } .checkup-bar span { transition: none; } }
+
+.quiet-times { display: flex; gap: 12px; }
+.quiet-times .field { flex: 1; }
+
+.banner.nearby { background: var(--tonal); color: var(--text); border: 0; }
+
+.storage-list { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 12px; }
+.storage-top { display: flex; justify-content: space-between; gap: 12px; }
+.storage-list .checkup-bar { margin: 4px 0 6px; }
+.delivery-details .host-list li { display: flex; justify-content: space-between; gap: 12px; }
+
+/* Sealed chip, delivery health, devices strip, what's new, voice speed */
+.sealed-chip { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; padding: 2px 8px; border: 1px solid var(--border-strong); border-radius: 999px; background: transparent; color: var(--text-soft); font: inherit; font-size: 11px; font-weight: 600; vertical-align: middle; cursor: pointer; }
+.sealed-chip:hover { background: var(--surface-hover); }
+.sealed-chip:focus-visible { outline: none; box-shadow: var(--ring); }
+.plain-list { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 6px; }
+.devices-strip { margin: 0; padding: 8px 12px; border-radius: var(--radius-sm); background: var(--tonal); color: var(--text-soft); font-size: 13px; }
+.whats-new.banner { margin: 8px 12px; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); }
+.audio-row { display: flex; align-items: center; gap: 6px; max-width: 100%; }
+.speed-button { min-width: 44px; font-variant-numeric: tabular-nums; }
+
+/* Progress ring (file and voice transfers), voice waveform, delivery devices, drop-to-send, quick-send popup */
+.progress-ring { position: relative; display: inline-grid; place-items: center; width: 36px; height: 36px; margin-top: 4px; font-size: 10px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.progress-ring svg { position: absolute; inset: 0; }
+.progress-ring circle { fill: none; stroke-width: 3; }
+.progress-ring-track { stroke: color-mix(in srgb, currentColor 20%, transparent); }
+.progress-ring-arc { stroke: currentColor; stroke-linecap: round; transition: stroke-dasharray 0.2s linear; }
+.waveform { display: flex; align-items: center; gap: 2px; height: 32px; min-width: 120px; flex: 1; cursor: pointer; border-radius: var(--radius-sm); }
+.waveform:focus-visible { outline: none; box-shadow: var(--ring); }
+.waveform span { flex: 1; min-width: 2px; max-width: 5px; border-radius: 2px; background: currentColor; opacity: 0.35; }
+.waveform span.on { opacity: 1; }
+.receipts-title { margin: 12px 0 4px; font-weight: 600; }
+.receipts-list li { padding: 2px 0; }
+.drop-send { display: grid; gap: 10px; min-width: min(360px, 80vw); }
+.drop-send-search, .quick-input { width: 100%; box-sizing: border-box; padding: 9px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font: inherit; }
+.drop-send-search:focus-visible, .quick-input:focus-visible { outline: none; box-shadow: var(--ring); }
+.drop-send-list, .quick-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: 260px; overflow-y: auto; }
+.drop-send-row, .quick-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.drop-send-row:hover, .quick-row:hover, .quick-row.active { background: var(--surface-hover); }
+.drop-send-row:disabled { opacity: 0.6; cursor: progress; }
+.quick-send { box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; height: 100vh; padding: 12px; background: var(--bg-elevated); color: var(--text); border: 1px solid var(--border-strong); }
+.quick-list { flex: 1; min-height: 0; max-height: none; align-content: start; }
+.quick-chip { align-self: flex-start; padding: 4px 10px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface); color: var(--text-soft); font: inherit; font-size: 13px; cursor: pointer; }
+.quick-note { margin: auto; text-align: center; }
+.quick-open { align-self: flex-end; margin-top: auto; }
+.quick-empty { padding: 8px 10px; }
+@media (prefers-reduced-motion: reduce) { .progress-ring-arc { transition: none; } }
 /* Linking by scan: the six digits typed on the new device */
 .link-steps { margin: 0; padding-left: 20px; display: grid; gap: 4px; text-align: left; }
 .digit-boxes { display: flex; gap: 8px; justify-content: center; }

@@ -8,6 +8,7 @@ pub mod api;
 pub mod core;
 pub mod error;
 pub mod events;
+pub mod insights;
 pub mod runtime;
 pub mod signaling;
 

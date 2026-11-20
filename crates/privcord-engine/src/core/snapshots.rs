@@ -357,6 +357,16 @@ impl Core {
                 .filter_map(|t| entry(kind::SEEN, json!({ "target": t }))),
         );
         entries.extend(entry(kind::SETTING, json!({ "key": "muted" })));
+        for key in [
+            super::prefs::KV_PINS,
+            super::prefs::KV_ARCHIVED,
+            super::prefs::KV_MUTE_UNTIL,
+            super::prefs::KV_QUIET,
+            super::prefs::KV_SECURE,
+            super::prefs::KV_SILENT,
+        ] {
+            entries.extend(entry(kind::SETTING, json!({ "key": key })));
+        }
         self.apply_entries(&entries);
     }
 }

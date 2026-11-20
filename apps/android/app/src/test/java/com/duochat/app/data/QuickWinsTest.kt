@@ -43,3 +43,41 @@ class QuickWinsTest {
         assertTrue(privacyCheckup(true, now, true, true, true, true, 2, now).first { it.id == "devices" }.hint.contains("2 linked devices"))
     }
 }
+
+class QuickWins2Test {
+    @Test
+    fun `quiet hours cross midnight and stay off when disabled or empty`() {
+        assertTrue(inQuietHours(true, 22 * 60, 7 * 60, 23, 0))
+        assertTrue(inQuietHours(true, 22 * 60, 7 * 60, 3, 0))
+        assertFalse(inQuietHours(true, 22 * 60, 7 * 60, 7, 0))
+        assertFalse(inQuietHours(true, 22 * 60, 7 * 60, 12, 0))
+        assertTrue(inQuietHours(true, 13 * 60, 14 * 60, 13, 30))
+        assertFalse(inQuietHours(false, 22 * 60, 7 * 60, 23, 0))
+        assertFalse(inQuietHours(true, 480, 480, 8, 0))
+        assertEquals("07:05", minutesLabel(7 * 60 + 5))
+    }
+
+    @Test
+    fun `delivery states are put in words`() {
+        assertEquals("Read", deliveryWords(DeliveryState.READ))
+        assertEquals("Waiting for them to come online", deliveryWords(DeliveryState.QUEUED))
+    }
+
+    @Test
+    fun `storage adds text and files per chat, biggest first, skipping deleted`() {
+        fun m(id: String, text: String, size: Int? = null, deleted: Boolean = false) = ChatMessage(
+            messageId = id, clientMessageId = id, senderId = "s", text = text, clientCreatedAt = 0L, deleted = deleted,
+            file = size?.let { FileMeta("f", "image/png", it, "h") },
+        )
+        val rows = storageByChat(
+            mapOf(
+                "a" to listOf(m("1", "hello"), m("2", "", 1000), m("3", "gone", deleted = true)),
+                "b" to listOf(m("4", "x".repeat(5000))),
+                "c" to listOf(m("5", "bye", deleted = true)),
+            ),
+        ) { it.uppercase() }
+        assertEquals(listOf("B", "A"), rows.map { it.name })
+        assertEquals(1005L, rows[1].bytes)
+        assertEquals(listOf("2"), rows[1].fileIds)
+    }
+}

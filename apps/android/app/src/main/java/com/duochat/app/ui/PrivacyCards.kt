@@ -94,3 +94,55 @@ fun NetworkHostsCard(rows: List<HostRow>) {
         }
     }
 }
+
+private fun formatSize(b: Long): String = when {
+    b >= 1_000_000 -> "%.1f MB".format(b / 1_000_000.0)
+    b >= 1_000 -> "%.0f KB".format(b / 1_000.0)
+    else -> "$b B"
+}
+
+/** What each chat takes on this phone, with a way to drop a chat's photos and files to free space. */
+@Composable
+fun StorageByChatCard(rows: List<com.duochat.app.data.ChatStorage>, onDeleteFiles: (List<String>) -> Unit) {
+    if (rows.isEmpty()) return
+    var confirm by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    val biggest = rows.first().bytes.coerceAtLeast(1L)
+    Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Storage by chat", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            rows.take(12).forEach { r ->
+                Column {
+                    Row {
+                        Text(r.name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                        Text(formatSize(r.bytes), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    LinearProgressIndicator(
+                        progress = { (r.bytes / biggest.toFloat()).coerceIn(0.03f, 1f) },
+                        modifier = Modifier.fillMaxWidth().height(6.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        strokeCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                        drawStopIndicator = {},
+                    )
+                    if (r.files > 0) {
+                        if (confirm == r.id) {
+                            Row {
+                                TextButton(onClick = { onDeleteFiles(r.fileIds); confirm = null }) {
+                                    Text("Delete ${r.files} file message${if (r.files == 1) "" else "s"} for me", color = MaterialTheme.colorScheme.error)
+                                }
+                                TextButton(onClick = { confirm = null }) { Text("Keep") }
+                            }
+                        } else {
+                            TextButton(onClick = { confirm = r.id }) { Text("Free ${formatSize(r.fileBytes)} of photos and files") }
+                        }
+                    }
+                }
+            }
+            Text(
+                "Deleting removes those messages from this phone only. Your friends keep their copies.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}

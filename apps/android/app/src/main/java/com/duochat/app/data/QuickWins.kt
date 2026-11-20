@@ -61,3 +61,32 @@ fun privacyCheckup(
         CheckupItem("devices", "No forgotten devices", staleDevices == 0, if (staleDevices == 0) "Every linked device was seen recently." else "$staleDevices linked device${if (staleDevices == 1) "" else "s"} not seen for 90 days. Remove ${if (staleDevices == 1) "it" else "them"} if lost."),
     )
 }
+
+/** No notifications between two times of day (minutes after midnight); the window may cross midnight. */
+fun inQuietHours(enabled: Boolean, fromMin: Int, toMin: Int, hour: Int, minute: Int): Boolean {
+    if (!enabled || fromMin == toMin) return false
+    val t = hour * 60 + minute
+    return if (fromMin < toMin) t in fromMin until toMin else t >= fromMin || t < toMin
+}
+
+fun minutesLabel(m: Int): String = "%02d:%02d".format(m / 60, m % 60)
+
+/** A message's delivery state in words. */
+fun deliveryWords(s: DeliveryState): String = when (s) {
+    DeliveryState.QUEUED -> "Waiting for them to come online"
+    DeliveryState.SENT -> "Sent"
+    DeliveryState.DELIVERED -> "Delivered"
+    DeliveryState.READ -> "Read"
+    DeliveryState.FAILED -> "Could not be sent"
+}
+
+data class ChatStorage(val id: String, val name: String, val messages: Int, val files: Int, val bytes: Long, val fileBytes: Long, val fileIds: List<String>)
+
+/** What each chat takes on this phone, biggest first (deleted messages are free). */
+fun storageByChat(messages: Map<String, List<ChatMessage>>, nameOf: (String) -> String): List<ChatStorage> =
+    messages.map { (id, list) ->
+        val live = list.filter { !it.deleted }
+        val fileMsgs = live.filter { it.file != null }
+        val fileBytes = fileMsgs.sumOf { it.file!!.size.toLong() }
+        ChatStorage(id, nameOf(id), live.size, fileMsgs.size, live.sumOf { it.text.toByteArray().size.toLong() } + fileBytes, fileBytes, fileMsgs.map { it.messageId })
+    }.filter { it.messages > 0 }.sortedByDescending { it.bytes }

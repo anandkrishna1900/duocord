@@ -58,7 +58,12 @@ object EngineHost {
             conversationId = com.duochat.app.AppConfig.conversationId,
             networkConfig = { settings.settings.value.network },
             ownName = { settings.settings.value.displayName },
-            isMuted = { id -> id in settings.settings.value.mutedChats },
+            isMuted = { id ->
+                val cur = settings.settings.value
+                val now = java.util.Calendar.getInstance()
+                id in cur.mutedChats ||
+                    com.duochat.app.data.inQuietHours(cur.quietEnabled, cur.quietFrom, cur.quietTo, now.get(java.util.Calendar.HOUR_OF_DAY), now.get(java.util.Calendar.MINUTE))
+            },
             onNotify = { notice -> com.duochat.app.notifications.DuoNotifications.showNotice(app, notice, settings.settings.value) },
             initialGroupOnly = s.groupOnly,
         )

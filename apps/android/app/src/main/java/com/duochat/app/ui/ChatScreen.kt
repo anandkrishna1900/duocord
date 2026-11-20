@@ -177,6 +177,7 @@ fun ChatScreen(
     val canWrite = state.phase == EnginePhase.READY && (friend != null || group?.iAmMember == true || channel != null)
     var menuOpen by remember { mutableStateOf(false) }
     var clearConfirm by remember { mutableStateOf(false) }
+    var detailsFor by remember { mutableStateOf<ChatMessage?>(null) }
     // "Sent. Undo": for a few seconds after sending, the message can be taken back from everyone.
     val snackbarHost = remember { androidx.compose.material3.SnackbarHostState() }
     val undoScope = rememberCoroutineScope()
@@ -319,6 +320,34 @@ fun ChatScreen(
             state.notice?.let {
                 Banner(Icons.Filled.Shield, it, MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.onPrimaryContainer, onDismiss = onClearNotice)
             }
+            if (friend != null && friend.link == LinkStatus.CONNECTED && friend.path == com.duochat.app.data.ConnectionPath.BLUETOOTH) {
+                Banner(
+                    Icons.Filled.Shield,
+                    "Nearby mode: no internet needed. This chat is going over Bluetooth, straight to ${friend.name}'s phone.",
+                    MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            detailsFor?.let { m ->
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { detailsFor = null },
+                    title = { Text("Delivery details") },
+                    text = {
+                        Column {
+                            Text("Sent " + java.text.DateFormat.getDateTimeInstance().format(java.util.Date(m.clientCreatedAt)), style = MaterialTheme.typography.bodySmall)
+                            Spacer(Modifier.height(8.dp))
+                            Text(com.duochat.app.data.deliveryWords(m.deliveryState), style = MaterialTheme.typography.titleMedium)
+                            if (m.totalRecipients > 1) Text("Delivered to ${m.deliveredTo} of ${m.totalRecipients} people", style = MaterialTheme.typography.bodyMedium)
+                            friend?.path?.let { Text("Right now this chat is ${it.label.lowercase()}.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                "Messages are end-to-end encrypted on every route. A person with several devices gets the message on each; the first one to receive it counts.",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    },
+                    confirmButton = { TextButton(onClick = { detailsFor = null }) { Text("Close") } },
+                )
+            }
             if (channel != null) {
                 Banner(
                     Icons.Filled.Shield,
@@ -363,6 +392,7 @@ fun ChatScreen(
                 onRetry = onRetry,
                 onReply = { replyingTo = it },
                 onDelete = onDeleteMessage,
+                onDetails = { detailsFor = it },
                 onReact = onReact,
                 loadFile = loadFile,
                 transfers = state.transfers,
@@ -422,6 +452,7 @@ private fun MessageList(
     onRetry: (String) -> Unit,
     onReply: (ChatMessage) -> Unit,
     onDelete: (String, Boolean) -> Unit,
+    onDetails: (ChatMessage) -> Unit = {},
     onReact: (String, String) -> Unit,
     loadFile: suspend (String) -> Pair<FileMeta, ByteArray>?,
     transfers: Map<String, Float>,
@@ -543,6 +574,7 @@ private fun MessageList(
                         onRetry = onRetry,
                         onReply = onReply,
                         onDelete = onDelete,
+                        onDetails = onDetails,
                         onReact = onReact,
                         selfUid = selfUid,
                         loadFile = loadFile,
@@ -610,6 +642,7 @@ private fun MessageBubble(
     onRetry: (String) -> Unit,
     onReply: (ChatMessage) -> Unit,
     onDelete: (String, Boolean) -> Unit,
+    onDetails: (ChatMessage) -> Unit = {},
     onReact: (String, String) -> Unit,
     selfUid: String,
     loadFile: suspend (String) -> Pair<FileMeta, ByteArray>?,
@@ -795,6 +828,10 @@ private fun MessageBubble(
                 if (onMute != null && !own) DropdownMenuItem(
                     text = { Text("Mute this person") },
                     onClick = { menuOpen = false; onMute(message.senderId) },
+                )
+                if (own && !message.deleted) DropdownMenuItem(
+                    text = { Text("Delivery details") },
+                    onClick = { menuOpen = false; onDetails(message) },
                 )
                 if (!message.deleted) DropdownMenuItem(
                     text = { Text("Delete for me") },

@@ -340,6 +340,7 @@ private fun RootScreen(viewModel: AppViewModel) {
                     onRequestNotifications = requestNotifications,
                     onUpdateSettings = viewModel::updateSettings,
                     onClearLocalData = viewModel::clearLocalData,
+                    onDeleteMessages = { ids -> ids.forEach { viewModel.deleteMessage(it, false) } },
                     onOpenManual = {
                         settingsOpen = false
                         manualOpen = true

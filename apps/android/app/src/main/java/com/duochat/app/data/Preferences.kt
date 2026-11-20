@@ -37,6 +37,10 @@ data class AppSettings(
     val pinned: List<String> = emptyList(),
     /** When a backup was last made (milliseconds), or 0. Only used by the privacy checkup. */
     val lastBackupAt: Long = 0L,
+    /** Quiet hours: no notifications between two times of day (minutes after midnight). */
+    val quietEnabled: Boolean = false,
+    val quietFrom: Int = 22 * 60,
+    val quietTo: Int = 7 * 60,
     val network: NetworkConfig = NetworkConfig(),
 )
 
@@ -75,6 +79,9 @@ class SettingsRepository(context: Context) {
             .putStringSet("mutedChats", next.mutedChats)
             .putString("pinned", next.pinned.joinToString(","))
             .putLong("lastBackupAt", next.lastBackupAt)
+            .putBoolean("quietEnabled", next.quietEnabled)
+            .putInt("quietFrom", next.quietFrom)
+            .putInt("quietTo", next.quietTo)
             .putString("network", next.network.toJson())
             .apply()
     }
@@ -98,6 +105,9 @@ class SettingsRepository(context: Context) {
             mutedChats = prefs.getStringSet("mutedChats", emptySet())?.toSet() ?: emptySet(),
             pinned = (prefs.getString("pinned", "") ?: "").split(",").filter { it.isNotBlank() }.takeLast(MAX_PINS),
             lastBackupAt = prefs.getLong("lastBackupAt", 0L),
+            quietEnabled = prefs.getBoolean("quietEnabled", false),
+            quietFrom = prefs.getInt("quietFrom", 22 * 60).coerceIn(0, 1439),
+            quietTo = prefs.getInt("quietTo", 7 * 60).coerceIn(0, 1439),
             network = NetworkConfig.fromJson(
                 prefs.getString("network", null),
                 fallback = AppConfig.defaultNetworkConfig(),

@@ -81,6 +81,7 @@ fun SettingsDialog(
     onRequestNotifications: () -> Unit,
     onUpdateSettings: (AppSettings.() -> AppSettings) -> Unit,
     onClearLocalData: ((Result<Unit>) -> Unit) -> Unit,
+    onDeleteMessages: (List<String>) -> Unit = {},
     onOpenManual: () -> Unit,
     onOpenNuke: () -> Unit,
     onBluetoothPermissionResult: () -> Unit = {},
@@ -299,6 +300,26 @@ SectionTitle("Appearance")
                     settings.notificationPreviews,
                     enabled = settings.notificationsEnabled,
                 ) { onUpdateSettings { copy(notificationPreviews = it) } }
+                ToggleRow(
+                    "Quiet hours",
+                    "No notifications between these times. Messages still arrive and wait in the chat.",
+                    settings.quietEnabled,
+                    enabled = settings.notificationsEnabled,
+                ) { onUpdateSettings { copy(quietEnabled = it) } }
+                if (settings.quietEnabled && settings.notificationsEnabled) {
+                    val ctx = LocalContext.current
+                    fun pick(initial: Int, set: (Int) -> Unit) {
+                        android.app.TimePickerDialog(ctx, { _, h, m -> set(h * 60 + m) }, initial / 60, initial % 60, true).show()
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { pick(settings.quietFrom) { v -> onUpdateSettings { copy(quietFrom = v) } } }) {
+                            Text("From ${com.duochat.app.data.minutesLabel(settings.quietFrom)}")
+                        }
+                        OutlinedButton(onClick = { pick(settings.quietTo) { v -> onUpdateSettings { copy(quietTo = v) } } }) {
+                            Text("Until ${com.duochat.app.data.minutesLabel(settings.quietTo)}")
+                        }
+                    }
+                }
                 Spacer(Modifier.height(8.dp))
                 OutlinedButton(onClick = onRequestNotifications) {
                     Icon(
@@ -753,6 +774,15 @@ ToggleRow(
                 Spacer(Modifier.height(14.dp))
                 SectionTitle("Backup")
                 BackupSection({ pass, done -> onExportBackup(pass) { r -> if (r.isSuccess) onUpdateSettings { copy(lastBackupAt = System.currentTimeMillis()) }; done(r) } }, onImportBackup)
+                Spacer(Modifier.height(20.dp))
+
+StorageByChatCard(
+                    rows = com.duochat.app.data.storageByChat(state.messages) { id ->
+                        state.contacts.firstOrNull { it.uid == id }?.name ?: state.groups.firstOrNull { it.groupId == id }?.name
+                            ?: state.channels.firstOrNull { it.id == id }?.let { "# ${it.name}" } ?: "Chat"
+                    },
+                    onDeleteFiles = onDeleteMessages,
+                )
                 Spacer(Modifier.height(20.dp))
 
 SectionTitle("About DuoCord")

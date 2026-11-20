@@ -52,10 +52,9 @@ pub struct SealedMedia {
 /// The nonce for one piece: 8 bytes made from the key it is sealed under, then the piece's number (the receiver reads
 /// the number from it). No two pieces under one key share a nonce, and nothing about it is a fixed value in the code.
 fn iv_for(key: &[u8; 32], index: u32) -> Result<[u8; 12], CryptoError> {
-    let mut iv = [0u8; 12];
-    iv[..8].copy_from_slice(&hkdf_sha256_info::<8>(key, &label("iv"))?);
-    iv[8..].copy_from_slice(&index.to_be_bytes());
-    Ok(iv)
+    let [a, b, c, d, e, f, g, h] = hkdf_sha256_info::<8>(key, &label("iv"))?;
+    let [i, j, k, l] = index.to_be_bytes();
+    Ok([a, b, c, d, e, f, g, h, i, j, k, l])
 }
 
 /// What `hkdf_sha256_info` is given for one purpose of this module.

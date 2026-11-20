@@ -15,7 +15,7 @@ import {
   type NetworkConfig,
 } from '@duochat/protocol';
 import { NO_PREFS, type ChatState, type DeviceLinkState, type PrefsView, type SearchHit } from '../engine';
-import type { ChatEngineApi, SendResult } from '../engineApi';
+import type { ChatEngineApi, DeviceReceipt, SendResult } from '../engineApi';
 import { HostedEngine, type EngineBridge } from '../engineBridge';
 import { uidMatchesKeys, type DeviceIdentity } from '../identity';
 import type { FileMeta, LocalStore, StoredMessage } from '../localDb';
@@ -29,7 +29,7 @@ export interface HostedDeps {
   /** The name on our invite card (Settings). */
   ownName: () => string;
   /** `title` is already worded for the user ("Sam" or "Sam in Trip"). */
-  onNotify: (message: StoredMessage, title: string) => void;
+  onNotify: (message: StoredMessage, title: string, silent?: boolean) => void;
   /** Turn the "store messages on the relays" setting on and remember it. */
   persistStoreForward: () => void;
   /** Delete a secret from the OS credential store (the engine's identity, on a full wipe). */
@@ -329,7 +329,7 @@ export class HostedChatEngine implements ChatEngineApi {
     const group = this.state.groups.find((g) => g.groupId === conversation);
     const channel = this.state.channels.find((c) => c.id === conversation);
     const title = person ?? (group ? `${message.senderName} in ${group.name}` : channel ? `${message.senderName} in #${channel.name}` : message.senderName);
-    this.deps.onNotify(message, title);
+    this.deps.onNotify(message, title, this.prefs.silentChats.includes(conversation));
   }
 
   /* ------------------------------------------------------------------ devices of the account */
@@ -415,6 +415,18 @@ export class HostedChatEngine implements ChatEngineApi {
 
   setMuteUntil(conversation: string, untilMs: number): void {
     void this.engine.call('set_mute_until', { conversation, until_ms: Math.max(0, Math.round(untilMs)) }).then(() => this.refresh(), () => undefined);
+  }
+
+  setSilent(conversation: string, silent: boolean): void {
+    void this.engine.call('set_silent', { conversation, silent }).then(() => this.refresh(), () => undefined);
+  }
+
+  async messageReceipts(messageId: string): Promise<DeviceReceipt[]> {
+    return shapeReceipts(await this.engine.call<unknown>('message_receipts', { message_id: messageId }).catch(() => null));
+  }
+
+  async meshHops(): Promise<Record<string, number>> {
+    return shapeHops(await this.engine.call<unknown>('mesh_hops').catch(() => null));
   }
 
   setQuietHours(enabled: boolean, from: number, to: number): void {
@@ -870,5 +882,25 @@ export function shapePrefs(raw: unknown): PrefsView | null {
     muteUntil: mute,
     quiet: { enabled: q.enabled === true, from: Number(q.from ?? 1320) || 0, to: Number(q.to ?? 420) || 0 },
     secureScreen: r.secure_screen === true,
+    silentChats: strings(r.silent_chats),
   };
+}
+
+/** `message_receipts` rows (snake_case) as the screens use them; anything malformed is dropped. */
+export function shapeReceipts(raw: unknown): DeviceReceipt[] {
+  if (!Array.isArray(raw)) return [];
+  const out: DeviceReceipt[] = [];
+  for (const x of raw) {
+    const r = (x ?? {}) as Record<string, unknown>;
+    if (typeof r.device_id !== 'string' || (r.state !== 'delivered' && r.state !== 'read' && r.state !== 'waiting')) continue;
+    out.push({ deviceId: r.device_id, deviceName: typeof r.device_name === 'string' ? r.device_name : null, state: r.state, at: Number(r.at) || 0 });
+  }
+  return out;
+}
+
+/** `mesh_hops`: conversation id to a hop count (whole, at least 0). */
+export function shapeHops(raw: unknown): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (typeof raw === 'object' && raw !== null) for (const [k, v] of Object.entries(raw)) if (typeof v === 'number' && v >= 0) out[k] = Math.floor(v);
+  return out;
 }

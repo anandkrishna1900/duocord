@@ -38,6 +38,7 @@ export async function ensureNotificationPermission(): Promise<boolean> {
 export async function notifyIncoming(
   message: { text: string; messageId: string; conversationId?: string },
   title: string,
+  silent = false,
 ): Promise<void> {
   const settings = loadSettings();
   if (!settings.notificationsEnabled) return;
@@ -48,7 +49,8 @@ export async function notifyIncoming(
   try {
     if (message.conversationId) lastNotified = { conversation: message.conversationId, at: Date.now() };
     if (isTauri()) {
-      sendNotification({ title, body });
+      // `silent` is honoured on mobile; the desktop plugin (2.8) has no switch for it on Windows, so it is best-effort there.
+      sendNotification({ title, body, ...(silent ? { silent: true } : {}) });
     } else {
       new Notification(title, { body, tag: `duochat-${message.messageId}` });
     }

@@ -4,6 +4,7 @@ import type { FileMeta } from '../lib/localDb';
 import type { UiMessage } from '../lib/engine';
 import { formatDay, formatTime } from '../lib/format';
 import { copyText } from '../lib/clipboard';
+import { playedBars, waveformFor } from '../lib/waveform';
 import { Avatar } from './Avatar';
 import {
   AlertIcon,
@@ -13,6 +14,8 @@ import {
   CopyIcon,
   DownloadIcon,
   FileIcon,
+  PauseIcon,
+  PlayIcon,
   ReplyIcon,
 } from './Icons';
 
@@ -21,16 +24,107 @@ type LoadFile = (messageId: string) => Promise<{ blob: Blob; meta: FileMeta } | 
 const SPEEDS = [1, 1.5, 2];
 let lastSpeed = 1; // remembered in memory only
 
-/** The browser's audio controls plus a 1x / 1.5x / 2x speed button. */
-function AudioPlayer({ src, label }: { src: string; label: string }) {
+/** A small ring for a transfer in progress: the percent in the middle, `value` from 0 to 1. */
+function ProgressRing({ value }: { value: number }) {
+  const pct = Math.round(Math.min(1, Math.max(0, value)) * 100);
+  const r = 14;
+  const c = 2 * Math.PI * r;
+  return (
+    <div className="progress-ring" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Transfer progress">
+      <svg viewBox="0 0 36 36" width="36" height="36" aria-hidden="true">
+        <circle className="progress-ring-track" cx="18" cy="18" r={r} />
+        <circle className="progress-ring-arc" cx="18" cy="18" r={r} strokeDasharray={`${(c * pct) / 100} ${c}`} transform="rotate(-90 18 18)" />
+      </svg>
+      <span>{pct}</span>
+    </div>
+  );
+}
+
+/**
+ * A voice note: a waveform of the real audio (about 48 bars, the played part highlighted, a click seeks) with a play
+ * button and a 1x / 1.5x / 2x speed button. When the audio cannot be decoded the browser's own controls are shown.
+ */
+function AudioPlayer({ src, blob, label, id }: { src: string; blob: Blob; label: string; id: string }) {
   const ref = useRef<HTMLAudioElement>(null);
   const [speed, setSpeed] = useState(lastSpeed);
+  const [peaks, setPeaks] = useState<number[] | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [played, setPlayed] = useState(0);
   useEffect(() => {
     if (ref.current) ref.current.playbackRate = speed;
   }, [speed, src]);
+  useEffect(() => {
+    let live = true;
+    setPeaks(null);
+    void (async () => {
+      try {
+        const bars = await waveformFor(id, await blob.arrayBuffer());
+        if (live) setPeaks(bars);
+      } catch {
+        /* the plain player stays */
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [blob, id]);
+  const seekTo = (fraction: number) => {
+    const a = ref.current;
+    if (a && Number.isFinite(a.duration)) a.currentTime = Math.min(1, Math.max(0, fraction)) * a.duration;
+  };
   return (
     <div className="audio-row">
-      <audio ref={ref} className="file-audio" src={src} controls preload="metadata" aria-label={label} onLoadedMetadata={(e) => (e.currentTarget.playbackRate = speed)} />
+      <audio
+        ref={ref}
+        className="file-audio"
+        src={src}
+        controls={!peaks}
+        hidden={!!peaks}
+        preload="metadata"
+        aria-label={label}
+        onLoadedMetadata={(e) => (e.currentTarget.playbackRate = speed)}
+        onTimeUpdate={(e) => setPlayed(playedBars(e.currentTarget.currentTime, e.currentTarget.duration, peaks?.length ?? 0))}
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onEnded={() => setPlaying(false)}
+      />
+      {peaks ? (
+        <>
+          <button
+            type="button"
+            className="icon-button subtle"
+            aria-label={playing ? `Pause ${label}` : `Play ${label}`}
+            onClick={() => (playing ? ref.current?.pause() : void ref.current?.play())}
+          >
+            {playing ? <PauseIcon size={17} /> : <PlayIcon size={17} />}
+          </button>
+          <div
+            className="waveform"
+            role="slider"
+            tabIndex={0}
+            aria-label={`${label} position`}
+            aria-valuemin={0}
+            aria-valuemax={peaks.length}
+            aria-valuenow={played}
+            onClick={(e) => {
+              const box = e.currentTarget.getBoundingClientRect();
+              seekTo((e.clientX - box.left) / box.width);
+            }}
+            onKeyDown={(e) => {
+              const a = ref.current;
+              if (!a) return;
+              if (e.key === 'ArrowRight') a.currentTime += 5;
+              else if (e.key === 'ArrowLeft') a.currentTime -= 5;
+              else return;
+              e.preventDefault();
+            }}
+          >
+            {peaks.map((p, i) => (
+              <span key={i} className={i < played ? 'on' : ''} style={{ height: `${Math.max(12, Math.round(p * 100))}%` }} />
+            ))}
+          </div>
+        </>
+      ) : null}
       <button
         type="button"
         className="button ghost small speed-button"
@@ -50,6 +144,7 @@ function AudioPlayer({ src, label }: { src: string; label: string }) {
 function FileBubble({ message, loadFile }: { message: UiMessage; loadFile: LoadFile }) {
   const meta = message.file;
   const [url, setUrl] = useState<string | null>(null);
+  const [blob, setBlob] = useState<Blob | null>(null);
   const [missing, setMissing] = useState(false);
   const [viewing, setViewing] = useState(false);
   const isImage = !!meta && isInlineImage(meta.mime);
@@ -69,6 +164,7 @@ function FileBubble({ message, loadFile }: { message: UiMessage; loadFile: LoadF
       }
       made = URL.createObjectURL(f.blob);
       setUrl(made);
+      setBlob(f.blob);
     });
     return () => {
       revoked = true;
@@ -116,7 +212,7 @@ function FileBubble({ message, loadFile }: { message: UiMessage; loadFile: LoadF
         </div>
       ) : null}
       {isVideo && url ? <video className="file-video" src={url} controls preload="metadata" playsInline /> : null}
-      {isAudio && url ? <AudioPlayer src={url} label={meta.name.startsWith('voice-note') ? 'Voice note' : meta.name} /> : null}
+      {isAudio && url && blob ? <AudioPlayer id={message.messageId} src={url} blob={blob} label={meta.name.startsWith('voice-note') ? 'Voice note' : meta.name} /> : null}
       <div className="file-card">
         <span className="file-icon" aria-hidden="true">
           <FileIcon size={22} />
@@ -134,9 +230,7 @@ function FileBubble({ message, loadFile }: { message: UiMessage; loadFile: LoadF
         ) : null}
       </div>
       {message.progress !== undefined ? (
-        <div className="file-progress" role="progressbar" aria-valuenow={Math.round(message.progress * 100)} aria-valuemin={0} aria-valuemax={100}>
-          <span style={{ width: `${Math.round(message.progress * 100)}%` }} />
-        </div>
+        <ProgressRing value={message.progress} />
       ) : null}
     </div>
   );

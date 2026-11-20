@@ -27,7 +27,10 @@ import { ChannelsDialog } from './ChannelsDialog';
 import { useSecureScreen, useUnreadTitle } from '../hooks/useWindowEffects';
 import { totalUnread, whatsNewPending } from '../lib/insightInputs';
 import { SealedBadge, WhatsNewBanner } from './Insights';
-import { AlertIcon, ArrowLeftIcon, LoaderIcon, PinIcon, RefreshIcon, SettingsIcon, ShieldIcon, UserIcon, XIcon } from './Icons';
+import { DropSendDialog } from './DropSendDialog';
+import { nearbyText, receiptLine } from '../lib/receipts';
+import type { DeviceReceipt } from '../lib/engineApi';
+import { AlertIcon, ArrowLeftIcon, BellOffIcon, LoaderIcon, PinIcon, RefreshIcon, SettingsIcon, ShieldIcon, UserIcon, XIcon } from './Icons';
 
 interface Row {
   id: string;
@@ -98,6 +101,52 @@ export function ChatLayout({
     if (mine) engine?.deleteMessage(mine.messageId, true);
     setUndo(null);
   };
+  /** Per-device receipts of the message in the details dialog (empty when the engine has none). */
+  const [receipts, setReceipts] = useState<DeviceReceipt[]>([]);
+  useEffect(() => {
+    setReceipts([]);
+    if (!detailsFor || !engine?.messageReceipts) return;
+    let live = true;
+    void engine.messageReceipts(detailsFor.messageId).then((r) => live && setReceipts(r), () => undefined);
+    return () => {
+      live = false;
+    };
+  }, [engine, detailsFor]);
+  /** Nearby hops per chat, asked of the engine while a Bluetooth banner is on screen. */
+  const [hops, setHops] = useState<Record<string, number>>({});
+  const nearbyNow = !!selected && !!state?.contacts.some((c) => c.uid === selected && c.conn === 'connected' && (c.path?.kind === 'bluetooth' || c.via === 'ble'));
+  useEffect(() => {
+    if (!nearbyNow || !engine?.meshHops) return;
+    let live = true;
+    const ask = () => void engine.meshHops!().then((h) => live && setHops(h), () => undefined);
+    ask();
+    const t = window.setInterval(ask, 5000);
+    return () => {
+      live = false;
+      window.clearInterval(t);
+    };
+  }, [engine, nearbyNow]);
+  /** Files dropped on the window while no chat is open: who should get them. */
+  const [dropped, setDropped] = useState<File[]>([]);
+  useEffect(() => {
+    if (selected) return;
+    const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes('Files');
+    const over = (e: DragEvent) => {
+      if (hasFiles(e)) e.preventDefault();
+    };
+    const drop = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      const files = Array.from(e.dataTransfer?.files ?? []);
+      if (files.length > 0) setDropped(files);
+    };
+    window.addEventListener('dragover', over);
+    window.addEventListener('drop', drop);
+    return () => {
+      window.removeEventListener('dragover', over);
+      window.removeEventListener('drop', drop);
+    };
+  }, [selected]);
   const [query, setQuery] = useState('');
   const [focusId, setFocusId] = useState<string | null>(null);
   const [legacyError, setError] = useState<string | null>(null);
@@ -350,6 +399,7 @@ export function ChatLayout({
                   <span className="chat-row-top">
                     <strong>{row.name}</strong>
                     {prefs.pins.includes(row.id) ? <PinIcon size={13} className="chat-row-pin" aria-label="Pinned" /> : null}
+                    {prefs.silentChats.includes(row.id) ? <BellOffIcon size={13} className="chat-row-pin" aria-label="Silent notifications" /> : null}
                     {row.at ? <span className="muted small">{formatTime(row.at)}</span> : null}
                   </span>
                   <span className="chat-row-bottom">
@@ -446,6 +496,18 @@ export function ChatLayout({
                         ))}
                       </>
                     )}
+                    {engine?.setSilent ? (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setMenuOpen(false);
+                          engine.setSilent!(selected!, !prefs.silentChats.includes(selected!));
+                        }}
+                      >
+                        {prefs.silentChats.includes(selected!) ? 'Notifications with sound' : 'Silent notifications'}
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       role="menuitem"
@@ -480,7 +542,7 @@ export function ChatLayout({
 
             {person && person.conn === 'connected' && (person.path?.kind === 'bluetooth' || person.via === 'ble') ? (
               <div className="banner nearby" role="status">
-                Nearby mode: no internet needed. This chat is going over Bluetooth, straight to {person.name}'s device.
+                {nearbyText(person.name, hops[person.uid])}
               </div>
             ) : null}
 
@@ -566,6 +628,18 @@ export function ChatLayout({
                       </li>
                     ))}
                   </ul>
+                  {receipts.length > 0 ? (
+                    <>
+                      <h3 className="small receipts-title">Devices</h3>
+                      <ul className="host-list receipts-list">
+                        {receipts.map((r) => (
+                          <li key={r.deviceId}>
+                            <span className="muted small">{receiptLine(r, formatTime)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  ) : null}
                   <p className="muted small">
                     {person?.path ? `Right now this chat is ${person.path.label.toLowerCase()}. ` : ''}
                     Messages are end-to-end encrypted on every route. A person with several devices gets the message on each; the first one to receive it counts.
@@ -646,6 +720,9 @@ export function ChatLayout({
         )}
       </main>
 
+      {dropped.length > 0 ? (
+        <DropSendDialog files={dropped} state={state} engine={engine} onClose={() => setDropped([])} onSent={(id) => { setDropped([]); open(id); }} />
+      ) : null}
       <RequestDialog requests={state.requests} engine={engine} onAdded={open} />
       <ChannelsDialog
         open={dialog === 'channels'}

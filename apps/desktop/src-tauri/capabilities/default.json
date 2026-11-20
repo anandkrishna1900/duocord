@@ -2,11 +2,16 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "DuoCord desktop capability: notifications and the main window (the Rust engine keeps its own database).",
-  "windows": ["main"],
+  "windows": ["main", "quick"],
   "permissions": [
     "core:default",
     "notification:default",
     "core:window:allow-set-content-protected",
-    "core:window:allow-set-title"
+    "core:window:allow-set-title",
+    "core:window:allow-close",
+    "core:window:allow-set-overlay-icon",
+    "core:tray:allow-get-by-id",
+    "core:tray:allow-set-tooltip",
+    "core:image:allow-new"
   ]
 }

@@ -52,6 +52,49 @@ pub fn show_main(app: &AppHandle) {
     }
 }
 
+/// Ctrl+Alt+D: a small always-on-top window to send a quick message (the page draws it when its address has
+/// `?quick=1`). The shortcut again closes it; so do Esc (in the page) and clicking away.
+pub fn toggle_quick(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("quick") {
+        let _ = w.close();
+        return;
+    }
+    let mut builder = tauri::WebviewWindowBuilder::new(
+        app,
+        "quick",
+        tauri::WebviewUrl::App("index.html?quick=1".into()),
+    )
+    .title("DuoCord quick send")
+    .inner_size(420.0, 260.0)
+    .resizable(false)
+    .decorations(false)
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .center()
+    .focused(true);
+    if crate::tor_active() {
+        builder = builder.proxy_url(tauri::Url::parse(crate::TOR_PROXY).expect("valid proxy url"));
+    }
+    if let Ok(window) = builder.build() {
+        let _ = window.set_focus();
+        let closing = window.clone();
+        window.on_window_event(move |event| {
+            if let tauri::WindowEvent::Focused(false) = event {
+                let _ = closing.close();
+            }
+        });
+    }
+}
+
+/// The popup's "Open DuoCord" link.
+#[tauri::command]
+pub fn open_main(app: AppHandle) {
+    if let Some(w) = app.get_webview_window("quick") {
+        let _ = w.close();
+    }
+    show_main(&app);
+}
+
 /// Builds the tray icon. (Closing the window keeps the app running: see the exit handler in `lib.rs`.)
 pub fn install(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", "Open DuoCord", true, None::<&str>)?;

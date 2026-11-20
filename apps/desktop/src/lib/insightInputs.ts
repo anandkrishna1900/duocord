@@ -29,6 +29,16 @@ export function titleFor(unread: number): string {
   return unread > 0 ? `(${unread > 99 ? '99+' : unread}) DuoCord` : 'DuoCord';
 }
 
+/** The tray tooltip: "DuoCord" or "DuoCord, 3 unread". */
+export function tooltipFor(unread: number): string {
+  return unread > 0 ? `DuoCord, ${unread > 99 ? '99+' : unread} unread` : 'DuoCord';
+}
+
+/** The number on the taskbar badge, capped at "9+" (empty for none). */
+export function badgeText(unread: number): string {
+  return unread <= 0 ? '' : unread > 9 ? '9+' : String(unread);
+}
+
 const SEEN_KEY = 'duochat.whatsNewSeen';
 
 /** True when this version's What's new has not been dismissed yet. A first run (nothing stored) is not an update. */

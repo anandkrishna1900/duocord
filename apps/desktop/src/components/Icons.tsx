@@ -281,3 +281,12 @@ export const PinIcon = makeIcon(
     <path d="M9 3h6l-1 6 3 3v2H7v-2l3-3-1-6z" />
   </>,
 );
+
+export const PlayIcon = makeIcon(<path d="M7 4.5v15l12-7.5z" />);
+
+export const PauseIcon = makeIcon(
+  <>
+    <path d="M8 5v14" />
+    <path d="M16 5v14" />
+  </>,
+);

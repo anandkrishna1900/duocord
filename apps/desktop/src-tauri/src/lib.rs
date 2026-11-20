@@ -231,13 +231,13 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec![tray::HIDDEN_ARG]),
         ));
-    // Ctrl+Alt+D brings the app to the front from anywhere (the shortcut may be taken by another program: then it is skipped).
+    // Ctrl+Alt+D opens the quick-send popup from anywhere (the shortcut may be taken by another program: then it is skipped).
     #[cfg(desktop)]
     let builder = builder.plugin(
         tauri_plugin_global_shortcut::Builder::new()
             .with_handler(|app, _shortcut, event| {
                 if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
-                    tray::show_main(app);
+                    tray::toggle_quick(app);
                 }
             })
             .build(),
@@ -264,6 +264,7 @@ pub fn run() {
         tray::background_settings,
         tray::set_close_to_tray,
         tray::set_start_at_login,
+        tray::open_main,
         ble_commands::ble_capabilities,
         ble_commands::ble_connect,
         ble_commands::ble_write,

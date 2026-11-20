@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeMutes, engineSignaling, quietNow, titleFor, totalUnread } from './insightInputs';
+import { activeMutes, badgeText, engineSignaling, quietNow, titleFor, tooltipFor, totalUnread } from './insightInputs';
 
 describe('insightInputs', () => {
   it('maps signaling', () => {
@@ -25,5 +25,10 @@ describe('insightInputs', () => {
     expect(titleFor(0)).toBe('DuoCord');
     expect(titleFor(3)).toBe('(3) DuoCord');
     expect(titleFor(250)).toBe('(99+) DuoCord');
+    expect(tooltipFor(0)).toBe('DuoCord');
+    expect(tooltipFor(4)).toBe('DuoCord, 4 unread');
+    expect(badgeText(0)).toBe('');
+    expect(badgeText(9)).toBe('9');
+    expect(badgeText(10)).toBe('9+');
   });
 });

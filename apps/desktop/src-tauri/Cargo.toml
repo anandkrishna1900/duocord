@@ -41,6 +41,10 @@ version = "2"
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies.tauri-plugin-autostart]
 version = "2"
 
+# Ctrl+Alt+D brings the app to the front from anywhere.
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies.tauri-plugin-global-shortcut]
+version = "2"
+
 # Bluetooth LE central (desktop only). UNTESTED on hardware; see docs/BLE_TRANSPORT.md.
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 btleplug = "=0.13.5"

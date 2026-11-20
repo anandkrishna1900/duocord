@@ -437,6 +437,33 @@ impl DesktopHost {
             "should_notify" => Ok(json!(e
                 .should_notify(text(args, "conversation")?)
                 .map_err(failed)?)),
+            "set_group_only" => unit(e.set_group_only(flag(args, "value")?)),
+            "set_store_forward" => unit(e.set_store_forward(flag(args, "value")?)),
+            "accept_request" => Ok(json!(e
+                .accept_request(text(args, "uid")?)
+                .map_err(failed)?)),
+            "dismiss_request" => unit(e.dismiss_request(text(args, "uid")?)),
+            "stop_invite" => unit(e.stop_invite()),
+            "retry_answer" => unit(e.retry_answer()),
+            "clear_answer" => unit(e.clear_answer()),
+            // message actions
+            "delete_message" => {
+                unit(e.delete_message(text(args, "message_id")?, flag(args, "everyone")?))
+            }
+            "react" => unit(e.react(text(args, "message_id")?, text(args, "emoji")?)),
+            "retry_message" => unit(e.retry_message(text(args, "message_id")?)),
+            "mark_conversation_read" => unit(e.mark_conversation_read(text(args, "conversation")?)),
+            "search" => json_of(
+                &e.search(text(args, "query")?, number(args, "limit").unwrap_or(50))
+                    .map_err(failed)?,
+            ),
+            // Bluetooth: the secret shared with a friend (hex), from which the page works out the tags to scan for
+            "ble_secret" => Ok(json!(e
+                .ble_secret(text(args, "peer")?)
+                .map_err(failed)?
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>())),
             // link bookkeeping
             "set_link_path" => {
                 unit(e.set_link_path(text(args, "peer")?, path_kind(&text(args, "path")?)?))

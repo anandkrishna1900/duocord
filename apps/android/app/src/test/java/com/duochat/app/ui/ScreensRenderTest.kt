@@ -20,6 +20,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /**
  * Renders the main screens (home, a chat in both themes, a group chat, an empty chat, Add friend) on the JVM with
@@ -27,6 +28,7 @@ import org.robolectric.annotation.Config
  * (pixels are not drawn: that needs Robolectric's native graphics mode, which CI runners do not have).
  */
 @RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 @Config(sdk = [35], qualifiers = "w393dp-h851dp-xxhdpi")
 open class ScreensRenderTest {
     @get:Rule

@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PrivCord: private encrypted messenger with no phone number or account</title>
+<meta name="description" content="PrivCord is a peer-to-peer, end-to-end encrypted messenger for Windows and Android. No account, no phone number, no server that reads your chats. Add friends with a QR code or six words; chat over Bluetooth with no internet.">
+<link rel="canonical" href="__SITE_URL__/">
+<meta name="theme-color" content="#0a0a0a">
+<link rel="icon" type="image/png" href="assets/favicon-32.png">
+<link rel="apple-touch-icon" href="assets/icon.png">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="PrivCord">
+<meta property="og:title" content="PrivCord: private encrypted messenger, no phone number, no account">
+<meta property="og:description" content="Chats go straight from device to device. No account, no phone number, no server that reads your messages. For Windows and Android.">
+<meta property="og:url" content="__SITE_URL__/">
+<meta property="og:image" content="__SITE_URL__/assets/social-preview.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="PrivCord: private encrypted messenger">
+<meta name="twitter:description" content="No account, no phone number, no server that reads your chats. Windows and Android.">
+<meta name="twitter:image" content="__SITE_URL__/assets/social-preview.png">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "name": "PrivCord",
+      "applicationCategory": "CommunicationApplication",
+      "operatingSystem": "Windows, Android",
+      "description": "Peer-to-peer, end-to-end encrypted messenger with no account, no phone number and no server that reads your chats.",
+      "url": "__SITE_URL__/",
+      "image": "__SITE_URL__/assets/social-preview.png",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+      "codeRepository": "https://github.com/__REPO__"
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        { "@type": "Question", "name": "Does PrivCord need a phone number, email or account?",
+          "acceptedAnswer": { "@type": "Answer", "text": "No. Your identity is a 12-word recovery phrase that you hold. There is nothing to sign up for." } },
+        { "@type": "Question", "name": "Is PrivCord end-to-end encrypted?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Yes. Messages are encrypted on your device and only the friend they are meant for can open them. The key exchange uses a post-quantum hybrid (ML-KEM-768 with P-256)." } },
+        { "@type": "Question", "name": "Can I use PrivCord without internet?",
+          "acceptedAnswer": { "@type": "Answer", "text": "On Android, an optional Bluetooth mesh passes sealed messages through nearby phones. It is experimental and has only been tested in simulation, not on real radios." } },
+        { "@type": "Question", "name": "Is PrivCord open source?",
+          "acceptedAnswer": { "@type": "Answer", "text": "The full source is public and free for personal, educational and research use. The PC-NC license does not allow commercial use without permission, so it is source-available rather than OSI open source." } },
+        { "@type": "Question", "name": "Has PrivCord been independently audited?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Not yet. The protocol is covered by tests, shared test vectors and fuzzing in CI. If you need a battle-tested, audited messenger today, use one of the audited ones." } }
+      ]
+    }
+  ]
+}
+</script>
+
+</head>
+<body>
+<div id="root">
+  <noscript>
+    <h1>PrivCord: private encrypted messenger with no phone number or account</h1>
+    <p>PrivCord is a peer-to-peer, end-to-end encrypted messenger for Windows and Android. No account, no phone number, no server that reads your chats. Add friends with a QR code or six words, and chat over Bluetooth with no internet (Android, experimental).</p>
+    <p>Source-available (PC-NC licence) and not yet independently audited. <a href="https://github.com/__REPO__">View the source on GitHub</a>.</p>
+  </noscript>
+</div>
+<script type="module" src="/src/main.jsx"></script>
+</body>
+</html>

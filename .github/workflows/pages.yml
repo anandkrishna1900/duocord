@@ -1,0 +1,49 @@
+name: Landing page
+
+# Builds site/ (Vite + React) and publishes it to GitHub Pages.
+# One-time setup: Settings > Pages > Source: "GitHub Actions".
+on:
+  push:
+    branches: [main]
+    paths: ['site/**', '.github/workflows/pages.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - name: Build
+        working-directory: site
+        run: |
+          npm ci
+          npm run build
+      - id: pages
+        uses: actions/configure-pages@v5
+      - name: Fill in the site address and repository
+        run: |
+          base="${{ steps.pages.outputs.base_url }}"
+          find site/dist -type f \( -name '*.html' -o -name '*.js' -o -name '*.txt' -o -name '*.xml' \) -print0 \
+            | xargs -0 sed -i "s#__SITE_URL__#${base}#g; s#__REPO__#${{ github.repository }}#g"
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/dist
+      - id: deployment
+        uses: actions/deploy-pages@v4

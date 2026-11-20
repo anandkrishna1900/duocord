@@ -257,3 +257,5 @@ footer nav { display: flex; gap: 22px; flex-wrap: wrap; } footer a { text-decora
 @media (prefers-reduced-motion: reduce) { .more { transition: none; } }
 
 .screens.bare { padding: 0; } .screens.bare > .wrap { display: none; }
+
+.donate-cta { margin: 16px 0 6px !important; } .fcard.plain .btn { color: var(--ink); text-decoration: none; }

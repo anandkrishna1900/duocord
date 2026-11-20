@@ -396,3 +396,38 @@ export function AboutPage({ Go, repo }) {
     </>
   );
 }
+
+const DONATE_URL = 'https://paypal.me/raiden43';
+
+export function DonatePage({ Go }) {
+  return (
+    <>
+      <Head eyebrow="Donate" title="Support PrivCord" lead="PrivCord is free, has no ads and collects nothing. If it is useful to you, you can chip in." />
+      <section className="page-sec">
+        <div className="wrap">
+          <div className="fgrid">
+            <article className="fcard plain">
+              <h3>Donate with PayPal</h3>
+              <p>Any amount helps. You pay on PayPal's own page, so PrivCord never sees your card or account details.</p>
+              <p className="donate-cta"><a className="btn primary" href={DONATE_URL} target="_blank" rel="noopener noreferrer">Donate on PayPal</a></p>
+              <p className="fine">paypal.me/raiden43</p>
+            </article>
+            <article className="fcard plain">
+              <h3>What it supports</h3>
+              <p>Time spent building and fixing PrivCord, and keeping the project free of ads, trackers and accounts. A donation does not unlock anything: everyone gets the same app.</p>
+            </article>
+            <article className="fcard plain">
+              <h3>Prefer to help another way?</h3>
+              <p>Test it on real phones and PCs, report bugs, or review the code. Independent eyes are the most useful thing right now. See <Go to="about">About</Go> for where to find us.</p>
+            </article>
+            <article className="fcard plain">
+              <h3>Good to know</h3>
+              <p>Donations are voluntary. PrivCord is a small independent project, not a registered charity, so a donation is not tax-deductible. It does not make PrivCord more secure by itself: it has not been independently audited yet.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+      <Next Go={Go} items={[['download', 'Download'], ['about', 'About'], ['faq', 'Questions']]} />
+    </>
+  );
+}

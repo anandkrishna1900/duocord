@@ -56,6 +56,12 @@ export interface ChatEngineApi {
   joinDeviceLink?(code: string, name: string): Promise<void>;
   confirmDeviceLink?(accept: boolean): Promise<void>;
   cancelDeviceLink?(): void;
+  /** New device: show a QR (the returned code) for the phone to scan; the phone then shows six digits to type here. */
+  startScanLinkOffer?(name: string): Promise<string>;
+  /** New device: the six digits the phone shows. Resolves true when they match (the phone still has to confirm). */
+  submitLinkCode?(digits: string): Promise<boolean>;
+  /** Device holding the account key: the code scanned (or pasted) from the new device's QR. */
+  hostScannedLink?(code: string): Promise<void>;
   /** Scheduled send: a message to go out at a time (a friend or a group; kept on this device). */
   scheduleMessage?(convId: string, text: string, at: number): Promise<{ ok: true } | { ok: false; error: string }>;
   cancelScheduled?(id: string): Promise<void>;

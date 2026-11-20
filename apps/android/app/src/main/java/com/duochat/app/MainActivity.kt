@@ -199,6 +199,8 @@ private fun RootScreen(viewModel: AppViewModel) {
             onCreate = viewModel::createIdentity,
             state = state,
             onJoinDevice = viewModel::joinDeviceLink,
+            onStartScanOffer = viewModel::startScanLinkOffer,
+            onSubmitLinkCode = viewModel::submitLinkCode,
             onCancelDeviceLink = viewModel::cancelDeviceLink,
             onDeviceLinked = viewModel::onDeviceLinked,
         )
@@ -347,6 +349,7 @@ private fun RootScreen(viewModel: AppViewModel) {
                     onExportBackup = viewModel::exportBackup,
                     onImportBackup = viewModel::importBackup,
                     onStartDeviceLink = viewModel::startDeviceLink,
+                    onHostScannedLink = viewModel::hostScannedLink,
                     onConfirmDeviceLink = viewModel::confirmDeviceLink,
                     onCancelDeviceLink = viewModel::cancelDeviceLink,
                     onDeviceRemoval = viewModel::deviceRemoval,

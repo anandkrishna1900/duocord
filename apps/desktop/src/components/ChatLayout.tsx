@@ -8,6 +8,7 @@ import { MAX_FILE_BYTES, formatBytes } from '@duochat/protocol';
 import { Avatar, BrandMark } from './Avatar';
 import { Composer } from './Composer';
 import { MessageList } from './MessageList';
+import { FilterPills, type ChatFilter } from './FilterPills';
 import { SettingsDialog, type SettingsSection } from './SettingsDialog';
 import { ManualConnectDialog } from './ManualConnectDialog';
 import { ClearChatDialog, NukeDialog } from './KillSwitchDialogs';
@@ -62,6 +63,7 @@ export function ChatLayout({
   fatal: string | null;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
+  const [filter, setFilter] = useState<ChatFilter>('all');
   const [menuOpen, setMenuOpen] = useState(false);
   const [dialog, setDialog] = useState<
     null | 'settings' | 'add' | 'group' | 'channels' | 'details' | 'manual' | 'nuke' | 'clear' | 'recovery'
@@ -288,8 +290,10 @@ export function ChatLayout({
             ))}
           </div>
         ) : hasChats ? (
+          <>
+          <FilterPills value={filter} onChange={setFilter} unread={rows.reduce((n, r) => n + (r.unread > 0 ? 1 : 0), 0)} />
           <nav className="chat-list" aria-label="Chats">
-            {rows.map((row) => (
+            {rows.filter((r) => (filter === 'unread' ? r.unread > 0 : filter === 'groups' ? r.isGroup : true)).map((row) => (
               <button
                 key={row.id}
                 type="button"
@@ -309,7 +313,11 @@ export function ChatLayout({
                 </span>
               </button>
             ))}
+            {rows.length > 0 && !rows.some((r) => (filter === 'unread' ? r.unread > 0 : filter === 'groups' ? r.isGroup : true)) ? (
+              <p className="muted small chat-list-none">{filter === 'unread' ? 'You are all caught up.' : 'No groups yet.'}</p>
+            ) : null}
           </nav>
+          </>
         ) : (
           <div className="sidebar-empty">
             <p className="muted small">No chats yet.</p>
@@ -477,8 +485,13 @@ export function ChatLayout({
           </>
         ) : (
           <div className="welcome">
-            <div className="empty-emblem">
-              <ShieldIcon size={30} />
+            <div className="empty-emblem duo-link" aria-hidden="true">
+              <svg viewBox="0 0 160 64" width="160" height="64" fill="none">
+                <path className="duo-line" d="M44 32 H116" strokeWidth="2" strokeLinecap="round" />
+                <circle className="duo-dot duo-dot-a" cx="36" cy="32" r="16" />
+                <circle className="duo-dot duo-dot-b" cx="124" cy="32" r="16" />
+                <circle className="duo-pulse" cx="44" cy="32" r="3.5" />
+              </svg>
             </div>
             <h2>{hasChats ? 'Pick a chat' : 'Welcome to DuoCord'}</h2>
             {hasChats ? (

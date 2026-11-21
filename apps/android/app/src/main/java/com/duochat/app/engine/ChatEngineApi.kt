@@ -23,6 +23,9 @@ interface ChatEngineApi {
     fun retryAnswer()
     fun clearAnswer()
     suspend fun deleteMessage(messageId: String, everyone: Boolean)
+
+    /** Load another page of a chat's older messages (the engine keeps only the newest ones on screen until asked). */
+    suspend fun loadEarlier(conversationId: String) {}
     suspend fun react(messageId: String, emoji: String)
     fun search(query: String, limit: Int = 50): List<SearchHit>
     suspend fun exportBackup(passphrase: String): Result<String>

@@ -171,6 +171,7 @@ fun ChatScreen(
     onLeaveChannel: () -> Unit,
     onMuteSender: (String) -> Unit,
     onDeleteMessage: (String, Boolean) -> Unit = { _, _ -> },
+    onLoadEarlier: () -> Unit = {},
     onReact: (String, String) -> Unit = { _, _ -> },
     onEnableStoreForward: () -> Unit = {},
     onOpenConnectionSettings: () -> Unit = {},
@@ -439,6 +440,8 @@ fun ChatScreen(
                 onRetry = onRetry,
                 onReply = { replyingTo = it },
                 onDelete = onDeleteMessage,
+                earlier = state.earlier[conversationId] ?: 0,
+                onLoadEarlier = onLoadEarlier,
                 onDetails = { detailsFor = it },
                 onReact = onReact,
                 loadFile = loadFile,
@@ -520,6 +523,8 @@ private fun MessageList(
     onReact: (String, String) -> Unit,
     loadFile: suspend (String) -> Pair<FileMeta, ByteArray>?,
     transfers: Map<String, Float>,
+    earlier: Int = 0,
+    onLoadEarlier: () -> Unit = {},
     convId: String = "",
     canReply: Boolean = true,
     onMute: ((String) -> Unit)? = null,
@@ -652,6 +657,15 @@ private fun MessageList(
                             }
                         },
                     )
+                }
+            }
+            // The list runs from the bottom, so the last item is the top of the chat.
+            if (earlier > 0) {
+                item(key = "load-earlier") {
+                    androidx.compose.material3.TextButton(
+                        onClick = onLoadEarlier,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Load earlier messages ($earlier)") }
                 }
             }
         }

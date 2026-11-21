@@ -104,8 +104,13 @@ impl Wipe<'_> {
     }
 
     fn forget_messages_where(&mut self, keep: impl Fn(&ConversationId) -> bool) {
-        self.core.messages.retain(|_, m| keep(&m.conversation));
-        let present: std::collections::HashSet<_> = self.core.messages.keys().cloned().collect();
+        self.core.messages.retain(|m| keep(&m.conversation));
+        let present: std::collections::HashSet<_> = self
+            .core
+            .messages
+            .iter()
+            .map(|(id, _)| id.clone())
+            .collect();
         self.core.reactions.retain(|id, _| present.contains(id));
         self.core.deleted.retain(|id| present.contains(id));
         let alive = |id: &privcord_domain::MessageId, core: &Core| core.messages.contains_key(id);

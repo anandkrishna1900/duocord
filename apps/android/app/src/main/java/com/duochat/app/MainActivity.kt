@@ -296,6 +296,7 @@ private fun RootScreen(viewModel: AppViewModel) {
                         onLeaveChannel = { viewModel.leaveChannel(openChatId); route = HOME },
                         onMuteSender = viewModel::muteSender,
                         onDeleteMessage = viewModel::deleteMessage,
+                        onLoadEarlier = { viewModel.loadEarlier(openChatId) },
                         onReact = viewModel::react,
                         onEnableStoreForward = { viewModel.updateSettings { copy(network = network.copy(storeForward = true)) } },
                         onOpenConnectionSettings = { settingsOpen = true },

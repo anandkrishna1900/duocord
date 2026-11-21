@@ -89,7 +89,7 @@ impl Core {
             .find(|(m, _)| m == id.as_str())
             .map(|(_, d)| d)
             .unwrap_or_default();
-        let list = match self.messages.get(id).map(|m| &m.conversation) {
+        let list = match self.messages.meta(id).map(|m| &m.conversation) {
             Some(ConversationId::Direct(uid)) => self.contact_device_list(uid),
             _ => None,
         };

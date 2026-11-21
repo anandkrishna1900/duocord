@@ -163,11 +163,7 @@ impl Core {
                 }])
                 .is_ok()
             {
-                for m in self.messages.values_mut() {
-                    if m.conversation == from {
-                        m.conversation = to.clone();
-                    }
-                }
+                self.messages.move_conversation(&from, &to);
             }
         }
         self.forget_legacy_group(old_id);

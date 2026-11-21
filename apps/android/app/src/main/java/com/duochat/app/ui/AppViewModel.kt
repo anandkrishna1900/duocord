@@ -363,6 +363,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { engine?.deleteMessage(messageId, everyone) }
     }
 
+    fun loadEarlier(conversationId: String) {
+        viewModelScope.launch { engine?.loadEarlier(conversationId) }
+    }
+
     fun react(messageId: String, emoji: String) {
         viewModelScope.launch { engine?.react(messageId, emoji) }
     }

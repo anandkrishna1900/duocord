@@ -116,6 +116,36 @@ class RustChatEngine(
     private var refreshJob: Job? = null
     private val refreshRequests = Channel<Unit>(Channel.CONFLATED)
     private var last: SnapshotDto? = null
+
+    /** Per chat: how many messages before the newest ones the person has asked to see (fetched again on every refresh). */
+    private val extra = java.util.concurrent.ConcurrentHashMap<String, Int>()
+
+    /**
+     * The engine's snapshot with only the newest [WINDOW] messages of each chat, so a long history costs no more to show
+     * than a short one, plus the older pages the person asked for in front of them.
+     */
+    private fun windowedSnapshot(e: PrivcordEngine): SnapshotDto {
+        val s = e.snapshotRecent(WINDOW.toUInt())
+        if (extra.isEmpty()) return s
+        val older = s.older.toMutableList()
+        val conversations = s.conversations.map { conv ->
+            val limit = extra[conv.id] ?: return@map conv
+            val first = conv.messages.firstOrNull()?.id ?: return@map conv
+            val page = runCatching { e.messagesBefore(conv.id, first, limit.toUInt()) }.getOrNull() ?: return@map conv
+            val at = older.indexOfFirst { it.conversation == conv.id }
+            if (at >= 0) {
+                val left = older[at].count.toLong() - page.messages.size
+                older[at] = older[at].copy(count = if (page.more) maxOf(left, 1L).toULong() else 0uL)
+            }
+            conv.copy(messages = page.messages + conv.messages)
+        }
+        return s.copy(conversations = conversations, older = older)
+    }
+
+    override suspend fun loadEarlier(conversationId: String) {
+        extra[conversationId] = (extra[conversationId] ?: 0) + EARLIER_PAGE
+        refreshNow()
+    }
     private var prefs: com.duochat.app.data.Prefs = com.duochat.app.data.Prefs()
     private var meshHops: Map<String, Int> = emptyMap()
     private var zoneSent: Int? = null
@@ -360,7 +390,7 @@ class RustChatEngine(
             migrateLegacyMutes(started)
             sendZone(started)
             loadPrefs(started)
-            val snapshot = withContext(Dispatchers.IO) { started.snapshot() }
+            val snapshot = withContext(Dispatchers.IO) { windowedSnapshot(started) }
             last = snapshot
             if (snapshot.ownUid == null) {
                 _state.update { it.copy(phase = EnginePhase.NEEDS_IDENTITY) }
@@ -497,7 +527,7 @@ class RustChatEngine(
     private suspend fun refreshNow() {
         val e = engine ?: return
         withContext(Dispatchers.IO) { sendZone(e); loadPrefs(e) }
-        val snapshot = runCatching { withContext(Dispatchers.IO) { e.snapshot() } }.getOrNull() ?: return
+        val snapshot = runCatching { withContext(Dispatchers.IO) { windowedSnapshot(e) } }.getOrNull() ?: return
         last = snapshot
         if (snapshot.ownUid != null) {
             _state.update { it.copy(phase = EnginePhase.READY, uid = snapshot.ownUid!!) }
@@ -531,7 +561,7 @@ class RustChatEngine(
             // even when the app is in the background (the request screen opens with the app).
             is EventDto.InviteRequest -> {
                 val e = engine
-                val name = e?.let { runCatching { withContext(Dispatchers.IO) { it.snapshot() } }.getOrNull() }
+                val name = e?.let { runCatching { withContext(Dispatchers.IO) { it.snapshotRecent(0u) } }.getOrNull() }
                     ?.requests?.firstOrNull { it.uid == event.uid }?.name ?: "Someone"
                 onNotify(IncomingNotice("request-${event.uid}", "", "$name wants to add you", "Open PrivCord to accept.", isMessage = false))
                 requestRefresh()
@@ -1037,6 +1067,7 @@ class RustChatEngine(
         _state.update {
             it.copy(
                 prefs = prefs, meshHops = meshHops, contacts = contacts, groups = groups, chats = summaries, messages = shaped,
+                earlier = s.older.filter { o -> o.count > 0uL }.associate { o -> o.conversation to o.count.toInt() },
                 queuedCount = s.queued.toInt(), groupOnly = groupOnly,
                 channels = s.channels.map { name ->
                     ChannelView("chan:$name", name, s.conversations.firstOrNull { c -> c.id == "chan:$name" }?.unread?.toInt() ?: 0, online)
@@ -1542,5 +1573,9 @@ class RustChatEngine(
         const val MANUAL_PREFIX = "RUST1:"
         const val BLE_SEARCH_MS = 30_000L
         const val BLE_RETRY_MS = 60_000L
+
+        /** Messages of each chat in a snapshot; "Load earlier" adds this many more. */
+        const val WINDOW = 200
+        const val EARLIER_PAGE = 100
     }
 }

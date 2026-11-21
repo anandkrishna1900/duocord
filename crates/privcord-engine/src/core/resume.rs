@@ -84,8 +84,8 @@ impl Core {
             .map(|o| o.message_id.clone())
             .filter(|id| {
                 self.messages
-                    .get(id)
-                    .is_some_and(|m| m.message.kind == privcord_domain::message::MessageKind::File)
+                    .meta(id)
+                    .is_some_and(|m| m.kind == privcord_domain::message::MessageKind::File)
             })
             .collect();
         for o in self

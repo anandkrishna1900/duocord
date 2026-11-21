@@ -289,7 +289,8 @@ impl Core {
     /// What each chat takes on this device, biggest first. Messages deleted for everyone are free.
     pub fn storage_by_chat(&self) -> Vec<ChatStorage> {
         let mut by: BTreeMap<String, ChatStorage> = BTreeMap::new();
-        for m in self.messages.values() {
+        // Read from storage a row at a time: only the totals are kept.
+        for m in self.ports.storage.messages().unwrap_or_default() {
             if self.deleted.contains(&m.message.message_id) {
                 continue;
             }

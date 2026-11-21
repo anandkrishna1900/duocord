@@ -547,3 +547,79 @@ fn erasing_a_chat_also_erases_a_saved_part_of_a_file() {
     assert!(report.summarize().complete, "{report:?}");
     assert!(!held(), "the saved part went with the chat");
 }
+
+#[test]
+fn a_chat_longer_than_the_in_memory_window_still_works_for_its_old_messages() {
+    use privcord_domain::ConversationId;
+    let clock = FakeClock::at(1_700_000_000_000);
+    let (mut a, mut b) = (node("alice", &clock), node("bob", &clock));
+    befriend(&mut a, &mut b);
+    let mut all = [&mut a, &mut b];
+    link(&mut all, 0, 1);
+    let [a, b] = all;
+    let n = 700; // more than the 512 that trigger cooling, so the oldest lose their text from memory
+    for i in 0..n {
+        clock.advance(10);
+        a.core
+            .send_message(
+                &b.uid,
+                &format!("note {i} zebra{}", if i == 3 { "!" } else { "" }),
+                None,
+            )
+            .unwrap();
+        if i % 50 == 49 {
+            let mut all = [&mut *a, &mut *b];
+            pump(&mut all);
+        }
+    }
+    let mut all = [&mut *a, &mut *b];
+    pump(&mut all);
+    let conv = ConversationId::Direct(a.uid.clone());
+    let full: Vec<_> = b
+        .core
+        .snapshot()
+        .messages
+        .into_iter()
+        .flat_map(|(_, v)| v)
+        .collect();
+    assert_eq!(full.len(), n);
+    assert!(full
+        .windows(2)
+        .all(|w| w[0].client_created_at <= w[1].client_created_at));
+    assert_eq!(
+        full[3].text, "note 3 zebra!",
+        "an old message still has its text"
+    );
+
+    // Paging back reaches the cold region and gives the same messages.
+    let recent = b.core.snapshot_recent(100);
+    assert_eq!(recent.older, vec![(conv.clone(), n - 100)]);
+    let first_kept = recent.messages[0].1[0].message_id.clone();
+    let page = b
+        .core
+        .messages_before(&conv, Some(&first_kept), 600)
+        .unwrap();
+    assert_eq!(page.messages, full[..600]);
+    assert!(!page.more);
+
+    // Old messages can be searched, reacted to and deleted.
+    let hits = b.core.search("zebra!", 10);
+    assert_eq!(hits.len(), 1);
+    b.core.react(&full[3].message_id, "👍").unwrap();
+    b.core.delete_message(&full[3].message_id, false).unwrap();
+    assert_eq!(b.core.snapshot().messages[0].1.len(), n - 1);
+    assert!(b.core.search("zebra!", 10).is_empty());
+
+    // After a restart the history is the same (read back from storage).
+    let (storage, secure, bclock) = (b.storage.clone(), b.secure.clone(), b.clock.clone());
+    let again = start("bob-3", storage, secure, bclock, false);
+    let after: Vec<_> = again
+        .core
+        .snapshot()
+        .messages
+        .into_iter()
+        .flat_map(|(_, v)| v)
+        .collect();
+    assert_eq!(after.len(), n - 1);
+    assert_eq!(after.last(), full.last());
+}

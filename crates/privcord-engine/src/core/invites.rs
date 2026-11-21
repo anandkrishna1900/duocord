@@ -700,7 +700,7 @@ impl Core {
         }
         self.contacts.remove(uid);
         self.messages
-            .retain(|_, m| m.conversation != ConversationId::Direct(uid.clone()));
+            .retain(|m| m.conversation != ConversationId::Direct(uid.clone()));
         self.outbox
             .retain(|o| self.messages.contains_key(&o.message_id));
         self.invites.requests.remove(uid);

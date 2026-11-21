@@ -8,7 +8,6 @@ use privcord_domain::{
     files::sha256_b64,
     message::{DeliveryState, MessageKind, TransportKind},
     privacy::ContactTrust,
-    MessageId,
 };
 use privcord_import::{backup::read_bundle, import, FileSource, Source};
 use serde_json::{json, Map, Value};
@@ -78,11 +77,6 @@ impl Core {
         o.insert("checked".into(), json!(c.stored.checked));
         o.insert("addedAt".into(), json!(c.stored.created_at));
         Value::Object(o)
-    }
-
-    fn message_json(&self, id: &MessageId) -> Option<Value> {
-        let m = self.messages.get(id)?;
-        Some(self.row_json(m))
     }
 
     /// One stored message in the backup format (also what the sync log carries).
@@ -158,12 +152,12 @@ impl Core {
         if passphrase.encode_utf16().count() < BACKUP_MIN_PASSPHRASE {
             return Err(ErrorCode::WeakPassphrase);
         }
-        let mut ids: Vec<&MessageId> = self.messages.keys().collect();
-        ids.sort();
+        // The whole history, read once (what is not in memory comes back from storage, which is encrypted).
+        let mut rows = self.all_rows();
+        rows.sort_by(|a, b| a.message.message_id.cmp(&b.message.message_id));
         // Photos, videos, voice notes and files: the newest first, as many as fit the budget.
-        let mut newest: Vec<_> = self
-            .messages
-            .values()
+        let mut newest: Vec<&privcord_ports::StoredMessage> = rows
+            .iter()
             .filter(|m| {
                 m.message.kind == MessageKind::File && !self.deleted.contains(&m.message.message_id)
             })
@@ -191,7 +185,7 @@ impl Core {
             "groups": self.groups.as_ref().map(|g| g.export()).unwrap_or_default(),
             "channels": self.channels.keys().collect::<Vec<_>>(),
             "blocked": self.muted.iter().collect::<Vec<_>>(),
-            "messages": ids.into_iter().filter_map(|id| self.message_json(id)).collect::<Vec<_>>(),
+            "messages": rows.iter().map(|r| self.row_json(r)).collect::<Vec<_>>(),
             "files": files,
             "legacyGroups": self.legacy_groups_json(),
         });

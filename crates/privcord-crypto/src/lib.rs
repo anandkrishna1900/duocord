@@ -30,6 +30,7 @@ pub mod peer_auth;
 pub mod pq;
 pub mod pq_channel;
 pub mod prekeys;
+pub mod ramseal;
 pub mod rng;
 pub mod safety;
 pub mod seal;

@@ -33,7 +33,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "REPLACE_WITH_THE_UPDATER_PUBLIC_KEY",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDgzODBCODA2MUJCQTk1OEUKUldTT2xib2JCcmlBZzdpekJCemx2dVZ5aFdMUm1QVE9zd0RtOXRPbnUwUHFOQ2djS0ZORjFGcjEK",
       "endpoints": ["https://github.com/raiden6767/PrivCord/releases/download/Windows/latest.json"],
       "windows": { "installMode": "passive" },
       "requireSignedVersion": true

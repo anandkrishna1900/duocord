@@ -309,9 +309,9 @@ export function FaqPage({ Go }) {
 }
 
 export function DownloadPage({ Go, repo, reduce, dlRef, dlOn }) {
-  const link = (label) => (
+  const link = (label, file) => (
     <Magnet padding={60} magnetStrength={3} disabled={reduce}>
-      <StarBorder as="a" href={`${repo}/releases/latest`} color={YELLOW} trailColor="#ffffff" backgroundColor={YELLOW} textColor={INK} borderColor="rgba(0,0,0,0)" duration={5} radius={10} className="cta-star">{label}</StarBorder>
+      <StarBorder as="a" href={`${repo}/releases/download/${file}`} color={YELLOW} trailColor="#ffffff" backgroundColor={YELLOW} textColor={INK} borderColor="rgba(0,0,0,0)" duration={5} radius={10} className="cta-star">{label}</StarBorder>
     </Magnet>
   );
   return (
@@ -323,8 +323,8 @@ export function DownloadPage({ Go, repo, reduce, dlRef, dlOn }) {
           <h1>Get PrivCord</h1>
           <p className="sub">Free. Pick your platform.</p>
           <div className="dl">
-            <div className="dl-row"><div><h3><Icon d={P.mon} />Windows</h3><p>Installer for Windows 10 and 11. The latest build is attached to the newest release.</p></div>{link('Download for Windows')}</div>
-            <div className="dl-row"><div><h3><Icon d={P.ph} />Android</h3><p>Install the arm64 APK (almost every phone); the armeabi-v7a one is for old 32-bit phones.</p></div>{link('Download for Android')}</div>
+            <div className="dl-row"><div><h3><Icon d={P.mon} />Windows</h3><p>Installer for Windows 10 and 11 (64-bit). Downloads the file directly.</p></div>{link('Download for Windows', 'Windows/PrivCord_0.1.0_x64-setup.exe')}</div>
+            <div className="dl-row"><div><h3><Icon d={P.ph} />Android</h3><p>One APK for Android phones. Downloads the file directly.</p></div>{link('Download for Android', 'Android/PrivCord.apk')}</div>
           </div>
         </div>
       </section>

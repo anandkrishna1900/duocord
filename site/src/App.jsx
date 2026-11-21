@@ -20,6 +20,8 @@ import AnimatedContent from './rb/AnimatedContent.jsx';
 import FadeContent from './rb/FadeContent.jsx';
 
 const REPO = 'https://github.com/__REPO__';
+const EXE = `${REPO}/releases/download/Windows/PrivCord_0.1.0_x64-setup.exe`;
+const APK = `${REPO}/releases/download/Android/PrivCord.apk`;
 
 
 function useReducedMotion() {
@@ -289,12 +291,12 @@ export default function App() {
               <p className="sub">Free. Pick your platform.</p>
               <div className="dl">
                 <div className="dl-row">
-                  <div><h3><Icon d={P.mon} />Windows</h3><p>Installer for Windows 10 and 11. The latest build is attached to the newest release.</p></div>
-                  <Magnet padding={60} magnetStrength={3} disabled={reduce}><StarBorder as="a" href={`${REPO}/releases/latest`} color={YELLOW} trailColor="#ffffff" backgroundColor={YELLOW} textColor={INK} borderColor="rgba(0,0,0,0)" duration={5} radius={10} className="cta-star">Download the installer</StarBorder></Magnet>
+                  <div><h3><Icon d={P.mon} />Windows</h3><p>Installer for Windows 10 and 11 (64-bit). Downloads the file directly.</p></div>
+                  <Magnet padding={60} magnetStrength={3} disabled={reduce}><StarBorder as="a" href={EXE} color={YELLOW} trailColor="#ffffff" backgroundColor={YELLOW} textColor={INK} borderColor="rgba(0,0,0,0)" duration={5} radius={10} className="cta-star">Download the installer</StarBorder></Magnet>
                 </div>
                 <div className="dl-row">
-                  <div><h3><Icon d={P.ph} />Android</h3><p>Install the arm64 APK (almost every phone); the armeabi-v7a one is for old 32-bit phones.</p></div>
-                  <Magnet padding={60} magnetStrength={3} disabled={reduce}><StarBorder as="a" href={`${REPO}/releases/latest`} color={YELLOW} trailColor="#ffffff" backgroundColor={YELLOW} textColor={INK} borderColor="rgba(0,0,0,0)" duration={5} radius={10} className="cta-star">Download the APK</StarBorder></Magnet>
+                  <div><h3><Icon d={P.ph} />Android</h3><p>One APK for Android phones. Downloads the file directly.</p></div>
+                  <Magnet padding={60} magnetStrength={3} disabled={reduce}><StarBorder as="a" href={APK} color={YELLOW} trailColor="#ffffff" backgroundColor={YELLOW} textColor={INK} borderColor="rgba(0,0,0,0)" duration={5} radius={10} className="cta-star">Download the APK</StarBorder></Magnet>
                 </div>
               </div>
               <p className="warn"><strong>Heads up:</strong> the Windows installer is not code-signed yet, so Windows SmartScreen will warn you: choose <em>More info</em>, then <em>Run anyway</em>. On Android you need to allow installing apps from this source. Windows will also ask to allow the firewall the first time, which lets PrivCord find friends on your local network.</p>

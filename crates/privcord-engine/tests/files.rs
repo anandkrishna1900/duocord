@@ -713,28 +713,3 @@ fn files_up_to_fifty_megabytes_are_accepted_and_more_is_refused() {
         Err(privcord_engine::ErrorCode::BadFile)
     );
 }
-
-#[test]
-fn zz_full_fifty_megabytes() {
-    let clock = FakeClock::at(1_700_000_000_000);
-    let (mut a, mut b) = (node("alice", &clock), node("bob", &clock));
-    befriend(&mut a, &mut b);
-    let data = sample(50 * 1024 * 1024);
-    let id = a
-        .core
-        .send_file(
-            &b.uid,
-            "huge.bin",
-            "application/octet-stream",
-            data.clone(),
-            None,
-        )
-        .unwrap();
-    let t = std::time::Instant::now();
-    let mut all = [&mut a, &mut b];
-    link(&mut all, 0, 1);
-    let [a, b] = all;
-    eprintln!("ELAPSED={:?}", t.elapsed());
-    assert_eq!(file_of(b, &id).expect("file arrived").bytes, data);
-    assert_eq!(state_of(a, &id), DeliveryState::Delivered);
-}

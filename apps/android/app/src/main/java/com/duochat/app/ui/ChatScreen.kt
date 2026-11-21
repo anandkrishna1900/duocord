@@ -958,17 +958,20 @@ private fun FileContent(
     val isImage = isInlineImage(meta.mime)
     val isVideo = isInlineVideo(meta.mime)
     val isAudio = com.duochat.app.data.isInlineAudio(meta.mime)
+    // A big photo, video or recording is the whole file in memory: it loads when asked for, not as it scrolls past.
+    val bigMedia = (isImage || isVideo || isAudio) && meta.size > AUTO_PREVIEW_BYTES
+    var wanted by remember(message.messageId) { mutableStateOf(!bigMedia) }
     // null = still loading; a failed decode falls back to the file card.
     var imageFailed by remember(message.messageId) { mutableStateOf(false) }
-    val image by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, message.messageId, arrived) {
-        if (!isImage || !arrived) return@produceState
+    val image by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, message.messageId, arrived, wanted) {
+        if (!isImage || !arrived || !wanted) return@produceState
         value = withContext(Dispatchers.IO) { loadFile(message.messageId)?.second?.let { decodeUpright(it, 1200) } }
         if (value == null) imageFailed = true
     }
     // Video: decrypted to a short-lived cache file (the player needs a path), shown with a poster frame and
     // played in place when tapped. The file is deleted when the bubble leaves the screen.
-    val videoFile by produceState<java.io.File?>(null, message.messageId, arrived) {
-        if (!isVideo || !arrived) return@produceState
+    val videoFile by produceState<java.io.File?>(null, message.messageId, arrived, wanted) {
+        if (!isVideo || !arrived || !wanted) return@produceState
         value = withContext(Dispatchers.IO) {
             val bytes = loadFile(message.messageId)?.second ?: return@withContext null
             java.io.File(context.cacheDir, "preview-${message.messageId}").also { it.writeBytes(bytes) }
@@ -998,7 +1001,7 @@ private fun FileContent(
     val mediaShape = RoundedCornerShape(12.dp)
     Column {
         when {
-            isImage && !imageFailed -> {
+            isImage && !imageFailed && wanted -> {
                 // Space is held while the photo arrives or decodes, so the chat does not jump when it appears.
                 androidx.compose.animation.AnimatedContent(
                     targetState = image,
@@ -1020,7 +1023,7 @@ private fun FileContent(
                     }
                 }
             }
-            isVideo -> Box(
+            isVideo && wanted -> Box(
                 Modifier.fillMaxWidth().heightIn(min = 140.dp, max = 280.dp).clip(mediaShape).background(Color.Black)
                     .combinedClickable(onClick = { if (videoFile != null) playing = true }, onLongClick = onLongPress),
                 contentAlignment = Alignment.Center,
@@ -1045,7 +1048,7 @@ private fun FileContent(
                     }
                 }
             }
-            isAudio -> VoiceNote(message.messageId, arrived, meta.size, color, loadFile)
+            isAudio && wanted -> VoiceNote(message.messageId, arrived, meta.size, color, loadFile)
             else -> Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.clip(RoundedCornerShape(10.dp))
@@ -1061,6 +1064,9 @@ private fun FileContent(
                 Spacer(Modifier.width(8.dp))
                 Icon(Icons.Filled.Download, contentDescription = null, tint = color.copy(alpha = 0.8f), modifier = Modifier.size(20.dp))
             }
+        }
+        if (bigMedia && !wanted) {
+            androidx.compose.material3.TextButton(onClick = { wanted = true }) { Text("Load preview (${formatBytes(meta.size)})") }
         }
         if (progress != null) {
             val percent = (progress * 100).toInt().coerceIn(0, 100)
@@ -1606,6 +1612,8 @@ private fun readPicked(context: android.content.Context, uri: Uri): PickedFile {
 }
 
 private const val PHOTO_READ_LIMIT = 48L * 1024 * 1024
+/** Photos, videos and recordings up to this size show themselves; a bigger one waits to be asked for. */
+private const val AUTO_PREVIEW_BYTES = 8 * 1024 * 1024
 private const val SHRINK_ABOVE = 1_000_000
 private const val PHOTO_SIDE = 2048
 

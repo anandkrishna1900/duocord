@@ -95,12 +95,21 @@ fn side() -> Side {
 
 /// Carry every queued frame to the other side until both are quiet (the page's job).
 fn pump(a: &Side, a_uid: &str, b: &Side, b_uid: &str) {
-    for _ in 0..50 {
+    // The engines answer on their own threads, so a quiet wire may only mean a reply is still on its way (a file takes
+    // several round trips): it is over after a stretch of quiet, not at the first empty look.
+    let mut quiet = 0;
+    for _ in 0..400 {
         let from_a: Vec<_> = std::mem::take(&mut *a.wire.0.lock().unwrap());
         let from_b: Vec<_> = std::mem::take(&mut *b.wire.0.lock().unwrap());
         if from_a.is_empty() && from_b.is_empty() {
-            return;
+            quiet += 1;
+            if quiet >= 8 {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            continue;
         }
+        quiet = 0;
         for (_, frame) in from_a {
             b.host
                 .invoke("frame_received", &json!({ "peer": a_uid, "frame": frame }))

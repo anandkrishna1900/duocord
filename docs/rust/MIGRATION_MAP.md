@@ -11,10 +11,10 @@ Status meanings: **Ported, tested** = the Rust implementation exists and is chec
 | Ported, tested | 66 | 9861 |
 | Partly ported | 1 | 2312 |
 | Not yet ported | 0 | 0 |
-| Stays (UI) | 93 | 17247 |
-| Stays (platform adapter) | 61 | 12266 |
+| Stays (UI) | 93 | 17295 |
+| Stays (platform adapter) | 63 | 12445 |
 | Replaced by a library | 4 | 333 |
-| **All mapped files** | **225** | **42019** |
+| **All mapped files** | **227** | **42246** |
 
 Ported does not mean retired: the TypeScript and Kotlin versions stay in production until the apps call the Rust engine (M7 desktop, M8 Android) and the compatibility gates pass (PRD section 16).
 
@@ -131,7 +131,7 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 | `apps/desktop/src/lib/killSwitch.ts` | 270 | `KillSwitchTargets`, `WebStorageLike`, `DesktopKillSwitchDeps`, `KILL_SWITCH_REPORT_KEY`, `createAppKillSwitchExecutor`, `createConversationKillSwitchExecutor` +3 | Emergency erase steps for the webview (local storage, IndexedDB, files, Tauri commands) | engine::core::privacy runs the plan and the report; these files only call web and OS APIs | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/desktop/src/lib/killSwitchFactory.ts` | 60 | `buildKillSwitchDeps`, `clearPersistedKillSwitchReport` | Emergency erase steps for the webview (local storage, IndexedDB, files, Tauri commands) | engine::core::privacy runs the plan and the report; these files only call web and OS APIs | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/desktop/src/lib/localDb.ts` | 423 | `OutboxRow`, `FileMeta`, `StoredMessage`, `LocalStore` | Desktop SQLite schema, encrypted columns, file store | storage::SqliteStorage; privcord-import (desktop importer) | Storage | Ported, tested | M7: after the importer has run on every install | importer and migration tests on generated fixtures (docs/legacy-fixtures.json); the browser file store stays in the adapter |
-| `apps/desktop/src/lib/network.ts` | 86 | `BUILTIN_TURN`, `loadTorMode`, `torModeActive`, `setTorMode`, `loadNetworkConfig`, `saveNetworkConfig` +2 | WebRTC peer connection and BLE link on the desktop | Transport adapters (stay); link policy moves to engine | Adapter | Stays (platform adapter) | Stays | n/a |
+| `apps/desktop/src/lib/network.ts` | 85 | `BUILTIN_TURN`, `loadTorMode`, `torModeActive`, `setTorMode`, `loadNetworkConfig`, `saveNetworkConfig` +2 | WebRTC peer connection and BLE link on the desktop | Transport adapters (stay); link policy moves to engine | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/desktop/src/lib/networkHosts.ts` | 35 | `HostRow`, `networkHosts` | Small pure helpers for the screens: privacy checkup, pinned chats, the hosts the app contacts | Desktop UI | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/lib/notifications.ts` | 60 | `takeRecentNotified`, `ensureNotificationPermission`, `notifyIncoming` | Presentation helpers, UI settings, themes, notifications bridge | UI / adapter (stays) | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/lib/outbox.test.ts` | 15 | (none) | Retry/outbox policy | engine::core delivery | Engine | Ported, tested | M7 | engine tests |
@@ -145,10 +145,12 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 | `apps/desktop/src/lib/quickSend.ts` | 42 | `SendTarget`, `sendTargets`, `snapshotTargets`, `filterTargets`, `moveIndex` | Voice-note waveform bars, receipt and nearby wording, quick-send and drop-to-send target lists | Desktop UI | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/lib/receipts.test.ts` | 17 | (none) | Voice-note waveform bars, receipt and nearby wording, quick-send and drop-to-send target lists | Desktop UI | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/lib/receipts.ts` | 14 | `receiptLine`, `nearbyText` | Voice-note waveform bars, receipt and nearby wording, quick-send and drop-to-send target lists | Desktop UI | UI | Stays (UI) | Stays | n/a |
+| `apps/desktop/src/lib/sealedSettings.test.ts` | 80 | (none) | Secure storage and at-rest encryption helpers | SecureStore adapter (Tauri keyring) | Adapter | Stays (platform adapter) | Stays | n/a |
+| `apps/desktop/src/lib/sealedSettings.ts` | 82 | `SealedName`, `loadSealedSettings`, `getSealed`, `setSealed` | Secure storage and at-rest encryption helpers | SecureStore adapter (Tauri keyring) | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/desktop/src/lib/secureStore.ts` | 42 | `usingOsSecureStorage`, `secretGet`, `secretSet`, `secretDelete` | Secure storage and at-rest encryption helpers | SecureStore adapter (Tauri keyring) | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/desktop/src/lib/selectedTab.test.ts` | 20 | (none) | Guards the look: later style layers must not repaint selected controls | Desktop UI | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/lib/settings.test.ts` | 34 | (none) | Presentation helpers, UI settings, themes, notifications bridge | UI / adapter (stays) | UI | Stays (UI) | Stays | n/a |
-| `apps/desktop/src/lib/settings.ts` | 123 | `ThemeMode`, `AppSettings`, `ACCENTS`, `parseSettings`, `loadSettings`, `saveSettings` +3 | Presentation helpers, UI settings, themes, notifications bridge | UI / adapter (stays) | UI | Stays (UI) | Stays | n/a |
+| `apps/desktop/src/lib/settings.ts` | 122 | `ThemeMode`, `AppSettings`, `ACCENTS`, `parseSettings`, `loadSettings`, `saveSettings` +3 | Presentation helpers, UI settings, themes, notifications bridge | UI / adapter (stays) | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/lib/signaling/hub.ts` | 57 | `transportsFor`, `SignalingHub` | Nostr events (BIP-340), relay client, signaling hub | engine::signaling::{relay,nostr,hub} (state machines) + crypto::nostr; a socket adapter of a few lines remains | Engine/Adapter | Ported, tested | M7: replace with the socket adapter that feeds SignalingHub | relay client against the real relay (tests/real_relay.rs); fake relays for backoff, timeouts, dedupe, Nostr rules |
 | `apps/desktop/src/lib/signaling/nostr.ts` | 187 | `NOSTR_KIND_SIGNAL`, `NOSTR_KIND_MESSAGE`, `NostrEvent`, `eventId`, `makeEvent`, `verifyEvent` +1 | Nostr events (BIP-340), relay client, signaling hub | engine::signaling::{relay,nostr,hub} (state machines) + crypto::nostr; a socket adapter of a few lines remains | Engine/Adapter | Ported, tested | M7: replace with the socket adapter that feeds SignalingHub | relay client against the real relay (tests/real_relay.rs); fake relays for backoff, timeouts, dedupe, Nostr rules |
 | `apps/desktop/src/lib/signaling/relayClient.ts` | 146 | `RelayClient` | Nostr events (BIP-340), relay client, signaling hub | engine::signaling::{relay,nostr,hub} (state machines) + crypto::nostr; a socket adapter of a few lines remains | Engine/Adapter | Ported, tested | M7: replace with the socket adapter that feeds SignalingHub | relay client against the real relay (tests/real_relay.rs); fake relays for backoff, timeouts, dedupe, Nostr rules |
@@ -161,7 +163,7 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 | `apps/desktop/src/lib/themes.ts` | 162 | `ThemeDef`, `THEMES`, `DEFAULT_PALETTE`, `classicTheme`, `APRICOT`, `themeById` +6 | Presentation helpers, UI settings, themes, notifications bridge | UI / adapter (stays) | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/lib/waveform.test.ts` | 22 | (none) | Voice-note waveform bars, receipt and nearby wording, quick-send and drop-to-send target lists | Desktop UI | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/lib/waveform.ts` | 43 | `bucketPeaks`, `playedBars`, `waveformFor` | Voice-note waveform bars, receipt and nearby wording, quick-send and drop-to-send target lists | Desktop UI | UI | Stays (UI) | Stays | n/a |
-| `apps/desktop/src/main.tsx` | 18 | (none) | App shell | UI | UI | Stays (UI) | Stays | n/a |
+| `apps/desktop/src/main.tsx` | 21 | (none) | App shell | UI | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/vite-env.d.ts` | 15 | (none) | App shell | UI | UI | Stays (UI) | Stays | n/a |
 
 ## Desktop shell (Rust / Tauri)
@@ -170,8 +172,8 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 |---|---:|---|---|---|---|---|---|---|
 | `apps/desktop/src-tauri/src/autobackup.rs` | 166 | `status_path`, `passphrase`, `now_ms`, `run`, `start`, `view` +6 | Weekly automatic backups: keeps the passphrase in the credential store, runs the check | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/desktop/src-tauri/src/ble.rs` | 168 | `BleEvent`, `BleLink`, `max_chunk`, `write`, `disconnect`, `payload_size` +3 | Native BLE central | BLE adapter | Adapter | Stays (platform adapter) | Stays | n/a |
-| `apps/desktop/src-tauri/src/engine_host.rs` | 522 | `hex`, `unhex`, `KeyringSecure`, `load_identity`, `save_identity`, `delete_identity` +32 | Hosts the Rust engine in the shell: keyring secret store, events to the page | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; M7 seam (page not rewired yet) | n/a |
-| `apps/desktop/src-tauri/src/lib.rs` | 311 | `page_entry`, `secret_get`, `secret_set`, `secret_delete`, `BleState`, `unhex` +10 | Tauri shell: commands, keyring, notifications | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; hosts the engine from M7 | n/a |
+| `apps/desktop/src-tauri/src/engine_host.rs` | 538 | `hex`, `unhex`, `KeyringSecure`, `load_identity`, `save_identity`, `delete_identity` +34 | Hosts the Rust engine in the shell: keyring secret store, events to the page | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; M7 seam (page not rewired yet) | n/a |
+| `apps/desktop/src-tauri/src/lib.rs` | 313 | `page_entry`, `secret_get`, `secret_set`, `secret_delete`, `BleState`, `unhex` +10 | Tauri shell: commands, keyring, notifications | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; hosts the engine from M7 | n/a |
 | `apps/desktop/src-tauri/src/main.rs` | 5 | `main` | Tauri shell: commands, keyring, notifications | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; hosts the engine from M7 | n/a |
 | `apps/desktop/src-tauri/src/tray.rs` | 158 | `flag`, `set_flag`, `has_flag`, `close_to_tray`, `show_main`, `toggle_quick` +6 | Tray icon, close to tray, start at login, one instance | Desktop adapter | Adapter | Stays (platform adapter) | Stays | n/a |
 
@@ -198,7 +200,7 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 | `apps/android/app/src/main/java/com/duochat/app/data/MessageStore.kt` | 243 | `MessageStore` | Chat state models and the in-memory message store over Room | engine state (snapshot, events) and storage::SqliteStorage | Engine | Ported, tested | M8: the engine owns this state | engine and storage tests |
 | `apps/android/app/src/main/java/com/duochat/app/data/Models.kt` | 425 | `DeliveryState`, `TransportKind`, `needsDelivery`, `ChatMessage`, `OutboxRow`, `EnginePhase` +39 | Chat state models and the in-memory message store over Room | engine state (snapshot, events) and storage::SqliteStorage | Engine | Ported, tested | M8: the engine owns this state | engine and storage tests |
 | `apps/android/app/src/main/java/com/duochat/app/data/NetworkConfig.kt` | 197 | `TransportMode`, `TurnServer`, `SignalingConfig`, `NetworkConfig`, `TurnShare` | Domain rules duplicated from TypeScript | domain | Domain | Ported, tested | M8 | n/a |
-| `apps/android/app/src/main/java/com/duochat/app/data/Preferences.kt` | 112 | `AppSettings`, `SettingsRepository` | App settings storage | UI state (stays) | UI | Stays (UI) | Stays | n/a |
+| `apps/android/app/src/main/java/com/duochat/app/data/Preferences.kt` | 158 | `AppSettings`, `SettingsRepository` | App settings storage | UI state (stays) | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/data/QuickWins.kt` | 179 | `minutesLabel`, `HostRow`, `CheckupItem`, `ChatStorage`, `objects`, `parseCheckup` +28 | Small pure helpers for the screens: pinned chats, hosts the app contacts, privacy checkup | UI state (stays) | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/data/Social.kt` | 106 | `deleteFrame`, `reactFrame`, `parseDelete`, `ReactionEvent`, `parseReact`, `ReactionChip` +3 | Delete/react frames, backup | domain::social, crypto::backup | Domain/Crypto | Ported, tested | M8 | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/data/Themes.kt` | 70 | `ThemeDef`, `themeById`, `channel`, `mixColors`, `luminance`, `contrastRatio` +2 | Themes | UI | UI | Stays (UI) | Stays | n/a |

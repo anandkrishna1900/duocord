@@ -25,7 +25,7 @@ export const FEATURES = [
   { cls: '', i: 'users', t: 'Groups of up to 10', p: 'Add Ben, Ben adds Cat, and you and Cat connect automatically.' },
   { cls: '', i: 'laptop', t: 'One account, many devices', p: 'Link your phone and PC with a QR code. The account key never leaves your first device.' },
   { cls: 'f-wide', i: 'bt', t: 'Keeps going with no internet', tag: 'Android, experimental', p: 'An optional Bluetooth mesh passes sealed messages through nearby phones, up to 7 hops. So far tested in simulation, not on real radios.' },
-  { cls: 'f-wide', i: 'clip', t: 'Files, photos, voice notes', p: "Up to 8 MB, sent straight to the other device with no upload to anyone's server." },
+  { cls: 'f-wide', i: 'clip', t: 'Files, photos, voice notes', p: "Up to 50 MB, sent straight to the other device with no upload to anyone's server." },
   { cls: '', i: 'clock', t: 'Send later', p: 'Write now, schedule it for the time you pick.' },
   { cls: '', i: 'pal', t: '16 themes', p: 'Midnight, AMOLED, Nord, Dracula, Blossom and more, on both apps.' },
   { cls: '', i: 'globe', t: 'Public channels', p: 'Join rooms like #general with no account. Messages are signed, but anyone who knows the name can read them.' },

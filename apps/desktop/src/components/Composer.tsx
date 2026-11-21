@@ -269,7 +269,7 @@ export function Composer({
           onClick={() => fileInput.current?.click()}
           disabled={disabled || uploading}
           aria-label="Send a file"
-          title="Send a file (up to 8 MB)"
+          title="Send a file (up to 50 MB)"
         >
           <PaperclipIcon size={18} />
         </button>

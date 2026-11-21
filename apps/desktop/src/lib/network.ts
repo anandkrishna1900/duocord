@@ -5,6 +5,7 @@ import {
   type NetworkConfig,
   type TurnServer,
 } from '@duochat/protocol';
+import { getSealed, setSealed } from './sealedSettings';
 
 /**
  * The TURN relay this release was built with (VITE_PRIVCORD_TURN_URLS / _USERNAME / _CREDENTIAL at build time; see
@@ -16,8 +17,6 @@ export const BUILTIN_TURN: TurnServer | null = (() => {
   if (urls.length === 0) return null;
   return { urls, username: env.VITE_PRIVCORD_TURN_USERNAME ?? '', credential: env.VITE_PRIVCORD_TURN_CREDENTIAL ?? '' };
 })();
-
-const KEY = 'duochat.network.v1';
 
 /** Whether this window was opened through Tor (private mode); read from the app once at start. */
 let torActive = false;
@@ -45,7 +44,7 @@ export async function setTorMode(on: boolean): Promise<void> {
 export function loadNetworkConfig(): NetworkConfig {
   let config: NetworkConfig;
   try {
-    config = parseNetworkConfig(localStorage.getItem(KEY));
+    config = parseNetworkConfig(getSealed('network'));
   } catch {
     config = structuredClone(DEFAULT_NETWORK_CONFIG);
   }
@@ -54,7 +53,7 @@ export function loadNetworkConfig(): NetworkConfig {
 
 export function saveNetworkConfig(config: NetworkConfig): void {
   const { torMode: _ignored, ...saved } = config;
-  localStorage.setItem(KEY, JSON.stringify(saved));
+  setSealed('network', JSON.stringify(saved));
   void pushNativeConfig();
 }
 

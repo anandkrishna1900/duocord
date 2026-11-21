@@ -110,6 +110,8 @@ export interface SnapshotJson {
   sync_lost?: number;
   usage?: { messages: number; files: number; file_bytes: number; contacts: number; sync_entries: number };
   scheduled?: { id: string; target: string; group: boolean; text: string; at: number }[];
+  /** Chats whose older messages a windowed snapshot left out, and how many. */
+  older?: { conversation: string; count: number }[];
 }
 
 /* ---- what the page knows that the engine does not ---- */
@@ -407,6 +409,7 @@ export function shapeState(s: SnapshotJson, ctx: ShapeContext): ChatState {
     contacts,
     groups,
     messages,
+    earlier: Object.fromEntries((s.older ?? []).filter((o) => o.count > 0).map((o) => [o.conversation, o.count])),
     signaling: ctx.signaling,
     storageBackend: 'sqlite',
     queued: s.queued,

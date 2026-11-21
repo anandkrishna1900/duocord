@@ -37,5 +37,5 @@ strict networks) TURN you configure.
 ## Not implemented
 
 Some building blocks exist in `packages/protocol` but nothing uses them yet: epoch group keys
-(`e2ee/groupCrypto.ts`), the earlier (replaced) mesh router. Files are implemented in `files.ts` (8 MB, direct links only); open channels and
+(`e2ee/groupCrypto.ts`), the earlier (replaced) mesh router. Files are implemented in `files.ts` (8 MB in the TypeScript engine, 50 MB in the Rust engine; direct links only); open channels and
 Bluetooth mesh relaying are in `mesh/` (see [CHANNELS_AND_MESH.md](CHANNELS_AND_MESH.md)).

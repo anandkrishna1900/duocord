@@ -296,6 +296,8 @@ export interface ChatState {
   contacts: ContactView[];
   groups: GroupView[];
   messages: Record<string, UiMessage[]>;
+  /** Hosted engine: how many older messages of a chat are not loaded yet (absent or 0: all are). */
+  earlier?: Record<string, number>;
   signaling: SignalingStatus;
   storageBackend: 'sqlite' | 'browser';
   /** Messages waiting for someone to come online. */
@@ -1254,7 +1256,7 @@ export class ChatEngine implements ChatEngineApi {
     }
   }
 
-  /** Send a file (at most 8 MB) to a friend or a group. It goes straight to each person over the direct link. */
+  /** Send a file (at most 50 MB) to a friend or a group. It goes straight to each person over the direct link. */
   async sendFile(
     convId: string,
     file: { name: string; mime: string; bytes: Uint8Array },

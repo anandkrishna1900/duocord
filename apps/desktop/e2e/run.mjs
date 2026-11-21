@@ -1,5 +1,6 @@
 // Usage: node e2e/run.mjs [--only 1,2,...]   (or: npm run e2e)
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { addFriend, build, connected, device, installBleSim, invites, isConnected, launch, onboard, openAdd, groupAdd, groupRemove,
@@ -536,7 +537,7 @@ await scenario(12, 'replies: quote shows on both sides in a direct chat and in a
 });
 
 /* 13 ----------------------------------------------------------------- */
-await scenario(13, 'files: images preview, exactly 8 MB arrives intact, 8 MB + 1 refused, group file reaches everyone, SVG never rendered', async (ctx) => {
+await scenario(13, 'files: images preview, exactly 8 MB arrives intact, 50 MB + 1 refused, group file reaches everyone, SVG never rendered', async (ctx) => {
   const relay = await startRelay(false);
   ctx.cleanups.push(relay.close);
   const net = relayNet(relay.url);
@@ -594,8 +595,15 @@ await scenario(13, 'files: images preview, exactly 8 MB arrives intact, 8 MB + 1
   const big = await saveFile(B.page, 'eight.bin');
   check(big.bytes.length === max.length && sha(big.bytes) === sha(max), '8 MB file is intact (SHA-256 equal)');
   // 4. one byte over: refused before anything is sent
-  await sendFile(A.page, { name: 'toobig.bin', mime: 'application/octet-stream', buffer: Buffer.alloc(8 * 1024 * 1024 + 1, 7) });
-  await A.page.waitForSelector('.composer-error:has-text("at most 8.0 MB")', { timeout: 10000 });
+  // (The limit is 50 MB; Playwright takes a file that big from disk, not from memory.)
+  const tooBigPath = path.join(os.tmpdir(), 'toobig.bin');
+  fs.writeFileSync(tooBigPath, Buffer.alloc(50 * 1024 * 1024 + 1, 7));
+  try {
+    await A.page.setInputFiles('input[type=file]', tooBigPath);
+    await A.page.waitForSelector('.composer-error:has-text("at most 50.0 MB")', { timeout: 30000 });
+  } finally {
+    fs.rmSync(tooBigPath, { force: true });
+  }
   await sleep(1500);
   check((await B.page.locator('.file-bubble:has-text("toobig.bin")').count()) === 0, 'oversized file is never sent');
   // 5. a hostile name is cleaned

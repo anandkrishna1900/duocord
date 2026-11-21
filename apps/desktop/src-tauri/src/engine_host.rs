@@ -17,7 +17,7 @@
 //! | `privcord://signal-put`        | `{ mailbox, blob, kind, ttlSec }`         | publish the blob to the relays                |
 //! | `privcord://notify`            | `{ conversation, sender, preview, silent }` | show a notification                           |
 
-use privcord_desktop_host::{native_signaling::NativeSignaling, DesktopHost};
+use privcord_desktop_host::{native_signaling::NativeSignaling, sealed_file, DesktopHost};
 use privcord_domain::signaling::PutKind;
 use privcord_ffi::{
     DatabaseKeyRead, NotifierCallbacks, SecureStoreCallbacks, SignalKind, TransportCallbacks,
@@ -31,6 +31,8 @@ const SERVICE: &str = "com.duochat.desktop";
 const IDENTITY_KEY: &str = "engine-identity-v1";
 /// The database encryption key (SQLCipher), separate from the identity.
 const DATABASE_KEY: &str = "engine-database-key-v1";
+/// The key the saved network settings file is encrypted under.
+const NETWORK_FILE_KEY: &str = "network-settings-file-key-v1";
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -145,12 +147,7 @@ pub fn engine_network(
     previews: bool,
 ) -> Result<(), String> {
     let saved = json!({ "network": network, "notify": notify, "previews": previews });
-    if let Some(path) = saved_network_path(&app) {
-        if let Some(dir) = path.parent() {
-            let _ = std::fs::create_dir_all(dir);
-        }
-        std::fs::write(&path, saved.to_string()).map_err(|e| e.to_string())?;
-    }
+    save_network(&app, &saved)?;
     apply_network(&app, &saved);
     // Started at sign-in: the page was only needed to start the engine. Now that the relays are set up, its window
     // goes, and PrivCord sits in the tray with only Rust running.
@@ -169,9 +166,105 @@ pub fn engine_network(
 
 static HIDDEN_START_DONE: AtomicBool = AtomicBool::new(false);
 
+/// The key the saved network settings are encrypted under, in the credential store (made on first use if `create`).
+fn network_file_key(create: bool) -> Option<[u8; 32]> {
+    let entry = keyring::Entry::new(SERVICE, NETWORK_FILE_KEY).ok()?;
+    match entry.get_password() {
+        Ok(text) => unhex(&text)?.try_into().ok(),
+        Err(keyring::Error::NoEntry) if create => {
+            let key = sealed_file::new_key()?;
+            entry.set_password(&hex(&key)).ok()?;
+            Some(key)
+        }
+        Err(_) => None,
+    }
+}
+
+/// What the page keeps as settings ("settings", "network"), saved encrypted so nothing of them sits on disk as plain text.
+#[tauri::command]
+pub fn settings_get(app: AppHandle, name: String) -> Result<Option<String>, String> {
+    let (Some(dir), Some(key)) = (app.path().app_data_dir().ok(), network_file_key(false)) else {
+        return Ok(None);
+    };
+    Ok(sealed_file::read_blob(&dir, &key, &name))
+}
+
+#[tauri::command]
+pub fn settings_set(app: AppHandle, name: String, text: String) -> Result<(), String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let key = network_file_key(true).ok_or("the credential store is not available")?;
+    sealed_file::write_blob(&dir, &key, &name, &text)
+}
+
+/// Saves the settings encrypted. With no credential store to hold the key nothing is written (and any older plain-text
+/// copy is removed): the page hands the settings over again at every start.
+fn save_network(app: &AppHandle, saved: &Value) -> Result<(), String> {
+    let Some(path) = saved_network_path(app) else {
+        return Ok(());
+    };
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let sealed = network_file_key(true).and_then(|k| sealed_file::seal(&k, saved.to_string().as_bytes()));
+    match sealed {
+        Some(bytes) => std::fs::write(&path, bytes).map_err(|e| e.to_string()),
+        None => {
+            let _ = std::fs::remove_file(&path);
+            Ok(())
+        }
+    }
+}
+
 fn saved_network(app: &AppHandle) -> Option<Value> {
-    let text = std::fs::read_to_string(saved_network_path(app)?).ok()?;
-    serde_json::from_str(&text).ok()
+    let path = saved_network_path(app)?;
+    let bytes = std::fs::read(&path).ok()?;
+    if sealed_file::is_sealed(&bytes) {
+        let plain = sealed_file::open(&network_file_key(false)?, &bytes)?;
+        return serde_json::from_slice(&plain).ok();
+    }
+    // A plain-text file from an older version: use it once, and put it back encrypted (or remove it).
+    let value: Value = serde_json::from_slice(&bytes).ok()?;
+    let _ = save_network(app, &value);
+    Some(value)
+}
+
+/// Send a file whose bytes come as they are: the page hands the raw bytes over (no base64 text in a JSON command, which for
+/// a 50 MB file would be a 67 MB string) and the details (who, name, type) ride in a header as hex-encoded JSON.
+#[tauri::command]
+pub async fn engine_send_file(
+    request: tauri::ipc::Request<'_>,
+    state: State<'_, EngineState>,
+) -> Result<Value, String> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("expected the file's bytes".into());
+    };
+    let details: Value = request
+        .headers()
+        .get("x-privcord-file")
+        .and_then(|v| v.to_str().ok())
+        .and_then(unhex)
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .ok_or("missing file details")?;
+    let data = bytes.clone();
+    let host = running(&state)?;
+    tauri::async_runtime::spawn_blocking(move || host.send_file_bytes(&details, data))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// A stored file's bytes, handed back as they are (an ArrayBuffer in the page).
+#[tauri::command]
+pub async fn engine_load_file(
+    state: State<'_, EngineState>,
+    message_id: String,
+) -> Result<tauri::ipc::Response, String> {
+    let host = running(&state)?;
+    let bytes = tauri::async_runtime::spawn_blocking(move || host.load_file_bytes(&message_id))
+        .await
+        .map_err(|e| e.to_string())??;
+    bytes
+        .map(tauri::ipc::Response::new)
+        .ok_or_else(|| "that file is no longer stored".to_owned())
 }
 
 /// The window is gone (PrivCord stays in the tray): its WebRTC links went with it.

@@ -421,18 +421,18 @@ impl Core {
             .cloned()
             .collect();
         for entry in due {
-            let Some(row) = self.messages.get(&entry.message_id) else {
+            let Some(row) = self.messages.meta(&entry.message_id) else {
                 continue;
             };
             let ConversationId::Group(g) = &row.conversation else {
                 continue;
             };
-            if row.message.sender_id != uid || now - row.message.client_created_at < MESH_AFTER_MS {
+            if row.sender_id != uid || now - row.client_created_at < MESH_AFTER_MS {
                 continue;
             }
             let key = (entry.message_id.clone(), entry.recipient.clone());
             let (last, rounds) = self.sealed.meshed.get(&key).copied().unwrap_or((0, 0));
-            let is_text = row.message.kind == MessageKind::Text;
+            let is_text = row.kind == MessageKind::Text;
             let max = if is_text {
                 MESH_MAX_ROUNDS_TEXT
             } else {
@@ -458,13 +458,30 @@ impl Core {
                 continue;
             }
             let payloads: Vec<Value> = if is_text {
+                // The text is read here, for the moment it is sent (it is sealed in memory the rest of the time).
+                let Some(whole) = self.message(&entry.message_id) else {
+                    continue;
+                };
                 vec![
-                    json!({ "t": "msg", "id": row.message.message_id, "text": row.message.text,
-                    "at": row.message.client_created_at, "g": g.as_str() }),
+                    json!({ "t": "msg", "id": whole.message.message_id, "text": whole.message.text,
+                    "at": whole.message.client_created_at, "g": g.as_str() }),
                 ]
             } else {
                 // A file (voice note, photo, anything): its offer and every chunk, each sealed to the member, in order.
                 // Both helpers get the same sealed copies; the member keeps the first of each and skips repeats.
+                // Handed on member to member as one sealed blob per frame: only files of the size older versions took.
+                let too_big = self
+                    .ports
+                    .storage
+                    .file_info(&entry.message_id)
+                    .ok()
+                    .flatten()
+                    .is_some_and(|i| {
+                        i.size > privcord_domain::limits::LEGACY_MAX_FILE_BYTES as u64
+                    });
+                if too_big {
+                    continue;
+                }
                 let Some(frames) = self.outbox_frames(&entry.message_id) else {
                     continue;
                 };
@@ -543,7 +560,7 @@ impl Core {
             .cloned()
             .collect();
         for entry in due {
-            let Some(row) = self.messages.get(&entry.message_id) else {
+            let Some(row) = self.message(&entry.message_id) else {
                 continue;
             };
             if row.message.kind != MessageKind::Text || row.message.sender_id != uid {
@@ -580,8 +597,8 @@ impl Core {
                     }])
                     .is_ok()
             {
-                if let Some(m) = self.messages.get_mut(&entry.message_id) {
-                    m.message.delivery_state = DeliveryState::Sent;
+                if let Some(m) = self.messages.meta_mut(&entry.message_id) {
+                    m.delivery_state = DeliveryState::Sent;
                 }
                 self.hub.publish(EngineEvent::MessageStatusChanged {
                     message_id: entry.message_id,

@@ -223,6 +223,18 @@ fn the_facade_runs_a_whole_conversation_with_plain_data() {
     );
     assert_eq!(bell.0.lock().unwrap()[0].2, "hello over the facade");
 
+    // A windowed snapshot leaves the history out and says how much; a page brings it back.
+    let recent = b.snapshot_recent(0).unwrap();
+    assert!(recent.conversations.iter().all(|c| c.messages.is_empty()));
+    assert_eq!(recent.older.len(), 1);
+    assert_eq!(recent.older[0].count, 1);
+    let page = b
+        .messages_before(recent.older[0].conversation.clone(), None, 10)
+        .unwrap();
+    assert_eq!(page.messages.len(), 1);
+    assert_eq!(page.messages[0].text, "hello over the facade");
+    assert!(!page.more);
+
     // Events come out in order and end with ShutDown.
     let mut saw_connected = false;
     while let Some(e) = a.next_event(0) {

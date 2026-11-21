@@ -95,12 +95,21 @@ fn side() -> Side {
 
 /// Carry every queued frame to the other side until both are quiet (the page's job).
 fn pump(a: &Side, a_uid: &str, b: &Side, b_uid: &str) {
-    for _ in 0..50 {
+    // The engines answer on their own threads, so a quiet wire may only mean a reply is still on its way (a file takes
+    // several round trips): it is over after a stretch of quiet, not at the first empty look.
+    let mut quiet = 0;
+    for _ in 0..400 {
         let from_a: Vec<_> = std::mem::take(&mut *a.wire.0.lock().unwrap());
         let from_b: Vec<_> = std::mem::take(&mut *b.wire.0.lock().unwrap());
         if from_a.is_empty() && from_b.is_empty() {
-            return;
+            quiet += 1;
+            if quiet >= 8 {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            continue;
         }
+        quiet = 0;
         for (_, frame) in from_a {
             b.host
                 .invoke("frame_received", &json!({ "peer": a_uid, "frame": frame }))
@@ -186,6 +195,29 @@ fn two_hosted_engines_pair_connect_and_exchange_a_message_through_json() {
     pump(&a, &a_uid, &b, &b_uid);
     assert!(snapshot_text(&b).contains("hello from the hosted engine"));
 
+    // The windowed snapshot and the page of older messages, as the page asks for them.
+    let recent = b
+        .host
+        .invoke("snapshot_recent", &json!({ "per_chat": 0 }))
+        .unwrap();
+    assert_eq!(recent["older"][0]["count"], 1);
+    assert_eq!(
+        recent["conversations"][0]["messages"]
+            .as_array()
+            .unwrap()
+            .len(),
+        0
+    );
+    let page = b
+        .host
+        .invoke(
+            "messages_before",
+            &json!({ "conversation": a_uid, "before": null, "limit": 10 }),
+        )
+        .unwrap();
+    assert_eq!(page["messages"][0]["text"], "hello from the hosted engine");
+    assert_eq!(page["more"], false);
+
     // `WRITE_FIXTURE=1 cargo test -p privcord-desktop-host` refreshes the real snapshot the page's TypeScript tests read.
     if std::env::var_os("WRITE_FIXTURE").is_some() {
         let snapshot = b.host.invoke("snapshot", &json!({})).unwrap();
@@ -257,6 +289,21 @@ fn files_search_and_group_commands_work_through_json() {
         .invoke("load_file", &json!({ "message_id": file_id }))
         .unwrap();
     assert_eq!(B64.decode(loaded["data"].as_str().unwrap()).unwrap(), bytes);
+
+    // The same file as raw bytes (no base64 text in between), in both directions.
+    let raw_id = a
+        .host
+        .send_file_bytes(
+            &json!({ "peer": b_uid, "name": "raw.bin", "mime": "application/octet-stream" }),
+            bytes.clone(),
+        )
+        .unwrap()
+        .as_str()
+        .unwrap()
+        .to_owned();
+    pump(&a, &a_uid, &b, &b_uid);
+    assert_eq!(b.host.load_file_bytes(&raw_id).unwrap().unwrap(), bytes);
+    assert!(b.host.load_file_bytes("no-such-message").unwrap().is_none());
 
     // Search finds a text message.
     a.host

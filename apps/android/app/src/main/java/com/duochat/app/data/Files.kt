@@ -15,7 +15,7 @@ import java.security.MessageDigest
 
 /** Hard limit on group size, including the creator. */
 const val MAX_GROUP_MEMBERS = 10
-const val MAX_FILE_BYTES = 8 * 1024 * 1024
+const val MAX_FILE_BYTES = 50 * 1024 * 1024
 const val FILE_CHUNK_BYTES = 12 * 1024
 const val MAX_REPLY_PREVIEW = 120
 const val MAX_FILE_NAME = 120

@@ -30,7 +30,7 @@ pub struct SearchHit {
 
 impl Core {
     /// Everyone in a conversation except us (the people a delete or a reaction must reach).
-    fn conversation_others(&self, conversation: &ConversationId) -> Vec<UserId> {
+    pub(super) fn conversation_others(&self, conversation: &ConversationId) -> Vec<UserId> {
         match conversation {
             ConversationId::Direct(p) => vec![p.clone()],
             ConversationId::Group(g) => self
@@ -51,11 +51,8 @@ impl Core {
         self.ports
             .storage
             .apply(&[StorageOp::Tombstone(id.clone())])?;
-        if let Some(m) = self.messages.get_mut(id) {
-            m.message.text.clear();
-            m.message.kind = MessageKind::Text;
-            m.message.reply_to = None;
-        }
+        // Nothing of the text or the quote stays in memory.
+        self.messages.forget_text(id);
         self.reactions.remove(id);
         self.outbox.retain(|o| &o.message_id != id);
         self.deleted.insert(id.clone());
@@ -71,8 +68,8 @@ impl Core {
         self.require_live()?;
         let own = self.uid.clone().ok_or(ErrorCode::NoIdentity)?;
         let (conversation, sender) = {
-            let m = self.messages.get(id).ok_or(ErrorCode::UnknownMessage)?;
-            (m.conversation.clone(), m.message.sender_id.clone())
+            let m = self.messages.meta(id).ok_or(ErrorCode::UnknownMessage)?;
+            (m.conversation.clone(), m.sender_id.clone())
         };
         if !everyone || sender != own {
             self.ports
@@ -127,27 +124,27 @@ impl Core {
         let me = self.uid.clone();
         let ids: Vec<MessageId> = self
             .messages
-            .values()
-            .filter(|m| {
+            .iter()
+            .filter(|(_, m)| {
                 &m.conversation == conversation
-                    && Some(&m.message.sender_id) != me.as_ref()
-                    && m.message.read_at.is_none()
+                    && Some(&m.sender_id) != me.as_ref()
+                    && m.read_at.is_none()
             })
-            .map(|m| m.message.message_id.clone())
+            .map(|(id, _)| id.clone())
             .collect();
         let now = self.now();
         for id in ids {
             let state = self
                 .messages
-                .get(&id)
-                .map_or(DeliveryState::Read, |m| m.message.delivery_state);
+                .meta(&id)
+                .map_or(DeliveryState::Read, |m| m.delivery_state);
             self.ports.storage.apply(&[StorageOp::SetDelivery {
                 id: id.clone(),
                 state,
                 read_at: Some(now),
             }])?;
-            if let Some(m) = self.messages.get_mut(&id) {
-                m.message.read_at = Some(now);
+            if let Some(m) = self.messages.meta_mut(&id) {
+                m.read_at = Some(now);
             }
         }
         self.hub.publish(crate::EngineEvent::SettingsChanged);
@@ -162,7 +159,7 @@ impl Core {
             return Err(ErrorCode::BadReaction);
         }
         let conversation = {
-            let m = self.messages.get(id).ok_or(ErrorCode::UnknownMessage)?;
+            let m = self.messages.meta(id).ok_or(ErrorCode::UnknownMessage)?;
             if self.deleted.contains(id) || matches!(m.conversation, ConversationId::Channel(_)) {
                 return Err(ErrorCode::UnknownMessage);
             }
@@ -219,8 +216,8 @@ impl Core {
         // Only the author can delete a message for everyone.
         let ok = self
             .messages
-            .get(&id)
-            .is_some_and(|m| &m.message.sender_id == from && !self.deleted.contains(&id));
+            .meta(&id)
+            .is_some_and(|m| &m.sender_id == from && !self.deleted.contains(&id));
         if ok {
             let _ = self.apply_tombstone(&id);
         }
@@ -230,7 +227,7 @@ impl Core {
         let Some(r) = parse_react_frame(frame) else {
             return;
         };
-        let Some(m) = self.messages.get(&r.message_id) else {
+        let Some(m) = self.messages.meta(&r.message_id) else {
             return;
         };
         let in_conversation = match &m.conversation {
@@ -278,7 +275,7 @@ impl Core {
             })
             .unwrap_or_default();
         let mut frames: Vec<Value> = Vec::new();
-        for (id, m) in &self.messages {
+        for (id, m) in self.messages.iter() {
             let relevant = match &m.conversation {
                 ConversationId::Direct(p) => p == &who,
                 ConversationId::Group(g) => member_of.iter().any(|x| x == g.as_str()),
@@ -288,7 +285,7 @@ impl Core {
                 continue;
             }
             if self.deleted.contains(id) {
-                if m.message.sender_id == own {
+                if m.sender_id == own {
                     frames.push(delete_frame(id));
                 }
             } else if let Some(mine) = self.reactions.get(id).and_then(|r| r.get(&own)) {
@@ -310,20 +307,24 @@ impl Core {
             return Vec::new();
         }
         let own = self.uid.as_ref();
+        // Read from storage, one row at a time into the filter: nothing but the hits is kept.
         let mut hits: Vec<SearchHit> = self
-            .messages
-            .iter()
-            .filter(|(id, m)| {
-                !self.deleted.contains(*id)
+            .ports
+            .storage
+            .messages()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|m| {
+                !self.deleted.contains(&m.message.message_id)
                     && m.message.text.to_lowercase().contains(&q)
                     && !(Some(&m.message.sender_id) != own
                         && self.muted.contains(&m.message.sender_id))
             })
-            .map(|(id, m)| SearchHit {
-                message_id: id.clone(),
-                conversation: m.conversation.clone(),
-                sender: m.message.sender_id.clone(),
-                text: m.message.text.clone(),
+            .map(|m| SearchHit {
+                message_id: m.message.message_id,
+                conversation: m.conversation,
+                sender: m.message.sender_id,
+                text: m.message.text,
                 at: m.message.client_created_at,
             })
             .collect();
@@ -357,17 +358,17 @@ impl Core {
     /// The chat list: newest message and unread count per conversation, and who is still owed each message of ours.
     pub(super) fn summaries(&self) -> (Vec<ConversationSummary>, Vec<DeliveryDetail>) {
         let own = self.uid.as_ref();
-        // One pass over the history. Chats are found by a borrowed key (nothing is cloned per message), and consecutive
+        // One pass over the index. Chats are found by a borrowed key (nothing is cloned per message), and consecutive
         // messages of the same chat skip the lookup altogether.
         struct Tally<'a> {
             conversation: &'a ConversationId,
-            best: Option<&'a StoredMessage>,
+            best: Option<(&'a MessageId, &'a super::message_store::Meta)>,
             unread: usize,
         }
         let mut tallies: Vec<Tally<'_>> = Vec::new();
         let mut index: BTreeMap<&ConversationId, usize> = BTreeMap::new();
         let mut last: Option<usize> = None;
-        for m in self.messages.values() {
+        for (id, m) in self.messages.iter() {
             let slot = match last.filter(|&i| {
                 tallies
                     .get(i)
@@ -387,26 +388,38 @@ impl Core {
             let Some(entry) = tallies.get_mut(slot) else {
                 continue;
             };
-            if Some(&m.message.sender_id) != own && m.message.read_at.is_none() {
+            if Some(&m.sender_id) != own && m.read_at.is_none() {
                 entry.unread += 1;
             }
             let newer = entry.best.is_none_or(|best| {
-                privcord_domain::ordering::compare_messages(&best.message, &m.message)
-                    == std::cmp::Ordering::Less
+                super::message_store::compare(best, (id, m)) == std::cmp::Ordering::Less
             });
             if newer {
-                entry.best = Some(m);
+                entry.best = Some((id, m));
             }
         }
-        let by_conv: Vec<(ConversationId, (Option<&StoredMessage>, usize))> = index
+        let by_conv: Vec<(ConversationId, (Option<MessageId>, usize))> = index
             .values()
             .filter_map(|&i| tallies.get(i))
-            .map(|t| (t.conversation.clone(), (t.best, t.unread)))
+            .map(|t| {
+                (
+                    t.conversation.clone(),
+                    (t.best.map(|(id, _)| id.clone()), t.unread),
+                )
+            })
+            .collect();
+        // The newest message of each chat is read whole (its text is in memory, sealed, or comes back from storage).
+        let newest_ids: Vec<MessageId> =
+            by_conv.iter().filter_map(|(_, (b, _))| b.clone()).collect();
+        let mut newest: std::collections::HashMap<MessageId, StoredMessage> = self
+            .rows_for(&newest_ids)
+            .into_iter()
+            .map(|r| (r.message.message_id.clone(), r))
             .collect();
         let summaries = by_conv
             .into_iter()
             .map(|(conversation, (best, unread))| ConversationSummary {
-                last: best.map(|m| LastMessage {
+                last: best.and_then(|id| newest.remove(&id)).map(|m| LastMessage {
                     text: if self.deleted.contains(&m.message.message_id) {
                         "Message deleted".to_owned()
                     } else if m.message.kind == MessageKind::File {
@@ -429,7 +442,7 @@ impl Core {
         let deliveries = pending
             .into_iter()
             .filter_map(|(id, pending)| {
-                let m = self.messages.get(id)?;
+                let m = self.messages.meta(id)?;
                 let total = match &m.conversation {
                     ConversationId::Group(_) => self.conversation_others(&m.conversation).len(),
                     _ => 1,

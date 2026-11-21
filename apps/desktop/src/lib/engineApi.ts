@@ -24,6 +24,8 @@ export interface ChatEngineApi {
   stop(): void;
   setVisible(visible: boolean): void;
   openConversation(convId: string | null): void;
+  /** Load a page of older messages of a chat (only the hosted engine keeps a window; the other holds them all). */
+  loadEarlier?(convId: string): Promise<void>;
   clearNotice(): void;
 
   /** The text a friend scans or pastes to add us. */

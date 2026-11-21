@@ -20,7 +20,7 @@ import { HostedEngine, type EngineBridge } from '../engineBridge';
 import { uidMatchesKeys, type DeviceIdentity } from '../identity';
 import type { FileMeta, LocalStore, StoredMessage } from '../localDb';
 import { HostedRuntime, type RuntimeOptions } from './runtime';
-import { shapeState, type SnapshotJson } from './shape';
+import { shapeState, type MessageJson, type SnapshotJson } from './shape';
 
 export interface HostedDeps {
   bridge: EngineBridge;
@@ -48,6 +48,10 @@ export const ENGINE_IDENTITY_KEY = 'engine-identity-v1';
 
 const LOOKUP_WAIT_MS = 42_000;
 const REFRESH_DELAY_MS = 30;
+/** Messages of each chat the snapshot carries: the screens stay as fast on a long history as on a short one. */
+const WINDOW = 200;
+/** Older messages loaded by one tap on "Load earlier". */
+const PAGE = 100;
 
 /** The engine's error names, in words (the Android adapter has the same table). */
 export function friendly(error: unknown): string {
@@ -105,6 +109,8 @@ export class HostedChatEngine implements ChatEngineApi {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private refreshing = false;
   private again = false;
+  /** Per chat: how many messages before the window the person has asked to see. Fetched again on every refresh, so the view stays in one piece as the window moves. */
+  private extra = new Map<string, number>();
   private current: Promise<void> = Promise.resolve();
   private lookup: { resolve: (p: { uid: string; name: string; safetyNumber: string; already: boolean }) => void; reject: (e: Error) => void } | null = null;
   private off: (() => void) | null = null;
@@ -182,7 +188,8 @@ export class HostedChatEngine implements ChatEngineApi {
         do {
           this.again = false;
           try {
-            const next = await this.engine.snapshot<SnapshotJson>();
+            const next = await this.engine.snapshot<SnapshotJson>(WINDOW);
+            await this.addEarlier(next);
             // Never go back to an older picture than the one on screen.
             if (!this.snapshot || next.seq >= this.snapshot.seq) this.snapshot = next;
             this.runtime?.setOwnUid(next.own_uid ?? '');
@@ -197,6 +204,29 @@ export class HostedChatEngine implements ChatEngineApi {
       }
     })();
     return this.current;
+  }
+
+  /** Put the pages the person asked for in front of each chat's window, and say how many are still not loaded. */
+  private async addEarlier(next: SnapshotJson): Promise<void> {
+    for (const [id, limit] of this.extra) {
+      const conv = next.conversations.find((c) => c.id === id);
+      const first = conv?.messages[0]?.id;
+      if (!conv || !first) continue;
+      try {
+        const page = await this.engine.messagesBefore<{ messages: MessageJson[]; more: boolean }>(id, first, limit);
+        conv.messages = [...page.messages, ...conv.messages];
+        const left = next.older?.find((o) => o.conversation === id);
+        if (left) left.count = page.more ? Math.max(left.count - page.messages.length, 1) : 0;
+      } catch {
+        // The window alone is still a true picture.
+      }
+    }
+  }
+
+  /** Show another page of a chat's older messages. */
+  async loadEarlier(convId: string): Promise<void> {
+    this.extra.set(convId, (this.extra.get(convId) ?? 0) + PAGE);
+    await this.refresh();
   }
 
   clearNotice(): void {
@@ -643,9 +673,16 @@ export class HostedChatEngine implements ChatEngineApi {
       const tooBig = validateFileSize(file.bytes.length);
       if (tooBig) return { ok: false, error: tooBig };
       if (file.bytes.length > MAX_FILE_BYTES) return { ok: false, error: 'That file is too big.' };
-      const args = { name: file.name, mime: file.mime || 'application/octet-stream', data: toBase64(file.bytes), reply_to: replyToId };
-      if (this.kindOf(convId) === 'group') await this.engine.call('send_group_file', { group: convId, ...args });
-      else await this.engine.call('send_file', { peer: convId, ...args });
+      const mime = file.mime || 'application/octet-stream';
+      const group = this.kindOf(convId) === 'group';
+      if (this.engine.rawFiles) {
+        // The bytes themselves, not a base64 text: a big file never becomes a giant string.
+        await this.engine.sendFileBytes({ ...(group ? { group: convId } : { peer: convId }), name: file.name, mime, reply_to: replyToId }, file.bytes);
+      } else {
+        const args = { name: file.name, mime, data: toBase64(file.bytes), reply_to: replyToId };
+        if (group) await this.engine.call('send_group_file', { group: convId, ...args });
+        else await this.engine.call('send_file', { peer: convId, ...args });
+      }
       this.scheduleRefresh();
       return { ok: true };
     } catch (e) {
@@ -654,6 +691,17 @@ export class HostedChatEngine implements ChatEngineApi {
   }
 
   async getFile(messageId: string): Promise<{ blob: Blob; meta: FileMeta } | null> {
+    if (this.engine.rawFiles) {
+      const raw = await this.engine.loadFileBytes(messageId);
+      const known = this.snapshot?.conversations.flatMap((c) => c.messages).find((m) => m.id === messageId);
+      if (raw && known) {
+        return {
+          blob: new Blob([raw as Uint8Array<ArrayBuffer>], { type: known.file_mime }),
+          meta: { name: known.text, mime: known.file_mime, size: raw.length, sha256: '' },
+        };
+      }
+      if (!raw) return null;
+    }
     const file = await this.engine.call<{ name: string; mime: string; data: string } | null>('load_file', { message_id: messageId }).catch(() => null);
     if (!file) return null;
     const bytes = fromBase64(file.data);
@@ -887,6 +935,7 @@ export class HostedChatEngine implements ChatEngineApi {
   async clearLocalData(): Promise<void> {
     await this.localStore.clearAll();
     this.snapshot = null;
+    this.extra.clear();
     this.emit();
   }
 

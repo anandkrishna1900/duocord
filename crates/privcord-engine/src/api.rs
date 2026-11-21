@@ -160,6 +160,23 @@ pub struct Snapshot {
     pub scheduled: Vec<crate::core::Scheduled>,
     /// What this device holds (the usage screen).
     pub usage: UsageView,
+    /// Chats whose older messages were left out of `messages` (a windowed snapshot): how many are still to load with
+    /// `messages_before`. Empty when `messages` holds everything.
+    pub older: Vec<(ConversationId, usize)>,
+}
+
+/// A page of one chat's history, oldest first (see `Core::messages_before`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MessagePage {
+    pub messages: Vec<ChatMessage>,
+    /// Messages older than the first of these are still to load.
+    pub more: bool,
+    pub own_uid: Option<UserId>,
+    /// What a snapshot carries beside the messages, for these messages only.
+    pub files: Vec<(MessageId, privcord_ports::FileInfo)>,
+    pub reactions: Vec<(MessageId, Vec<(UserId, String)>)>,
+    pub deleted: Vec<MessageId>,
+    pub deliveries: Vec<DeliveryDetail>,
 }
 
 /// What this device holds: counts and the size of the files (build step 10, the usage screen).
@@ -271,7 +288,8 @@ pub enum EngineEvent {
         name: String,
         size: usize,
     },
-    /// A file has been handed to the link for `peer`: `frames` frames, the first of which is the offer.
+    /// Older versions: a file has been handed to the link for `peer`, `frames` frames, the first of which is the offer.
+    /// Files now go in windows, so this is no longer sent; the sender's progress comes as `FileProgress`.
     FileQueued {
         peer: UserId,
         message_id: MessageId,

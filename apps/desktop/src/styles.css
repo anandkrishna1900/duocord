@@ -3802,3 +3802,24 @@ input[type='checkbox'] {
 }
 .digit-box:focus { outline: 2px solid var(--accent, currentColor); outline-offset: 1px; transform: translateY(-1px); }
 @media (prefers-reduced-motion: reduce) { .digit-box { transition: none; } .digit-box:focus { transform: none; } }
+
+/* "Load earlier messages": the top of a long chat (only the newest messages are loaded at first). */
+.load-earlier {
+  display: block;
+  margin: 8px auto 14px;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.85em;
+  cursor: pointer;
+}
+.load-earlier:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+.load-earlier:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

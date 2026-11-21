@@ -624,8 +624,8 @@ impl Core {
                     // (the receipt came to the device that sent it; the others learn it here).
                     let theirs = self
                         .messages
-                        .get(&id)
-                        .is_some_and(|m| Some(&m.message.sender_id) != self.uid.as_ref());
+                        .meta(&id)
+                        .is_some_and(|m| Some(&m.sender_id) != self.uid.as_ref());
                     if theirs {
                         if read_at.is_some() {
                             items.push((kind::SEEN, json!({ "target": id })));
@@ -1109,9 +1109,9 @@ impl Core {
                 value,
             });
         }
-        let mut rows: Vec<&StoredMessage> = self
-            .messages
-            .values()
+        let mut rows: Vec<StoredMessage> = self
+            .all_rows()
+            .into_iter()
             .filter(|m| !matches!(m.conversation, ConversationId::Channel(_)))
             .collect();
         rows.sort_by_key(|m| std::cmp::Reverse(m.message.client_created_at));
@@ -1576,7 +1576,7 @@ impl Core {
                     muted = self
                         .sync
                         .as_ref()
-                        .and_then(|s| s.replica.state().setting(SETTING_MUTED).cloned());
+                        .and_then(|s| s.replica.state().setting(SETTING_MUTED));
                 }
                 _ => {}
             }
@@ -1723,7 +1723,7 @@ impl Core {
                 if let Some(v) = s.replica.state().setting(key) {
                     ops.push(StorageOp::SetKv {
                         key: format!("{key}.v1"),
-                        value: serde_json::to_vec(v).unwrap_or_default(),
+                        value: serde_json::to_vec(&v).unwrap_or_default(),
                     });
                 }
             }

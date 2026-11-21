@@ -7,7 +7,7 @@
 //! state snapshots and events.
 
 use crate::{
-    api::{ContactView, EngineEvent, GroupView, Snapshot},
+    api::{ContactView, DeliveryDetail, EngineEvent, GroupView, MessagePage, Snapshot},
     error::ErrorCode,
     events::{EventHub, EventStream},
 };
@@ -43,7 +43,6 @@ use privcord_domain::{
         declined_frame, parse_declined_frame, ChatMessage, DeclineReason, DeliveryState,
         MessageKind, ReplyRef, TransportKind,
     },
-    ordering::sort_messages,
     privacy::{accepts_direct, can_start_direct, ContactTrust},
     state::{ConnectionEvent, ConnectionFailure, ConnectionPath, ConnectionState},
     ConversationId, GroupId, MessageId, UserId,
@@ -61,6 +60,7 @@ use zeroize::Zeroizing;
 
 mod backup;
 mod devices;
+mod filestream;
 mod health;
 mod invites;
 mod keys;
@@ -68,10 +68,12 @@ pub mod lan;
 mod legacy_groups;
 mod linking;
 mod media;
+mod message_store;
 mod prefs;
 mod privacy;
 mod receipts;
 mod removal;
+mod resume;
 mod scheduled;
 mod signaling;
 mod snapshots;
@@ -227,7 +229,7 @@ pub struct Core {
     identity: Option<Identity>,
     uid: Option<UserId>,
     contacts: BTreeMap<UserId, StoredContactState>,
-    messages: HashMap<MessageId, StoredMessage>,
+    messages: message_store::MessageStore,
     outbox: Vec<OutboxEntry>,
     peers: HashMap<UserId, Peer>,
     group_only: bool,
@@ -263,6 +265,14 @@ pub struct Core {
     /// The storage port as wrapped by the sync recorder.
     recorder: Arc<sync::Recorder>,
     sealed: signaling::SealedState,
+    /// Files offered again whose receiver has not said where it is yet: (who, message) -> when to send it all.
+    file_waits: std::collections::HashMap<(UserId, MessageId), i64>,
+    /// Files being sent, sealed in memory (shared by every recipient of the message).
+    file_sends: std::collections::HashMap<MessageId, filestream::FileSend>,
+    /// How far each recipient has got with a file, so the next window can go.
+    file_streams: std::collections::HashMap<(UserId, MessageId), filestream::FileStream>,
+    /// Seals what the engine holds of files and history in memory.
+    ram_seal: Arc<privcord_crypto::ramseal::RamSeal>,
     /// Channel mailboxes we are listening on (the adapter opens the sockets).
     channel_subscribed: HashSet<String>,
     /// The name each person gave in a channel message (they are not contacts).
@@ -315,12 +325,17 @@ impl Core {
         // Every change stored from here on passes the sync recorder (core/sync.rs).
         let recorder = Arc::new(sync::Recorder::new(ports.storage.clone()));
         ports.storage = recorder.clone();
+        // What the engine holds of the history in memory is sealed under a key that exists only in this process.
+        let seal = Arc::new(privcord_crypto::ramseal::RamSeal::new(&mut *ports.entropy)?);
         let mut core = Self {
             ports,
             identity: None,
             uid: None,
             contacts: BTreeMap::new(),
-            messages: HashMap::new(),
+            messages: message_store::MessageStore::new(seal.clone()),
+            ram_seal: seal,
+            file_sends: std::collections::HashMap::new(),
+            file_streams: std::collections::HashMap::new(),
             outbox: Vec::new(),
             peers: HashMap::new(),
             group_only: false,
@@ -342,6 +357,7 @@ impl Core {
             account: None,
             recorder,
             sealed: signaling::SealedState::default(),
+            file_waits: std::collections::HashMap::new(),
             channel_subscribed: HashSet::new(),
             channel_people: BTreeMap::new(),
             pending_group: PendingGroupBuffer::default(),
@@ -430,10 +446,11 @@ impl Core {
                     .insert(stored.uid.clone(), StoredContactState { stored, contact });
             }
         }
-        for m in self.ports.storage.messages()? {
-            self.messages.insert(m.message.message_id.clone(), m);
-        }
         self.outbox = self.ports.storage.outbox()?;
+        let history = self.ports.storage.messages()?;
+        let outbox = &self.outbox;
+        self.messages
+            .load(history, &|id| outbox.iter().any(|o| &o.message_id == id));
         for r in self.ports.storage.reactions()? {
             self.reactions
                 .entry(r.message_id)
@@ -879,8 +896,12 @@ impl Core {
             p.session = None;
             p.pq = None;
             p.early_hello = None;
+        }
+        self.checkpoint_files(peer);
+        if let Some(p) = self.peers.get_mut(peer) {
             p.files.clear();
         }
+        self.retry_files_now(peer);
         self.step(peer, ConnectionEvent::Closed);
         if self
             .peers
@@ -895,8 +916,12 @@ impl Core {
         if let Some(p) = self.peers.get_mut(peer) {
             p.session = None;
             p.pq = None;
+        }
+        self.checkpoint_files(peer);
+        if let Some(p) = self.peers.get_mut(peer) {
             p.files.clear();
         }
+        self.retry_files_now(peer);
         self.step(peer, ConnectionEvent::Failed(reason));
         if !matches!(
             self.peers.get(peer).map(|p| p.state),
@@ -1281,6 +1306,8 @@ impl Core {
             Some("react") => self.on_react_frame(&Self::person_of(peer), frame),
             Some("file_offer") => self.on_file_offer(peer, frame),
             Some("file_chunk") => self.on_file_chunk(peer, frame),
+            Some("file_have") => self.on_file_have(peer, frame),
+            Some("file_ack") => self.on_file_ack(peer, frame),
             Some("devices") => self.on_device_notice(peer, frame),
             Some("privacy") => {
                 self.note_devices(peer, frame);
@@ -1348,7 +1375,7 @@ impl Core {
             // Not stored, so not acknowledged: the sender will send it again.
             return;
         }
-        self.messages.insert(message.message_id.clone(), row);
+        self.remember(row);
         self.hub.publish(EngineEvent::MessageAdded {
             conversation: conversation.clone(),
             message_id: message.message_id.clone(),
@@ -1366,8 +1393,8 @@ impl Core {
 
     /// Is this a message we sent to `peer` (directly, or as one member of a group)?
     fn is_ours_to(&self, id: &MessageId, peer: &UserId) -> bool {
-        self.messages.get(id).is_some_and(|m| {
-            Some(&m.message.sender_id) == self.uid.as_ref()
+        self.messages.meta(id).is_some_and(|m| {
+            Some(&m.sender_id) == self.uid.as_ref()
                 && match &m.conversation {
                     ConversationId::Direct(p) => p == peer,
                     // A group message went to each member separately: that member (and only they) may answer for it.
@@ -1399,14 +1426,25 @@ impl Core {
         if !ours {
             return;
         }
+        // The receiver has the whole file: the transfer is over, and its progress bar goes.
+        if self
+            .file_streams
+            .remove(&(peer.clone(), id.clone()))
+            .is_some()
+        {
+            self.hub.publish(EngineEvent::FileProgress {
+                message_id: id.clone(),
+                percent: 100,
+            });
+        }
         self.record_receipt(&id, peer, state == DeliveryState::Read);
-        let Some(current) = self.messages.get(&id).map(|m| m.message.delivery_state) else {
+        let Some(current) = self.messages.meta(&id).map(|m| m.delivery_state) else {
             return;
         };
         let mut next = DeliveryState::highest(current, state);
         // A group message counts as delivered when everyone has it, not when the first person does.
         let others_pending = matches!(
-            self.messages.get(&id).map(|m| &m.conversation),
+            self.messages.meta(&id).map(|m| &m.conversation),
             Some(ConversationId::Group(_))
         ) && self
             .outbox
@@ -1432,9 +1470,9 @@ impl Core {
         }
         self.outbox
             .retain(|o| !(o.message_id == id && &o.recipient == who));
-        if let Some(m) = self.messages.get_mut(&id) {
-            m.message.delivery_state = next;
-            m.message.read_at = read_at.or(m.message.read_at);
+        if let Some(m) = self.messages.meta_mut(&id) {
+            m.delivery_state = next;
+            m.read_at = read_at.or(m.read_at);
         }
         if next != current {
             self.hub.publish(EngineEvent::MessageStatusChanged {
@@ -1469,14 +1507,14 @@ impl Core {
             return;
         }
         let in_group = matches!(
-            self.messages.get(&id).map(|m| &m.conversation),
+            self.messages.meta(&id).map(|m| &m.conversation),
             Some(ConversationId::Group(_))
         );
         let others_pending = self
             .outbox
             .iter()
             .any(|o| o.message_id == id && &o.recipient != who);
-        let current = self.messages.get(&id).map(|m| m.message.delivery_state);
+        let current = self.messages.meta(&id).map(|m| m.delivery_state);
         // In a group one person refusing does not make the message a failure for everybody else: it only fails when
         // nobody else has it and nobody else is still to get it.
         let fail = !in_group
@@ -1499,8 +1537,8 @@ impl Core {
         self.outbox
             .retain(|o| !(o.message_id == id && &o.recipient == who));
         if fail {
-            if let Some(m) = self.messages.get_mut(&id) {
-                m.message.delivery_state = DeliveryState::Failed;
+            if let Some(m) = self.messages.meta_mut(&id) {
+                m.delivery_state = DeliveryState::Failed;
             }
             self.hub
                 .publish(EngineEvent::MessageRefused { message_id: id });
@@ -1539,7 +1577,7 @@ impl Core {
         let reply = match reply_to {
             None => None,
             Some(id) => {
-                let m = self.messages.get(id).ok_or(ErrorCode::UnknownMessage)?;
+                let m = self.message(id).ok_or(ErrorCode::UnknownMessage)?;
                 Some(ReplyRef::quoting(
                     &m.message.message_id,
                     &m.message.sender_id,
@@ -1569,7 +1607,7 @@ impl Core {
             StorageOp::InsertMessage(row.clone()),
             StorageOp::PutOutbox(entry.clone()),
         ])?;
-        self.messages.insert(id.clone(), row);
+        self.remember(row);
         self.outbox.push(entry);
         self.hub.publish(EngineEvent::MessageAdded {
             conversation,
@@ -1583,7 +1621,7 @@ impl Core {
     /// Send what is due for one person, if their link is up and authenticated.
     /// The frames that carry one stored message: a text frame, or a file offer and its chunks.
     pub(super) fn outbox_frames(&self, message_id: &MessageId) -> Option<Vec<Value>> {
-        let row = self.messages.get(message_id)?;
+        let row = self.message(message_id)?;
         let entry_id = message_id;
         let frames: Vec<Value> = if row.message.kind == MessageKind::File {
             let Ok(Some(file)) = self.ports.storage.file(entry_id) else {
@@ -1636,17 +1674,27 @@ impl Core {
             .cloned()
             .collect();
         for entry in due {
-            let Some(frames) = self.outbox_frames(&entry.message_id) else {
+            let Some(row) = self.messages.meta(&entry.message_id) else {
                 continue;
             };
-            let Some(row) = self.messages.get(&entry.message_id) else {
-                continue;
+            let was_queued = row.delivery_state == DeliveryState::Queued;
+            let is_file = row.kind == MessageKind::File;
+            // A file goes as its offer alone: the receiver says where it is (`file_have`, which may be part way if it kept
+            // some of an earlier try) and the chunks follow in windows, each answered by `file_ack`. A receiver that never
+            // answers is sent a small file whole by `tick_file_waits`. A file is hundreds of frames: give the whole
+            // transfer time to finish before offering it again.
+            let frames = if is_file {
+                match self.file_offer_frame(&entry.message_id) {
+                    Some(offer) => vec![offer],
+                    None => continue,
+                }
+            } else {
+                match self.outbox_frames(&entry.message_id) {
+                    Some(f) => f,
+                    None => continue,
+                }
             };
-            let was_queued = row.message.delivery_state == DeliveryState::Queued;
-            let file_frames = (row.message.kind == MessageKind::File)
-                .then(|| u32::try_from(frames.len()).unwrap_or(u32::MAX));
-            // A file is hundreds of frames: give the whole transfer time to finish before sending it again.
-            let wait = if row.message.kind == MessageKind::File {
+            let wait = if is_file {
                 FILE_RETRY_AFTER_MS
             } else {
                 RETRY_AFTER_MS
@@ -1655,12 +1703,11 @@ impl Core {
             if !all_sent {
                 return;
             }
-            if let Some(frames) = file_frames {
-                self.hub.publish(EngineEvent::FileQueued {
-                    peer: peer.clone(),
-                    message_id: entry.message_id.clone(),
-                    frames,
-                });
+            if is_file {
+                self.file_waits.insert(
+                    (peer.clone(), entry.message_id.clone()),
+                    now + filestream::HAVE_WAIT_MS,
+                );
             }
             let next = OutboxEntry {
                 attempts: entry.attempts + 1,
@@ -1686,8 +1733,8 @@ impl Core {
                 *o = next;
             }
             if was_queued {
-                if let Some(m) = self.messages.get_mut(&entry.message_id) {
-                    m.message.delivery_state = DeliveryState::Sent;
+                if let Some(m) = self.messages.meta_mut(&entry.message_id) {
+                    m.delivery_state = DeliveryState::Sent;
                 }
                 self.hub.publish(EngineEvent::MessageStatusChanged {
                     message_id: entry.message_id,
@@ -1702,13 +1749,13 @@ impl Core {
         self.require_live()?;
         let ids: Vec<MessageId> = self
             .messages
-            .values()
-            .filter(|m| {
+            .iter()
+            .filter(|(_, m)| {
                 m.conversation == ConversationId::Direct(peer.clone())
-                    && &m.message.sender_id == peer
-                    && m.message.read_at.is_none()
+                    && &m.sender_id == peer
+                    && m.read_at.is_none()
             })
-            .map(|m| m.message.message_id.clone())
+            .map(|(id, _)| id.clone())
             .collect();
         let now = self.now();
         for id in ids {
@@ -1717,9 +1764,9 @@ impl Core {
                 state: DeliveryState::Read,
                 read_at: Some(now),
             }])?;
-            if let Some(m) = self.messages.get_mut(&id) {
-                m.message.delivery_state = DeliveryState::Read;
-                m.message.read_at = Some(now);
+            if let Some(m) = self.messages.meta_mut(&id) {
+                m.delivery_state = DeliveryState::Read;
+                m.read_at = Some(now);
             }
             for addr in self.ready_addresses(peer) {
                 self.send_secure(&addr, &json!({ "v": PROTOCOL_VERSION, "kind": "ack", "messageId": id, "state": "READ", "at": now }));
@@ -1816,6 +1863,7 @@ impl Core {
         self.tick_device_notices();
         self.tick_key_handover();
         self.tick_media();
+        self.tick_file_waits();
         self.tick_sealed();
         self.tick_group_mesh();
         self.tick_channels();
@@ -2168,7 +2216,7 @@ impl Core {
         let reply = match reply_to {
             None => None,
             Some(id) => {
-                let m = self.messages.get(id).ok_or(ErrorCode::UnknownMessage)?;
+                let m = self.message(id).ok_or(ErrorCode::UnknownMessage)?;
                 Some(ReplyRef::quoting(
                     &m.message.message_id,
                     &m.message.sender_id,
@@ -2204,7 +2252,7 @@ impl Core {
         let mut ops = vec![StorageOp::InsertMessage(row.clone())];
         ops.extend(entries.iter().cloned().map(StorageOp::PutOutbox));
         self.ports.storage.apply(&ops)?;
-        self.messages.insert(id.clone(), row);
+        self.remember(row);
         self.outbox.extend(entries);
         self.hub.publish(EngineEvent::MessageAdded {
             conversation,
@@ -2250,8 +2298,8 @@ impl Core {
     pub fn retry_message(&mut self, id: &MessageId) -> Result<(), ErrorCode> {
         self.require_live()?;
         let own = self.uid.clone().ok_or(ErrorCode::NoIdentity)?;
-        let row = self.messages.get(id).ok_or(ErrorCode::UnknownMessage)?;
-        if row.message.sender_id != own || row.message.delivery_state == DeliveryState::Read {
+        let row = self.messages.meta(id).ok_or(ErrorCode::UnknownMessage)?;
+        if row.sender_id != own || row.delivery_state == DeliveryState::Read {
             return Err(ErrorCode::UnknownMessage);
         }
         let recipients: Vec<UserId> = match &row.conversation {
@@ -2291,8 +2339,12 @@ impl Core {
         }];
         ops.extend(entries.iter().cloned().map(StorageOp::PutOutbox));
         self.ports.storage.apply(&ops)?;
-        if let Some(m) = self.messages.get_mut(id) {
-            m.message.delivery_state = DeliveryState::Queued;
+        if let Some(m) = self.messages.meta_mut(id) {
+            m.delivery_state = DeliveryState::Queued;
+        }
+        // It is owed to someone again, so its text comes back into memory (sealed) for the sends.
+        if let Some(whole) = self.message(id) {
+            self.messages.warm(whole);
         }
         self.outbox.extend(entries);
         self.hub.publish(EngineEvent::MessageStatusChanged {
@@ -2364,7 +2416,7 @@ impl Core {
         {
             return;
         }
-        self.messages.insert(message.message_id.clone(), row);
+        self.remember(row);
         self.hub.publish(EngineEvent::MessageAdded {
             conversation: conversation.clone(),
             message_id: message.message_id.clone(),
@@ -2395,7 +2447,7 @@ impl Core {
         let reply = match reply_to {
             None => None,
             Some(id) => {
-                let m = self.messages.get(id).ok_or(ErrorCode::UnknownMessage)?;
+                let m = self.message(id).ok_or(ErrorCode::UnknownMessage)?;
                 Some(ReplyRef::quoting(
                     &m.message.message_id,
                     &m.message.sender_id,
@@ -2444,7 +2496,7 @@ impl Core {
         ];
         ops.extend(entries.iter().cloned().map(StorageOp::PutOutbox));
         self.ports.storage.apply(&ops)?;
-        self.messages.insert(id.clone(), row);
+        self.remember(row);
         self.outbox.extend(entries);
         self.hub.publish(EngineEvent::MessageAdded {
             conversation,
@@ -2561,17 +2613,26 @@ impl Core {
             self.send_ack(peer, &id, at);
             return;
         }
-        let outcome = self
-            .peers
-            .get_mut(peer)
-            .map(|p| p.files.begin(offer))
-            .unwrap_or(BeginOutcome::Busy);
+        // The same file offered again while it is arriving (the sender's retry timer ran out) is not a new start: say where
+        // we are and carry on. Otherwise start from what an earlier try left (nothing if there is none).
+        let continuing = self.peers.get(peer).is_some_and(|p| p.files.holds(&offer));
+        let outcome = if continuing {
+            BeginOutcome::Ok
+        } else {
+            let held = self.take_partial(&offer);
+            let store = Box::new(filestream::SealedChunks::new(self.ram_seal.clone(), &id));
+            self.peers
+                .get_mut(peer)
+                .map(|p| p.files.begin_with(offer, held, store))
+                .unwrap_or(BeginOutcome::Busy)
+        };
         match outcome {
             BeginOutcome::Ok => {
                 let conversation = match group {
                     None => Some(ConversationId::Direct(who.clone())),
                     Some(g) => GroupId::new(g.as_str()).ok().map(ConversationId::Group),
                 };
+                self.send_have(peer, &id);
                 if let Some(conversation) = conversation {
                     self.hub.publish(EngineEvent::FileIncoming {
                         conversation,
@@ -2605,6 +2666,15 @@ impl Core {
         };
         match result {
             AssembleResult::More => {
+                let next = self.peers.get(peer).and_then(|p| p.files.next_index(&id));
+                if let Some(n) = next {
+                    if n % privcord_domain::limits::FILE_ACK_EVERY == 0 {
+                        self.send_ack_progress(peer, &id, n);
+                    }
+                    if n % resume::PART_EVERY == 0 {
+                        self.save_partial(peer, &id);
+                    }
+                }
                 let fraction = self
                     .peers
                     .get(peer)
@@ -2619,10 +2689,12 @@ impl Core {
             }
             AssembleResult::Failed(reason) => {
                 self.finish_progress(&id);
+                self.drop_partial(&id);
                 self.decline(peer, &id, reason);
             }
             AssembleResult::Done { offer, bytes } => {
                 self.finish_progress(&id);
+                self.drop_partial(&id);
                 self.store_received_file(peer, *offer, bytes);
             }
         }
@@ -2674,7 +2746,7 @@ impl Core {
         if self.ports.storage.apply(&ops).is_err() {
             return;
         }
-        self.messages.insert(message.message_id.clone(), row);
+        self.remember(row);
         self.hub.publish(EngineEvent::MessageAdded {
             conversation: conversation.clone(),
             message_id: message.message_id.clone(),
@@ -2830,7 +2902,7 @@ impl Core {
         self.ports
             .storage
             .apply(&[StorageOp::InsertMessage(row.clone())])?;
-        self.messages.insert(id.clone(), row);
+        self.remember(row);
         self.hub.publish(EngineEvent::MessageAdded {
             conversation,
             message_id: id.clone(),
@@ -2966,7 +3038,7 @@ impl Core {
         {
             return;
         }
-        self.messages.insert(id.clone(), row);
+        self.remember(row);
         self.hub.publish(EngineEvent::MessageAdded {
             conversation: conversation.clone(),
             message_id: id,
@@ -2983,6 +3055,91 @@ impl Core {
     /* ---------------------------------------------------------------- state */
 
     pub fn snapshot(&self) -> Snapshot {
+        self.snapshot_window(None)
+    }
+
+    /// The snapshot with only the newest `per_chat` messages of each chat, so it stays the same size however long the
+    /// history grows. What was left out is counted in `older` and comes by `messages_before`.
+    pub fn snapshot_recent(&self, per_chat: usize) -> Snapshot {
+        self.snapshot_window(Some(per_chat))
+    }
+
+    /// Up to `limit` messages of a chat that came before `before` (the newest ones when `before` is `None`), oldest
+    /// first.
+    pub fn messages_before(
+        &self,
+        conversation: &ConversationId,
+        before: Option<&MessageId>,
+        limit: usize,
+    ) -> Result<MessagePage, ErrorCode> {
+        let ids = self.messages.chat_ids(conversation);
+        let end = match before {
+            None => ids.len(),
+            Some(id) => ids
+                .iter()
+                .position(|i| i == id)
+                .ok_or(ErrorCode::UnknownMessage)?,
+        };
+        let start = end.saturating_sub(limit);
+        let messages: Vec<ChatMessage> = self
+            .rows_for(ids.get(start..end).unwrap_or_default())
+            .into_iter()
+            .map(|r| r.message)
+            .collect();
+        let files = messages
+            .iter()
+            .filter(|m| m.kind == MessageKind::File)
+            .filter_map(|m| {
+                let info = self.ports.storage.file_info(&m.message_id).ok().flatten()?;
+                Some((m.message_id.clone(), info))
+            })
+            .collect();
+        let reactions = messages
+            .iter()
+            .filter_map(|m| {
+                let r = self.reactions.get(&m.message_id)?;
+                Some((
+                    m.message_id.clone(),
+                    r.iter().map(|(u, e)| (u.clone(), e.clone())).collect(),
+                ))
+            })
+            .collect();
+        let deleted = messages
+            .iter()
+            .filter(|m| self.deleted.contains(&m.message_id))
+            .map(|m| m.message_id.clone())
+            .collect();
+        let total = match conversation {
+            ConversationId::Group(_) => self.conversation_others(conversation).len(),
+            _ => 1,
+        };
+        let deliveries = messages
+            .iter()
+            .filter_map(|m| {
+                let pending = self
+                    .outbox
+                    .iter()
+                    .filter(|o| o.message_id == m.message_id)
+                    .count();
+                (pending > 0).then(|| DeliveryDetail {
+                    message_id: m.message_id.clone(),
+                    pending,
+                    total,
+                })
+            })
+            .collect();
+        Ok(MessagePage {
+            more: start > 0,
+            own_uid: self.uid.clone(),
+            messages,
+            files,
+            reactions,
+            deleted,
+            deliveries,
+        })
+    }
+
+    fn snapshot_window(&self, window: Option<usize>) -> Snapshot {
         let removals = self.pending_removals();
         // Safety numbers cover the account key, which every device of the account knows.
         let own = self.account.as_ref().map(|(sign, _)| sign);
@@ -3013,30 +3170,15 @@ impl Core {
                 can_message: self.may_start_direct(&c.stored.uid),
             })
             .collect();
-        // Group by chat with a borrowed key; consecutive messages of one chat skip the lookup.
-        let mut lists: Vec<(&ConversationId, Vec<ChatMessage>)> = Vec::new();
-        let mut index: BTreeMap<&ConversationId, usize> = BTreeMap::new();
-        let mut last: Option<usize> = None;
-        for m in self.messages.values() {
-            let slot =
-                match last.filter(|&i| lists.get(i).is_some_and(|(c, _)| *c == &m.conversation)) {
-                    Some(i) => i,
-                    None => *index.entry(&m.conversation).or_insert_with(|| {
-                        lists.push((&m.conversation, Vec::new()));
-                        lists.len() - 1
-                    }),
-                };
-            last = Some(slot);
-            if let Some((_, list)) = lists.get_mut(slot) {
-                list.push(m.message.clone());
+        let mut messages = Vec::new();
+        let mut older = Vec::new();
+        for (conv, ids) in self.messages.by_chat() {
+            let skip = window.map_or(0, |n| ids.len().saturating_sub(n));
+            if skip > 0 {
+                older.push((conv.clone(), skip));
             }
-        }
-        let mut messages = Vec::with_capacity(index.len());
-        for &i in index.values() {
-            if let Some((c, v)) = lists.get_mut(i) {
-                sort_messages(v);
-                messages.push(((*c).clone(), std::mem::take(v)));
-            }
+            let rows = self.rows_for(ids.get(skip..).unwrap_or_default());
+            messages.push((conv, rows.into_iter().map(|r| r.message).collect()));
         }
         let groups = self.groups.as_ref().map_or_else(Vec::new, |g| {
             g.my_groups()
@@ -3074,10 +3216,9 @@ impl Core {
         let (summaries, deliveries) = self.summaries();
         let files: Vec<(MessageId, privcord_ports::FileInfo)> = self
             .messages
-            .values()
-            .filter(|m| m.message.kind == MessageKind::File)
-            .filter_map(|m| {
-                let id = &m.message.message_id;
+            .iter()
+            .filter(|(_, m)| m.kind == MessageKind::File)
+            .filter_map(|(id, _)| {
                 self.ports
                     .storage
                     .file_info(id)
@@ -3146,6 +3287,7 @@ impl Core {
             sync_lost: self.sync_lost(),
             scheduled: self.scheduled(),
             usage,
+            older,
         }
     }
 

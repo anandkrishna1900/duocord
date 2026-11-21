@@ -1,3 +1,4 @@
+import { getSealed, setSealed } from './sealedSettings';
 import { DEFAULT_PALETTE, THEMES, classicTheme, themeById, themeVars } from './themes';
 
 export type ThemeMode = 'system' | 'dark' | 'light';
@@ -27,8 +28,6 @@ export const ACCENTS = [
   { name: 'Rose', value: '#b83a5e' },
   { name: 'Slate', value: '#3e4c5e' },
 ] as const;
-
-const SETTINGS_KEY = 'duochat.settings.v1';
 
 const DEFAULTS: AppSettings = {
   theme: 'system',
@@ -76,11 +75,11 @@ export function parseSettings(raw: string | null): AppSettings {
 }
 
 export function loadSettings(): AppSettings {
-  return parseSettings(localStorage.getItem(SETTINGS_KEY));
+  return parseSettings(getSealed('settings'));
 }
 
 export function saveSettings(settings: AppSettings): void {
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  setSealed('settings', JSON.stringify(settings));
   // The shell shows notifications while the window is closed: it needs these choices.
   void import('./network').then((n) => n.pushNativeConfig({ enabled: settings.notificationsEnabled, previews: settings.notificationPreviews }));
 }

@@ -116,6 +116,36 @@ class RustChatEngine(
     private var refreshJob: Job? = null
     private val refreshRequests = Channel<Unit>(Channel.CONFLATED)
     private var last: SnapshotDto? = null
+
+    /** Per chat: how many messages before the newest ones the person has asked to see (fetched again on every refresh). */
+    private val extra = java.util.concurrent.ConcurrentHashMap<String, Int>()
+
+    /**
+     * The engine's snapshot with only the newest [WINDOW] messages of each chat, so a long history costs no more to show
+     * than a short one, plus the older pages the person asked for in front of them.
+     */
+    private fun windowedSnapshot(e: PrivcordEngine): SnapshotDto {
+        val s = e.snapshotRecent(WINDOW.toUInt())
+        if (extra.isEmpty()) return s
+        val older = s.older.toMutableList()
+        val conversations = s.conversations.map { conv ->
+            val limit = extra[conv.id] ?: return@map conv
+            val first = conv.messages.firstOrNull()?.id ?: return@map conv
+            val page = runCatching { e.messagesBefore(conv.id, first, limit.toUInt()) }.getOrNull() ?: return@map conv
+            val at = older.indexOfFirst { it.conversation == conv.id }
+            if (at >= 0) {
+                val left = older[at].count.toLong() - page.messages.size
+                older[at] = older[at].copy(count = if (page.more) maxOf(left, 1L).toULong() else 0uL)
+            }
+            conv.copy(messages = page.messages + conv.messages)
+        }
+        return s.copy(conversations = conversations, older = older)
+    }
+
+    override suspend fun loadEarlier(conversationId: String) {
+        extra[conversationId] = (extra[conversationId] ?: 0) + EARLIER_PAGE
+        refreshNow()
+    }
     private var prefs: com.duochat.app.data.Prefs = com.duochat.app.data.Prefs()
     private var meshHops: Map<String, Int> = emptyMap()
     private var zoneSent: Int? = null
@@ -333,7 +363,7 @@ class RustChatEngine(
                 while (System.currentTimeMillis() < deadline && !stopped) {
                     val online = hubs.values.firstOrNull { it.status() == SignalingStatus.ONLINE }
                     if (online != null && runCatching { online.put(mailbox, decoded, wire, ttlSec.toInt()) }.isSuccess) {
-                        android.util.Log.i("RustEngine", "put $wire to ${mailbox.take(8)} ok")
+                        android.util.Log.i("RustEngine", "put $wire ok")
                         break
                     }
                     delay(PUT_RETRY_MS)
@@ -360,7 +390,7 @@ class RustChatEngine(
             migrateLegacyMutes(started)
             sendZone(started)
             loadPrefs(started)
-            val snapshot = withContext(Dispatchers.IO) { started.snapshot() }
+            val snapshot = withContext(Dispatchers.IO) { windowedSnapshot(started) }
             last = snapshot
             if (snapshot.ownUid == null) {
                 _state.update { it.copy(phase = EnginePhase.NEEDS_IDENTITY) }
@@ -497,7 +527,7 @@ class RustChatEngine(
     private suspend fun refreshNow() {
         val e = engine ?: return
         withContext(Dispatchers.IO) { sendZone(e); loadPrefs(e) }
-        val snapshot = runCatching { withContext(Dispatchers.IO) { e.snapshot() } }.getOrNull() ?: return
+        val snapshot = runCatching { withContext(Dispatchers.IO) { windowedSnapshot(e) } }.getOrNull() ?: return
         last = snapshot
         if (snapshot.ownUid != null) {
             _state.update { it.copy(phase = EnginePhase.READY, uid = snapshot.ownUid!!) }
@@ -510,11 +540,11 @@ class RustChatEngine(
     private suspend fun onEvent(event: EventDto) {
         when (event) {
             is EventDto.DialRequested -> {
-                android.util.Log.i("RustEngine", "dial ${event.peer.take(8)} initiator=${event.initiator} signaling=${hubStatus()}")
+                android.util.Log.i("RustEngine", "dial initiator=${event.initiator} signaling=${hubStatus()}")
                 dial(event.peer, event.initiator)
             }
             is EventDto.SignalReceived -> {
-                android.util.Log.i("RustEngine", "signal ${event.kind} from ${event.peer.take(8)}")
+                android.util.Log.i("RustEngine", "signal ${event.kind}")
                 onSignal(event.peer, event.kind, event.sdp)
             }
             is EventDto.MessageAdded -> {
@@ -531,7 +561,7 @@ class RustChatEngine(
             // even when the app is in the background (the request screen opens with the app).
             is EventDto.InviteRequest -> {
                 val e = engine
-                val name = e?.let { runCatching { withContext(Dispatchers.IO) { it.snapshot() } }.getOrNull() }
+                val name = e?.let { runCatching { withContext(Dispatchers.IO) { it.snapshotRecent(0u) } }.getOrNull() }
                     ?.requests?.firstOrNull { it.uid == event.uid }?.name ?: "Someone"
                 onNotify(IncomingNotice("request-${event.uid}", "", "$name wants to add you", "Open PrivCord to accept.", isMessage = false))
                 requestRefresh()
@@ -1037,6 +1067,7 @@ class RustChatEngine(
         _state.update {
             it.copy(
                 prefs = prefs, meshHops = meshHops, contacts = contacts, groups = groups, chats = summaries, messages = shaped,
+                earlier = s.older.filter { o -> o.count > 0uL }.associate { o -> o.conversation to o.count.toInt() },
                 queuedCount = s.queued.toInt(), groupOnly = groupOnly,
                 channels = s.channels.map { name ->
                     ChannelView("chan:$name", name, s.conversations.firstOrNull { c -> c.id == "chan:$name" }?.unread?.toInt() ?: 0, online)
@@ -1090,7 +1121,7 @@ class RustChatEngine(
         is uniffi.privcord_ffi.FfiException.InvalidCard -> "That is not a valid invite. Check the words, or ask your friend to share it again."
         is uniffi.privcord_ffi.FfiException.OwnCard -> "That is your own invite. Send it to a friend instead."
         is uniffi.privcord_ffi.FfiException.UnknownContact -> "Unknown friend."
-        is uniffi.privcord_ffi.FfiException.BadFile -> "That file cannot be sent. It must not be empty and can be 8 MB at most."
+        is uniffi.privcord_ffi.FfiException.BadFile -> "That file cannot be sent. It must not be empty and can be 50 MB at most."
         is uniffi.privcord_ffi.FfiException.Busy -> "The app is busy. Try again in a moment."
         is uniffi.privcord_ffi.FfiException.GroupFull -> "That group is full (10 members at most)."
         is uniffi.privcord_ffi.FfiException.NoSuchGroup -> "That group no longer exists."
@@ -1352,6 +1383,8 @@ class RustChatEngine(
 
     override suspend fun clearLocalData() {
         call { wipeEverything() }
+        // Nothing is left to check for: the periodic check stays off until the app is opened again.
+        com.duochat.app.notifications.BackgroundCheck.cancel(app)
         secure.deleteIdentity()
         // The database (erased in place above) and its Keystore key go too. It must be closed first, so this engine
         // stops here and waits for the close; the caller starts a fresh one. (A delayed delete on the engine's scope was
@@ -1542,5 +1575,9 @@ class RustChatEngine(
         const val MANUAL_PREFIX = "RUST1:"
         const val BLE_SEARCH_MS = 30_000L
         const val BLE_RETRY_MS = 60_000L
+
+        /** Messages of each chat in a snapshot; "Load earlier" adds this many more. */
+        const val WINDOW = 200
+        const val EARLIER_PAGE = 100
     }
 }

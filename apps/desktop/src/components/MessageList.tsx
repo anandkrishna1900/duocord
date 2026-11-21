@@ -140,6 +140,9 @@ function AudioPlayer({ src, blob, label, id }: { src: string; blob: Blob; label:
   );
 }
 
+/** Previews of files up to this size load by themselves; a bigger one waits until it is asked for (it is the whole file). */
+const AUTO_PREVIEW_BYTES = 8 * 1024 * 1024;
+
 /** A received or sent file: a preview for safe image types, a card with Save for everything else. */
 function FileBubble({ message, loadFile }: { message: UiMessage; loadFile: LoadFile }) {
   const meta = message.file;
@@ -151,9 +154,10 @@ function FileBubble({ message, loadFile }: { message: UiMessage; loadFile: LoadF
   const isVideo = !!meta && isInlineVideo(meta.mime);
   const isAudio = !!meta && isInlineAudio(meta.mime);
   const preview = isImage || isVideo || isAudio;
+  const [wanted, setWanted] = useState(!!meta && meta.size <= AUTO_PREVIEW_BYTES);
 
   useEffect(() => {
-    if (!preview) return;
+    if (!preview || !wanted) return;
     let revoked = false;
     let made: string | null = null;
     void loadFile(message.messageId).then((f) => {
@@ -170,7 +174,7 @@ function FileBubble({ message, loadFile }: { message: UiMessage; loadFile: LoadF
       revoked = true;
       if (made) URL.revokeObjectURL(made);
     };
-  }, [message.messageId, preview, loadFile]);
+  }, [message.messageId, preview, wanted, loadFile]);
 
   async function save() {
     const f = await loadFile(message.messageId);
@@ -213,6 +217,11 @@ function FileBubble({ message, loadFile }: { message: UiMessage; loadFile: LoadF
       ) : null}
       {isVideo && url ? <video className="file-video" src={url} controls preload="metadata" playsInline /> : null}
       {isAudio && url && blob ? <AudioPlayer id={message.messageId} src={url} blob={blob} label={meta.name.startsWith('voice-note') ? 'Voice note' : meta.name} /> : null}
+      {preview && !wanted && !missing ? (
+        <button type="button" className="button secondary small" onClick={() => setWanted(true)}>
+          Load preview ({formatBytes(meta.size)})
+        </button>
+      ) : null}
       <div className="file-card">
         <span className="file-icon" aria-hidden="true">
           <FileIcon size={22} />
@@ -296,8 +305,13 @@ export function MessageList({
   onDetails,
   focusId,
   onFocused,
+  earlier = 0,
+  onLoadEarlier,
 }: {
   convId: string;
+  /** Older messages of this chat that are not loaded yet, and a way to load another page of them. */
+  earlier?: number;
+  onLoadEarlier?: () => Promise<void>;
   /** Message to scroll to and flash (from search). */
   focusId?: string | null;
   onFocused?: () => void;
@@ -360,6 +374,23 @@ export function MessageList({
     const copied = await copyText(text);
     setCopyStatus(copied ? 'copied' : 'failed');
     window.setTimeout(() => setCopyStatus(null), 1800);
+  }
+
+  const [loadingEarlier, setLoadingEarlier] = useState(false);
+  /** Load a page of older messages and keep what the person is reading where it was. */
+  async function loadEarlier() {
+    const element = scrollRef.current;
+    if (!onLoadEarlier || !element || loadingEarlier) return;
+    const fromBottom = element.scrollHeight - element.scrollTop;
+    setLoadingEarlier(true);
+    try {
+      await onLoadEarlier();
+    } finally {
+      setLoadingEarlier(false);
+      requestAnimationFrame(() => {
+        element.scrollTop = element.scrollHeight - fromBottom;
+      });
+    }
   }
 
   function toBottom(behavior: ScrollBehavior = 'auto') {
@@ -435,6 +466,11 @@ export function MessageList({
   return (
     <div className="message-scroll" ref={scrollRef} onScroll={onScroll} onWheel={onWheel} onTouchMove={() => { if (scrollRef.current && scrollRef.current.scrollHeight - scrollRef.current.scrollTop - scrollRef.current.clientHeight > 120) pinnedRef.current = false; }}>
       <div className="message-inner" ref={innerRef}>
+        {earlier > 0 && onLoadEarlier ? (
+          <button type="button" className="load-earlier" disabled={loadingEarlier} onClick={() => void loadEarlier()}>
+            {loadingEarlier ? 'Loading…' : `Load earlier messages (${earlier})`}
+          </button>
+        ) : null}
         {messages.map((message, index) => {
           const day = formatDay(message.clientCreatedAt);
           const showDay = day !== lastDay;

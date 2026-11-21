@@ -171,6 +171,7 @@ fun ChatScreen(
     onLeaveChannel: () -> Unit,
     onMuteSender: (String) -> Unit,
     onDeleteMessage: (String, Boolean) -> Unit = { _, _ -> },
+    onLoadEarlier: () -> Unit = {},
     onReact: (String, String) -> Unit = { _, _ -> },
     onEnableStoreForward: () -> Unit = {},
     onOpenConnectionSettings: () -> Unit = {},
@@ -439,6 +440,8 @@ fun ChatScreen(
                 onRetry = onRetry,
                 onReply = { replyingTo = it },
                 onDelete = onDeleteMessage,
+                earlier = state.earlier[conversationId] ?: 0,
+                onLoadEarlier = onLoadEarlier,
                 onDetails = { detailsFor = it },
                 onReact = onReact,
                 loadFile = loadFile,
@@ -520,6 +523,8 @@ private fun MessageList(
     onReact: (String, String) -> Unit,
     loadFile: suspend (String) -> Pair<FileMeta, ByteArray>?,
     transfers: Map<String, Float>,
+    earlier: Int = 0,
+    onLoadEarlier: () -> Unit = {},
     convId: String = "",
     canReply: Boolean = true,
     onMute: ((String) -> Unit)? = null,
@@ -652,6 +657,15 @@ private fun MessageList(
                             }
                         },
                     )
+                }
+            }
+            // The list runs from the bottom, so the last item is the top of the chat.
+            if (earlier > 0) {
+                item(key = "load-earlier") {
+                    androidx.compose.material3.TextButton(
+                        onClick = onLoadEarlier,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Load earlier messages ($earlier)") }
                 }
             }
         }
@@ -944,35 +958,29 @@ private fun FileContent(
     val isImage = isInlineImage(meta.mime)
     val isVideo = isInlineVideo(meta.mime)
     val isAudio = com.duochat.app.data.isInlineAudio(meta.mime)
+    // A big photo, video or recording is the whole file in memory: it loads when asked for, not as it scrolls past.
+    val bigMedia = (isImage || isVideo || isAudio) && meta.size > AUTO_PREVIEW_BYTES
+    var wanted by remember(message.messageId) { mutableStateOf(!bigMedia) }
     // null = still loading; a failed decode falls back to the file card.
     var imageFailed by remember(message.messageId) { mutableStateOf(false) }
-    val image by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, message.messageId, arrived) {
-        if (!isImage || !arrived) return@produceState
+    val image by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, message.messageId, arrived, wanted) {
+        if (!isImage || !arrived || !wanted) return@produceState
         value = withContext(Dispatchers.IO) { loadFile(message.messageId)?.second?.let { decodeUpright(it, 1200) } }
         if (value == null) imageFailed = true
     }
-    // Video: decrypted to a short-lived cache file (the player needs a path), shown with a poster frame and
-    // played in place when tapped. The file is deleted when the bubble leaves the screen.
-    val videoFile by produceState<java.io.File?>(null, message.messageId, arrived) {
-        if (!isVideo || !arrived) return@produceState
-        value = withContext(Dispatchers.IO) {
-            val bytes = loadFile(message.messageId)?.second ?: return@withContext null
-            java.io.File(context.cacheDir, "preview-${message.messageId}").also { it.writeBytes(bytes) }
-        }
+    // Video: read from the encrypted database into memory and played from there, with a poster frame, in place when
+    // tapped. Nothing decrypted is written to the phone's storage; the bytes go when the bubble leaves the screen.
+    val videoBytes by produceState<ByteArray?>(null, message.messageId, arrived, wanted) {
+        if (!isVideo || !arrived || !wanted) return@produceState
+        value = withContext(Dispatchers.IO) { loadFile(message.messageId)?.second }
     }
-    // Capture the file this effect is for: reading `videoFile` inside onDispose would see the NEW file when the key
-    // changes (null -> file) and delete the preview the moment it was written.
-    androidx.compose.runtime.DisposableEffect(videoFile) {
-        val f = videoFile
-        onDispose { f?.delete() }
-    }
-    val poster by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, videoFile) {
-        val f = videoFile ?: return@produceState
+    val poster by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, videoBytes) {
+        val f = videoBytes ?: return@produceState
         value = withContext(Dispatchers.IO) {
             runCatching {
                 val r = android.media.MediaMetadataRetriever()
                 try {
-                    r.setDataSource(f.path)
+                    r.setDataSource(BytesMediaDataSource(f))
                     r.getFrameAtTime(0)?.asImageBitmap()
                 } finally {
                     r.release()
@@ -984,7 +992,7 @@ private fun FileContent(
     val mediaShape = RoundedCornerShape(12.dp)
     Column {
         when {
-            isImage && !imageFailed -> {
+            isImage && !imageFailed && wanted -> {
                 // Space is held while the photo arrives or decodes, so the chat does not jump when it appears.
                 androidx.compose.animation.AnimatedContent(
                     targetState = image,
@@ -1006,21 +1014,24 @@ private fun FileContent(
                     }
                 }
             }
-            isVideo -> Box(
+            isVideo && wanted -> Box(
                 Modifier.fillMaxWidth().heightIn(min = 140.dp, max = 280.dp).clip(mediaShape).background(Color.Black)
-                    .combinedClickable(onClick = { if (videoFile != null) playing = true }, onLongClick = onLongPress),
+                    .combinedClickable(onClick = { if (videoBytes != null) playing = true }, onLongClick = onLongPress),
                 contentAlignment = Alignment.Center,
             ) {
-                val file = videoFile
+                val file = videoBytes
                 if (playing && file != null) {
                     androidx.compose.ui.viewinterop.AndroidView(
                         factory = { c ->
-                            android.widget.VideoView(c).apply {
-                                setMediaController(android.widget.MediaController(c).also { it.setAnchorView(this) })
-                                setVideoPath(file.path)
-                                setOnPreparedListener { start() }
+                            androidx.media3.ui.PlayerView(c).apply {
+                                player = androidx.media3.exoplayer.ExoPlayer.Builder(c).build().also { p ->
+                                    p.setMediaSource(memoryMediaSource(file))
+                                    p.prepare()
+                                    p.playWhenReady = true
+                                }
                             }
                         },
+                        onRelease = { it.player?.release() },
                         modifier = Modifier.fillMaxWidth().heightIn(min = 140.dp, max = 280.dp),
                     )
                 } else {
@@ -1031,7 +1042,7 @@ private fun FileContent(
                     }
                 }
             }
-            isAudio -> VoiceNote(message.messageId, arrived, meta.size, color, loadFile)
+            isAudio && wanted -> VoiceNote(message.messageId, arrived, meta.size, color, loadFile)
             else -> Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.clip(RoundedCornerShape(10.dp))
@@ -1047,6 +1058,9 @@ private fun FileContent(
                 Spacer(Modifier.width(8.dp))
                 Icon(Icons.Filled.Download, contentDescription = null, tint = color.copy(alpha = 0.8f), modifier = Modifier.size(20.dp))
             }
+        }
+        if (bigMedia && !wanted) {
+            androidx.compose.material3.TextButton(onClick = { wanted = true }) { Text("Load preview (${formatBytes(meta.size)})") }
         }
         if (progress != null) {
             val percent = (progress * 100).toInt().coerceIn(0, 100)
@@ -1394,7 +1408,7 @@ private fun Composer(
                 // The clip sits centred on the first line (a one-line field is 56 dp tall) and stays there as text grows.
                 if (!isChannel) Box(Modifier.height(56.dp), contentAlignment = Alignment.Center) {
                     IconButton(onClick = { picker.launch("*/*") }, modifier = Modifier.size(48.dp)) {
-                        Icon(Icons.Filled.AttachFile, contentDescription = "Send a file (up to 8 MB)", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(Icons.Filled.AttachFile, contentDescription = "Send a file (up to 50 MB)", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 androidx.compose.material3.TextField(
@@ -1544,7 +1558,7 @@ fun avatarHue(seed: String): Int {
 
 private class PickedFile(val name: String, val mime: String, val bytes: ByteArray)
 
-/** Reads a file the user picked, refusing anything over the 8 MB limit before it is loaded into memory. */
+/** Reads a file the user picked, refusing anything over the 50 MB limit before it is loaded into memory. */
 private fun readPicked(context: android.content.Context, uri: Uri): PickedFile {
     var name = "file"
     var size = -1L
@@ -1558,17 +1572,33 @@ private fun readPicked(context: android.content.Context, uri: Uri): PickedFile {
     // Photos are shrunk before sending, so a big original may be read; anything else must fit as it is.
     val limit = if (isShrinkable(type)) PHOTO_READ_LIMIT else MAX_FILE_BYTES.toLong()
     if (size > limit) throw IllegalArgumentException("Files can be at most ${formatBytes(MAX_FILE_BYTES)}.")
-    val bytes = context.contentResolver.openInputStream(uri)?.use { input ->
-        val out = java.io.ByteArrayOutputStream()
-        val buffer = ByteArray(64 * 1024)
-        while (true) {
-            val n = input.read(buffer)
-            if (n < 0) break
-            out.write(buffer, 0, n)
-            if (out.size() > limit) throw IllegalArgumentException("Files can be at most ${formatBytes(MAX_FILE_BYTES)}.")
-        }
-        out.toByteArray()
-    } ?: throw IllegalStateException("Could not open that file.")
+    val bytes = try {
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            if (size in 1..limit) {
+                // The size is known: one buffer of exactly that size, so a big file is never copied while it grows.
+                val buf = ByteArray(size.toInt())
+                var off = 0
+                while (off < buf.size) {
+                    val n = input.read(buf, off, buf.size - off)
+                    if (n < 0) break
+                    off += n
+                }
+                if (off == buf.size) buf else buf.copyOf(off)
+            } else {
+                val out = java.io.ByteArrayOutputStream()
+                val buffer = ByteArray(64 * 1024)
+                while (true) {
+                    val n = input.read(buffer)
+                    if (n < 0) break
+                    out.write(buffer, 0, n)
+                    if (out.size() > limit) throw IllegalArgumentException("Files can be at most ${formatBytes(MAX_FILE_BYTES)}.")
+                }
+                out.toByteArray()
+            }
+        } ?: throw IllegalStateException("Could not open that file.")
+    } catch (e: OutOfMemoryError) {
+        throw IllegalStateException("This phone does not have enough free memory to send a file this big. Try a smaller one.")
+    }
     val shrunk = if (isShrinkable(type) && bytes.size > SHRINK_ABOVE) shrinkPhoto(bytes, name) else null
     val picked = shrunk ?: PickedFile(name, type, bytes)
     if (picked.bytes.size > MAX_FILE_BYTES) throw IllegalArgumentException("Files can be at most ${formatBytes(MAX_FILE_BYTES)}.")
@@ -1576,6 +1606,8 @@ private fun readPicked(context: android.content.Context, uri: Uri): PickedFile {
 }
 
 private const val PHOTO_READ_LIMIT = 48L * 1024 * 1024
+/** Photos, videos and recordings up to this size show themselves; a bigger one waits to be asked for. */
+private const val AUTO_PREVIEW_BYTES = 8 * 1024 * 1024
 private const val SHRINK_ABOVE = 1_000_000
 private const val PHOTO_SIDE = 2048
 
@@ -1630,11 +1662,9 @@ private var nowPlaying: java.lang.ref.WeakReference<androidx.media3.exoplayer.Ex
 @Composable
 private fun VoiceNote(messageId: String, arrived: Boolean, size: Int, color: Color, loadFile: suspend (String) -> Pair<FileMeta, ByteArray>?) {
     val context = LocalContext.current
-    val file by produceState<java.io.File?>(null, messageId, arrived) {
-        value = withContext(Dispatchers.IO) {
-            val bytes = loadFile(messageId)?.second ?: return@withContext null
-            java.io.File(context.cacheDir, "audio-$messageId").also { it.writeBytes(bytes) }
-        }
+    // Read from the encrypted database into memory and played from there: nothing decrypted is written to storage.
+    val file by produceState<ByteArray?>(null, messageId, arrived) {
+        value = withContext(Dispatchers.IO) { loadFile(messageId)?.second }
     }
     var player by remember { mutableStateOf<androidx.media3.exoplayer.ExoPlayer?>(null) }
     var isPlaying by remember { mutableStateOf(false) }
@@ -1647,12 +1677,8 @@ private fun VoiceNote(messageId: String, arrived: Boolean, size: Int, color: Col
         if (value == null) value = WaveformDecoder.peaks(f, WAVE_BARS)?.also { waveformCache[messageId] = it }
     }
     androidx.compose.runtime.DisposableEffect(file) {
-        // Capture the file this effect is for. Reading `file` inside onDispose saw the NEW file when the key changed
-        // (null -> file), so the decrypted voice note was deleted the moment it was written: "can't be played".
-        val f = file
         onDispose {
             player?.release(); player = null; isPlaying = false
-            f?.delete()
         }
     }
     // Follows the playhead every frame while playing, so the bar glides instead of stepping.
@@ -1676,7 +1702,7 @@ private fun VoiceNote(messageId: String, arrived: Boolean, size: Int, color: Col
                     Toast.makeText(context, "This voice note can't be played", Toast.LENGTH_SHORT).show()
                 }
             })
-            p.setMediaItem(androidx.media3.common.MediaItem.fromUri(android.net.Uri.fromFile(f)))
+            p.setMediaSource(memoryMediaSource(f))
             p.setPlaybackSpeed(speed)
             p.prepare()
             player = p

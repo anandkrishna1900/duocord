@@ -240,6 +240,8 @@ data class ChatState(
     val chats: List<ChatSummary> = emptyList(),
     /** Messages by conversation id (contact uid or group id), oldest first. */
     val messages: Map<String, List<ChatMessage>> = emptyMap(),
+    /** Conversation id to how many older messages are not loaded yet (the chat opens with its newest ones). */
+    val earlier: Map<String, Int> = emptyMap(),
     val queuedCount: Int = 0,
     val linkCount: Int = 0,
     val error: String? = null,

@@ -14,7 +14,7 @@ const LABEL: &str = "desktop-settings-file/v1";
 
 /// A new random key to keep in the credential store.
 pub fn new_key() -> Option<[u8; 32]> {
-    let mut key = [0u8; 32];
+    let mut key = privcord_crypto::kdf::blank::<32>();
     OsEntropy.fill(&mut key).ok()?;
     Some(key)
 }

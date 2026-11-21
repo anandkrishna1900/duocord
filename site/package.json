@@ -5,7 +5,9 @@
   "type": "module",
   "description": "PrivCord landing page",
   "scripts": {
+    "predev": "node scripts/changelog.mjs",
     "dev": "vite",
+    "prebuild": "node scripts/changelog.mjs",
     "build": "vite build && node scripts/pages.mjs",
     "preview": "vite preview"
   },

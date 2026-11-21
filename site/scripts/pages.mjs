@@ -8,6 +8,7 @@ const PAGES = {
   architecture: ['Architecture: how PrivCord is built', 'An interactive map of PrivCord: the shared Rust engine, ports and adapters, how a message travels, the crates, the steps taken and the design decisions.'],
   screens: ['Screens: PrivCord', 'Real screenshots of PrivCord on Windows and Android.'],
   compare: ['How PrivCord compares', 'PrivCord next to Signal, Session and Briar: accounts, servers, Bluetooth and audits.'],
+  changelog: ['Changelog: what changed in PrivCord', 'Every change to PrivCord, newest first, with the full history. Rebuilt automatically after each merge.'],
   faq: ['Questions people ask: PrivCord', 'Accounts, servers, offline use, platforms, lost phones, licence and audits.'],
   download: ['Get PrivCord for Windows and Android', 'Download PrivCord for Windows or Android. Free.'],
   donate: ['Support PrivCord: donate', 'PrivCord is free, with no ads and no tracking. Donate with PayPal if it is useful to you.'],

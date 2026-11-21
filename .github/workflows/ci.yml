@@ -5,9 +5,9 @@ name: CI
 on:
   push:
     branches: [main]
-    paths-ignore: ['site/**', '*.md', '.gitignore', '.github/workflows/pages.yml']
+    paths-ignore: ['site/**', '*.md', '.gitignore', '.github/workflows/pages.yml', '.github/workflows/test-builds.yml']
   pull_request:
-    paths-ignore: ['site/**', '*.md', '.gitignore', '.github/workflows/pages.yml']
+    paths-ignore: ['site/**', '*.md', '.gitignore', '.github/workflows/pages.yml', '.github/workflows/test-builds.yml']
 
 permissions:
   contents: read

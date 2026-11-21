@@ -36,18 +36,25 @@ jobs:
       # Every build is newer than the last (the updater needs that). With the update-signing key (a repository secret)
       # the build also makes the signed update files; without it, it is only an installer.
       - name: Build the installer
-        shell: bash
+        # PowerShell, not bash: Git Bash puts Git's own Perl first, and the OpenSSL inside the encrypted database library
+        # (built from source) needs the runner's Perl.
+        shell: pwsh
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
-            echo '{"version":"0.1.${{ github.run_number }}","bundle":{"createUpdaterArtifacts":true}}' > apps/desktop/ci-version.conf.json
-          else
-            echo '{"version":"0.1.${{ github.run_number }}"}' > apps/desktop/ci-version.conf.json
-          fi
+          $config = @{ version = "0.1.${{ github.run_number }}" }
+          if ($env:TAURI_SIGNING_PRIVATE_KEY) { $config.bundle = @{ createUpdaterArtifacts = $true } }
+          $config | ConvertTo-Json -Depth 5 | Set-Content -Path apps/desktop/ci-version.conf.json -Encoding utf8
           # Call the workspace directly: the root script forwards arguments to a second npm, which would take --config itself.
-          npm --workspace @duochat/desktop run tauri:build -- --config ci-version.conf.json
+          # Tauri downloads its NSIS packager from github.com at the end; that has returned HTTP 504 before, so retry.
+          for ($i = 1; $i -le 3; $i++) {
+            npm --workspace @duochat/desktop run tauri:build -- --config ci-version.conf.json
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            Write-Host "tauri build failed (attempt $i of 3); retrying in 60 s"
+            Start-Sleep -Seconds 60
+          }
+          exit 1
       - uses: actions/upload-artifact@v7
         with:
           name: duochat-windows-unsigned

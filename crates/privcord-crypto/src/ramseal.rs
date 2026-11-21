@@ -6,14 +6,15 @@
 //! exists only for the moment something uses it. It does not defend against someone who can read this running process
 //! (the key is in it too), and it is not a way to store anything: the key dies with the process.
 
-use crate::{aead, error::CryptoError, rng::Entropy};
-use std::sync::atomic::{AtomicU64, Ordering};
+use crate::{
+    aead,
+    error::CryptoError,
+    rng::{Entropy, OsEntropy},
+};
 use zeroize::Zeroizing;
 
 pub struct RamSeal {
     key: Zeroizing<[u8; 32]>,
-    /// Every seal under this key takes the next number, so no two share a nonce.
-    counter: AtomicU64,
 }
 
 impl std::fmt::Debug for RamSeal {
@@ -26,22 +27,14 @@ impl RamSeal {
     pub fn new(entropy: &mut dyn Entropy) -> Result<Self, CryptoError> {
         let mut key = Zeroizing::new([0u8; 32]);
         entropy.fill(&mut *key)?;
-        Ok(Self {
-            key,
-            counter: AtomicU64::new(0),
-        })
-    }
-
-    fn nonce(&self) -> [u8; aead::IV_BYTES] {
-        let n = self.counter.fetch_add(1, Ordering::SeqCst);
-        let mut iv = [0u8; aead::IV_BYTES];
-        iv[4..].copy_from_slice(&n.to_be_bytes());
-        iv
+        Ok(Self { key })
     }
 
     /// The nonce, then the ciphertext and tag.
     pub fn seal(&self, label: &str, plaintext: &[u8]) -> Result<Vec<u8>, CryptoError> {
-        let iv = self.nonce();
+        // A fresh random 96-bit nonce for every seal (the key lives for one run, so a repeat is out of reach).
+        let mut iv = [0u8; aead::IV_BYTES];
+        OsEntropy.fill(&mut iv)?;
         let ct = aead::encrypt(&*self.key, &iv, plaintext, label.as_bytes())?;
         let mut out = Vec::with_capacity(iv.len() + ct.len());
         out.extend_from_slice(&iv);

@@ -363,7 +363,7 @@ class RustChatEngine(
                 while (System.currentTimeMillis() < deadline && !stopped) {
                     val online = hubs.values.firstOrNull { it.status() == SignalingStatus.ONLINE }
                     if (online != null && runCatching { online.put(mailbox, decoded, wire, ttlSec.toInt()) }.isSuccess) {
-                        android.util.Log.i("RustEngine", "put $wire to ${mailbox.take(8)} ok")
+                        android.util.Log.i("RustEngine", "put $wire ok")
                         break
                     }
                     delay(PUT_RETRY_MS)
@@ -540,11 +540,11 @@ class RustChatEngine(
     private suspend fun onEvent(event: EventDto) {
         when (event) {
             is EventDto.DialRequested -> {
-                android.util.Log.i("RustEngine", "dial ${event.peer.take(8)} initiator=${event.initiator} signaling=${hubStatus()}")
+                android.util.Log.i("RustEngine", "dial initiator=${event.initiator} signaling=${hubStatus()}")
                 dial(event.peer, event.initiator)
             }
             is EventDto.SignalReceived -> {
-                android.util.Log.i("RustEngine", "signal ${event.kind} from ${event.peer.take(8)}")
+                android.util.Log.i("RustEngine", "signal ${event.kind}")
                 onSignal(event.peer, event.kind, event.sdp)
             }
             is EventDto.MessageAdded -> {

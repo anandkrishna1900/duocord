@@ -118,7 +118,7 @@ impl Core {
         let settled = latest.is_none() || replica.base().map(Snapshot::id) == latest;
         if maker.as_deref() == Some(me.as_str())
             && settled
-            && replica.entries().count() >= SNAPSHOT_EVERY
+            && replica.entry_count() >= SNAPSHOT_EVERY
         {
             self.make_snapshot();
         }
@@ -173,9 +173,7 @@ impl Core {
     /// How many entries the log holds in memory (tests).
     #[doc(hidden)]
     pub fn sync_log_len(&self) -> usize {
-        self.sync
-            .as_ref()
-            .map_or(0, |s| s.replica().entries().count())
+        self.sync.as_ref().map_or(0, |s| s.replica().entry_count())
     }
 
     /// Makes a snapshot now (tests; normally made when the log has grown).

@@ -1576,7 +1576,7 @@ impl Core {
                     muted = self
                         .sync
                         .as_ref()
-                        .and_then(|s| s.replica.state().setting(SETTING_MUTED).cloned());
+                        .and_then(|s| s.replica.state().setting(SETTING_MUTED));
                 }
                 _ => {}
             }
@@ -1723,7 +1723,7 @@ impl Core {
                 if let Some(v) = s.replica.state().setting(key) {
                     ops.push(StorageOp::SetKv {
                         key: format!("{key}.v1"),
-                        value: serde_json::to_vec(v).unwrap_or_default(),
+                        value: serde_json::to_vec(&v).unwrap_or_default(),
                     });
                 }
             }

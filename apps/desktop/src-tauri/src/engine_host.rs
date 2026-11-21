@@ -17,7 +17,7 @@
 //! | `privcord://signal-put`        | `{ mailbox, blob, kind, ttlSec }`         | publish the blob to the relays                |
 //! | `privcord://notify`            | `{ conversation, sender, preview, silent }` | show a notification                           |
 
-use privcord_desktop_host::{native_signaling::NativeSignaling, DesktopHost};
+use privcord_desktop_host::{native_signaling::NativeSignaling, sealed_file, DesktopHost};
 use privcord_domain::signaling::PutKind;
 use privcord_ffi::{
     DatabaseKeyRead, NotifierCallbacks, SecureStoreCallbacks, SignalKind, TransportCallbacks,
@@ -31,6 +31,8 @@ const SERVICE: &str = "com.duochat.desktop";
 const IDENTITY_KEY: &str = "engine-identity-v1";
 /// The database encryption key (SQLCipher), separate from the identity.
 const DATABASE_KEY: &str = "engine-database-key-v1";
+/// The key the saved network settings file is encrypted under.
+const NETWORK_FILE_KEY: &str = "network-settings-file-key-v1";
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -145,12 +147,7 @@ pub fn engine_network(
     previews: bool,
 ) -> Result<(), String> {
     let saved = json!({ "network": network, "notify": notify, "previews": previews });
-    if let Some(path) = saved_network_path(&app) {
-        if let Some(dir) = path.parent() {
-            let _ = std::fs::create_dir_all(dir);
-        }
-        std::fs::write(&path, saved.to_string()).map_err(|e| e.to_string())?;
-    }
+    save_network(&app, &saved)?;
     apply_network(&app, &saved);
     // Started at sign-in: the page was only needed to start the engine. Now that the relays are set up, its window
     // goes, and PrivCord sits in the tray with only Rust running.
@@ -169,9 +166,50 @@ pub fn engine_network(
 
 static HIDDEN_START_DONE: AtomicBool = AtomicBool::new(false);
 
+/// The key the saved network settings are encrypted under, in the credential store (made on first use if `create`).
+fn network_file_key(create: bool) -> Option<[u8; 32]> {
+    let entry = keyring::Entry::new(SERVICE, NETWORK_FILE_KEY).ok()?;
+    match entry.get_password() {
+        Ok(text) => unhex(&text)?.try_into().ok(),
+        Err(keyring::Error::NoEntry) if create => {
+            let key = sealed_file::new_key()?;
+            entry.set_password(&hex(&key)).ok()?;
+            Some(key)
+        }
+        Err(_) => None,
+    }
+}
+
+/// Saves the settings encrypted. With no credential store to hold the key nothing is written (and any older plain-text
+/// copy is removed): the page hands the settings over again at every start.
+fn save_network(app: &AppHandle, saved: &Value) -> Result<(), String> {
+    let Some(path) = saved_network_path(app) else {
+        return Ok(());
+    };
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let sealed = network_file_key(true).and_then(|k| sealed_file::seal(&k, saved.to_string().as_bytes()));
+    match sealed {
+        Some(bytes) => std::fs::write(&path, bytes).map_err(|e| e.to_string()),
+        None => {
+            let _ = std::fs::remove_file(&path);
+            Ok(())
+        }
+    }
+}
+
 fn saved_network(app: &AppHandle) -> Option<Value> {
-    let text = std::fs::read_to_string(saved_network_path(app)?).ok()?;
-    serde_json::from_str(&text).ok()
+    let path = saved_network_path(app)?;
+    let bytes = std::fs::read(&path).ok()?;
+    if sealed_file::is_sealed(&bytes) {
+        let plain = sealed_file::open(&network_file_key(false)?, &bytes)?;
+        return serde_json::from_slice(&plain).ok();
+    }
+    // A plain-text file from an older version: use it once, and put it back encrypted (or remove it).
+    let value: Value = serde_json::from_slice(&bytes).ok()?;
+    let _ = save_network(app, &value);
+    Some(value)
 }
 
 /// The window is gone (PrivCord stays in the tray): its WebRTC links went with it.

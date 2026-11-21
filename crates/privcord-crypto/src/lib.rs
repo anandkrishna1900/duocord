@@ -34,6 +34,7 @@ pub mod ramseal;
 pub mod rng;
 pub mod safety;
 pub mod seal;
+pub mod sealed;
 pub mod secure_channel;
 pub mod selfbox;
 pub mod synclog;

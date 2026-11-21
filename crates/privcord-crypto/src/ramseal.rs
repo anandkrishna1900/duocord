@@ -23,6 +23,26 @@ impl std::fmt::Debug for RamSeal {
     }
 }
 
+/// AES-256-GCM under `key` with a fresh random nonce: the nonce, then the ciphertext and tag. `label` is bound in.
+pub fn seal_with_key(key: &[u8; 32], label: &str, plaintext: &[u8]) -> Result<Vec<u8>, CryptoError> {
+    // A fresh random 96-bit nonce for every seal.
+    let mut iv = crate::kdf::blank::<{ aead::IV_BYTES }>();
+    OsEntropy.fill(&mut iv)?;
+    let ct = aead::encrypt(key, &iv, plaintext, label.as_bytes())?;
+    let mut out = Vec::with_capacity(iv.len() + ct.len());
+    out.extend_from_slice(&iv);
+    out.extend_from_slice(&ct);
+    Ok(out)
+}
+
+/// The reverse of [`seal_with_key`]; `None` for another key, another label or a changed byte.
+pub fn open_with_key(key: &[u8; 32], label: &str, sealed: &[u8]) -> Option<Zeroizing<Vec<u8>>> {
+    let (iv, ct) = sealed.split_at_checked(aead::IV_BYTES)?;
+    aead::decrypt(key, iv, ct, label.as_bytes())
+        .ok()
+        .map(Zeroizing::new)
+}
+
 impl RamSeal {
     pub fn new(entropy: &mut dyn Entropy) -> Result<Self, CryptoError> {
         let mut key = Zeroizing::new([0u8; 32]);
@@ -32,22 +52,12 @@ impl RamSeal {
 
     /// The nonce, then the ciphertext and tag.
     pub fn seal(&self, label: &str, plaintext: &[u8]) -> Result<Vec<u8>, CryptoError> {
-        // A fresh random 96-bit nonce for every seal (the key lives for one run, so a repeat is out of reach).
-        let mut iv = crate::kdf::blank::<{ aead::IV_BYTES }>();
-        OsEntropy.fill(&mut iv)?;
-        let ct = aead::encrypt(&*self.key, &iv, plaintext, label.as_bytes())?;
-        let mut out = Vec::with_capacity(iv.len() + ct.len());
-        out.extend_from_slice(&iv);
-        out.extend_from_slice(&ct);
-        Ok(out)
+        seal_with_key(&self.key, label, plaintext)
     }
 
     /// `None` for another key, another label or a changed byte. The result is wiped when dropped.
     pub fn open(&self, label: &str, sealed: &[u8]) -> Option<Zeroizing<Vec<u8>>> {
-        let (iv, ct) = sealed.split_at_checked(aead::IV_BYTES)?;
-        aead::decrypt(&*self.key, iv, ct, label.as_bytes())
-            .ok()
-            .map(Zeroizing::new)
+        open_with_key(&self.key, label, sealed)
     }
 }
 

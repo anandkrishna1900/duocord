@@ -14,6 +14,7 @@
 pub mod autobackup;
 pub mod lan;
 pub mod native_signaling;
+pub mod sealed_file;
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use privcord_ffi::{

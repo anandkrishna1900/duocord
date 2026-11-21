@@ -24,6 +24,7 @@ use crate::{
     error::CryptoError,
     identity::{verify_signature, Identity},
     kdf::sha256,
+    sealed::Sealed,
 };
 use privcord_domain::codec;
 use serde::{Deserialize, Serialize};
@@ -241,7 +242,8 @@ pub struct Order {
 struct MessageRec {
     order: Order,
     hash: String,
-    body: Value,
+    /// Sealed in memory (it carries the text); written out as the plain value.
+    body: Sealed<Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -274,27 +276,67 @@ fn put_lww<K: Ord, T>(map: &mut BTreeMap<K, Lww<T>>, key: K, next: Lww<T>) {
     }
 }
 
+/// One group's signed events as canonical text, each sealed in memory, kept apart by a hash of the text. Written out as
+/// the sorted list of texts, so the stored and hashed form is the same as for a plain set.
+#[derive(Debug, Clone, Default)]
+struct GroupEvents(BTreeMap<String, Sealed<String>>);
+
+impl GroupEvents {
+    fn insert(&mut self, text: String) {
+        let key = codec::hex(&sha256(text.as_bytes()));
+        self.0.entry(key).or_insert_with(|| Sealed::new(&text));
+    }
+
+    fn texts(&self) -> Vec<String> {
+        let mut t: Vec<String> = self.0.values().filter_map(Sealed::open).collect();
+        t.sort();
+        t
+    }
+}
+
+impl PartialEq for GroupEvents {
+    fn eq(&self, other: &Self) -> bool {
+        self.texts() == other.texts()
+    }
+}
+
+impl Serialize for GroupEvents {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        self.texts().serialize(s)
+    }
+}
+
+impl<'de> Deserialize<'de> for GroupEvents {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let mut g = GroupEvents::default();
+        for t in BTreeSet::<String>::deserialize(d)? {
+            g.insert(t);
+        }
+        Ok(g)
+    }
+}
+
 /// The merged result of every applied entry.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct State {
     messages: BTreeMap<String, MessageRec>,
-    edits: BTreeMap<String, Lww<String>>,
+    edits: BTreeMap<String, Lww<Sealed<String>>>,
     deleted: BTreeSet<String>,
     hidden: BTreeSet<String>,
     /// Messages read on some device: read everywhere (risk 21).
     seen: BTreeSet<String>,
     /// message → who → their reaction (`None`: taken back).
-    reactions: BTreeMap<String, BTreeMap<String, Lww<Option<String>>>>,
+    reactions: BTreeMap<String, BTreeMap<String, Lww<Sealed<Option<String>>>>>,
     read: BTreeMap<String, Hlc>,
-    settings: BTreeMap<String, Lww<Value>>,
+    settings: BTreeMap<String, Lww<Sealed<Value>>>,
     /// How far our own messages got with the person they went to (1 delivered, 2 read): the furthest any device saw.
     ticks: BTreeMap<String, u8>,
     /// Contacts as last written (by uid).
-    contacts: BTreeMap<String, Lww<Value>>,
+    contacts: BTreeMap<String, Lww<Sealed<Value>>>,
     /// Each group's signed events (canonical text), all of them: groups merge event by event.
-    groups: BTreeMap<String, BTreeSet<String>>,
+    groups: BTreeMap<String, GroupEvents>,
     /// Snapshots announced (by id), and which devices hold each.
-    snapshots: BTreeMap<String, Value>,
+    snapshots: BTreeMap<String, Sealed<Value>>,
     haves: BTreeMap<String, BTreeSet<String>>,
     /// Removals asked for (device → when each request was made), and the requests taken back (`device@at`).
     #[serde(default)]
@@ -379,7 +421,7 @@ impl State {
                 let rec = MessageRec {
                     order,
                     hash: hash.to_owned(),
-                    body: b.clone(),
+                    body: Sealed::new(b),
                 };
                 // The same id written twice (only a broken or hostile device does that): keep one, the same one
                 // everywhere.
@@ -397,7 +439,7 @@ impl State {
                     .and_then(Value::as_str)
                     .ok_or("missing text")?
                     .to_owned();
-                put_lww(&mut self.edits, target, lww(e, text));
+                put_lww(&mut self.edits, target, lww(e, Sealed::new(&text)));
             }
             kind::DELETE => {
                 self.deleted.insert(id_field(b, "target")?.to_owned());
@@ -418,7 +460,11 @@ impl State {
                     Some(Value::Null) | None => None,
                     _ => return Err("bad emoji"),
                 };
-                put_lww(self.reactions.entry(target).or_default(), by, lww(e, emoji));
+                put_lww(
+                    self.reactions.entry(target).or_default(),
+                    by,
+                    lww(e, Sealed::new(&emoji)),
+                );
             }
             kind::READ => {
                 let conv = id_field(b, "conv")?.to_owned();
@@ -440,7 +486,7 @@ impl State {
             }
             kind::CONTACT => {
                 let uid = id_field(b, "uid")?.to_owned();
-                put_lww(&mut self.contacts, uid, lww(e, b.clone()));
+                put_lww(&mut self.contacts, uid, lww(e, Sealed::new(b)));
             }
             kind::GROUP => {
                 let id = id_field(b, "id")?.to_owned();
@@ -455,7 +501,7 @@ impl State {
             }
             kind::SNAPSHOT => {
                 let id = id_field(b, "id")?.to_owned();
-                self.snapshots.insert(id, b.clone());
+                self.snapshots.insert(id, Sealed::new(b));
             }
             kind::HAVE => {
                 let id = id_field(b, "snapshot")?.to_owned();
@@ -476,7 +522,7 @@ impl State {
             kind::SETTING => {
                 let key = id_field(b, "key")?.to_owned();
                 let value = b.get("value").cloned().ok_or("missing value")?;
-                put_lww(&mut self.settings, key, lww(e, value));
+                put_lww(&mut self.settings, key, lww(e, Sealed::new(&value)));
             }
             _ => {}
         }
@@ -490,7 +536,9 @@ impl State {
             .messages
             .iter()
             .filter(|(id, m)| {
-                m.body.get("conv").and_then(Value::as_str) == Some(conv)
+                m.body
+                    .open()
+                    .is_some_and(|b| b.get("conv").and_then(Value::as_str) == Some(conv))
                     && !self.deleted.contains(*id)
                     && !self.hidden.contains(*id)
             })
@@ -502,12 +550,11 @@ impl State {
                 let text = self
                     .edits
                     .get(id)
-                    .map(|e| e.value.clone())
+                    .and_then(|e| e.value.open())
                     .or_else(|| {
                         m.body
-                            .get("text")
-                            .and_then(Value::as_str)
-                            .map(str::to_owned)
+                            .open()
+                            .and_then(|b| b.get("text").and_then(Value::as_str).map(str::to_owned))
                     })
                     .unwrap_or_default();
                 (id.clone(), text)
@@ -524,7 +571,7 @@ impl State {
             .get(message)
             .into_iter()
             .flatten()
-            .filter_map(|(by, r)| r.value.clone().map(|e| (by.clone(), e)))
+            .filter_map(|(by, r)| r.value.open().flatten().map(|e| (by.clone(), e)))
             .collect()
     }
 
@@ -546,7 +593,7 @@ impl State {
             .get(message)
             .into_iter()
             .flatten()
-            .map(|(by, r)| (by.clone(), r.value.clone()))
+            .map(|(by, r)| (by.clone(), r.value.open().flatten()))
             .collect()
     }
 
@@ -569,8 +616,10 @@ impl State {
     }
 
     /// Every message, as written (its body), by id.
-    pub fn message_bodies(&self) -> impl Iterator<Item = (&String, &Value)> {
-        self.messages.iter().map(|(id, m)| (id, &m.body))
+    pub fn message_bodies(&self) -> impl Iterator<Item = (&String, Value)> {
+        self.messages
+            .iter()
+            .filter_map(|(id, m)| m.body.open().map(|b| (id, b)))
     }
 
     pub fn deleted(&self) -> &BTreeSet<String> {
@@ -581,8 +630,8 @@ impl State {
         &self.hidden
     }
 
-    pub fn contacts(&self) -> impl Iterator<Item = &Value> {
-        self.contacts.values().map(|c| &c.value)
+    pub fn contacts(&self) -> impl Iterator<Item = Value> + '_ {
+        self.contacts.values().filter_map(|c| c.value.open())
     }
 
     /// Each group's events, parsed back.
@@ -590,7 +639,8 @@ impl State {
         self.groups.iter().map(|(id, evs)| {
             (
                 id,
-                evs.iter()
+                evs.texts()
+                    .iter()
                     .filter_map(|t| serde_json::from_str(t).ok())
                     .collect(),
             )
@@ -612,8 +662,8 @@ impl State {
     }
 
     /// A snapshot announced in the log, and the devices that hold it.
-    pub fn snapshot_note(&self, id: &str) -> Option<&Value> {
-        self.snapshots.get(id)
+    pub fn snapshot_note(&self, id: &str) -> Option<Value> {
+        self.snapshots.get(id).and_then(Sealed::open)
     }
 
     pub fn holders(&self, id: &str) -> BTreeSet<String> {
@@ -621,23 +671,26 @@ impl State {
     }
 
     /// The newest snapshot announced (by its cut's size), if any.
-    pub fn latest_snapshot(&self) -> Option<(&String, &Value)> {
-        self.snapshots.iter().max_by_key(|(id, v)| {
-            let n: u64 = v
-                .get("upto")
-                .and_then(Value::as_object)
-                .map(|o| o.values().filter_map(Value::as_u64).sum())
-                .unwrap_or(0);
-            (n, (*id).clone())
-        })
+    pub fn latest_snapshot(&self) -> Option<(&String, Value)> {
+        self.snapshots
+            .iter()
+            .filter_map(|(id, v)| v.open().map(|v| (id, v)))
+            .max_by_key(|(id, v)| {
+                let n: u64 = v
+                    .get("upto")
+                    .and_then(Value::as_object)
+                    .map(|o| o.values().filter_map(Value::as_u64).sum())
+                    .unwrap_or(0);
+                (n, (*id).clone())
+            })
     }
 
     pub fn read_upto(&self, conv: &str) -> Option<Hlc> {
         self.read.get(conv).copied()
     }
 
-    pub fn setting(&self, key: &str) -> Option<&Value> {
-        self.settings.get(key).map(|s| &s.value)
+    pub fn setting(&self, key: &str) -> Option<Value> {
+        self.settings.get(key).and_then(|s| s.value.open())
     }
 
     /// A hash of the merged state (risk 10). Text is normalised first, so the same words typed on two platforms
@@ -707,7 +760,50 @@ struct Stream {
     /// The newest wall-clock time of an entry taken from this stream.
     last_wall: i64,
     last_hash: String,
-    pending: BTreeMap<u64, Entry>,
+    pending: BTreeMap<u64, HeldEntry>,
+}
+
+/// An entry as the replica keeps it in memory: the body (the text, the contact, the group events) sealed, the rest as it
+/// is. It reads back as the same `Entry`, so what is sent, signed and hashed does not change.
+#[derive(Debug, Clone, PartialEq)]
+struct HeldEntry {
+    device: String,
+    series: u32,
+    seq: u64,
+    prev: String,
+    hlc: Hlc,
+    kind: String,
+    body: Sealed<Value>,
+    sig: String,
+}
+
+impl HeldEntry {
+    fn new(e: &Entry) -> Self {
+        Self {
+            device: e.device.clone(),
+            series: e.series,
+            seq: e.seq,
+            prev: e.prev.clone(),
+            hlc: e.hlc,
+            kind: e.kind.clone(),
+            body: Sealed::new(&e.body),
+            sig: e.sig.clone(),
+        }
+    }
+
+    /// `None` only if sealing was impossible when it was made (then the entry could not be kept safely).
+    fn open(&self) -> Option<Entry> {
+        Some(Entry {
+            device: self.device.clone(),
+            series: self.series,
+            seq: self.seq,
+            prev: self.prev.clone(),
+            hlc: self.hlc,
+            kind: self.kind.clone(),
+            body: self.body.open()?,
+            sig: self.sig.clone(),
+        })
+    }
 }
 
 /// One device's view of the account's logs and their merged state.
@@ -720,7 +816,7 @@ pub struct Replica {
     streams: BTreeMap<(String, u32), Stream>,
     frozen: BTreeSet<String>,
     // ponytail: the log is kept in memory here; the engine keeps it in its database.
-    log: BTreeMap<(String, u32, u64), Entry>,
+    log: BTreeMap<(String, u32, u64), HeldEntry>,
     hashes: BTreeMap<(String, u32, u64), String>,
     quarantined: Vec<(String, &'static str)>,
     pending_total: usize,
@@ -736,7 +832,7 @@ pub struct Replica {
     /// The account's signing key, for lost markers and corrections.
     account_sign: Option<crate::devices::PublicJwkAlias>,
     /// Corrections in force: entry hash → its replacement body (`Null`: voided).
-    corrections: BTreeMap<String, Value>,
+    corrections: BTreeMap<String, Sealed<Value>>,
     /// Entries given up on by lost markers.
     lost: u64,
 }
@@ -864,7 +960,10 @@ impl Replica {
         self.state.snapshots.contains_key(id)
             || self.streams.values().any(|s| {
                 s.pending.values().any(|e| {
-                    e.kind == kind::SNAPSHOT && e.body.get("id").and_then(Value::as_str) == Some(id)
+                    e.kind == kind::SNAPSHOT
+                        && e.body
+                            .open()
+                            .is_some_and(|b| b.get("id").and_then(Value::as_str) == Some(id))
                 })
             })
     }
@@ -1012,11 +1111,16 @@ impl Replica {
 
     /// Snapshot announcements in the log, applied or still waiting (a new device sees them before it can apply them).
     pub fn snapshot_notes(&self) -> Vec<Value> {
-        let mut out: Vec<Value> = self.state.snapshots.values().cloned().collect();
+        let mut out: Vec<Value> = self
+            .state
+            .snapshots
+            .values()
+            .filter_map(Sealed::open)
+            .collect();
         for s in self.streams.values() {
             for e in s.pending.values() {
                 if e.kind == kind::SNAPSHOT {
-                    out.push(e.body.clone());
+                    out.extend(e.body.open());
                 }
             }
         }
@@ -1028,10 +1132,13 @@ impl Replica {
         loop {
             let stream = self.streams.entry(key.clone()).or_default();
             let next = stream.have + 1;
-            let Some(e) = stream.pending.remove(&next) else {
+            let Some(held) = stream.pending.remove(&next) else {
                 break;
             };
             self.pending_total -= 1;
+            let Some(e) = held.open() else {
+                break;
+            };
             let h = e.hash();
             if let Outcome::Refused(_) = self.take(e, h, now) {
                 break;
@@ -1073,19 +1180,22 @@ impl Replica {
             .as_ref()
             .map(|b| b.state.clone())
             .unwrap_or_default();
-        for (k, e) in &self.log {
+        for (k, held) in &self.log {
             let Some(hash) = self.hashes.get(k) else {
                 continue;
             };
-            match self.corrections.get(hash) {
-                Some(Value::Null) => {}
-                Some(body) => {
+            let Some(e) = held.open() else {
+                continue;
+            };
+            match self.corrections.get(hash).map(Sealed::open) {
+                Some(Some(Value::Null) | None) => {}
+                Some(Some(body)) => {
                     let mut fixed = e.clone();
-                    fixed.body = body.clone();
+                    fixed.body = body;
                     let _ = state.apply(&fixed, hash);
                 }
                 None => {
-                    let _ = state.apply(e, hash);
+                    let _ = state.apply(&e, hash);
                 }
             }
         }
@@ -1134,7 +1244,7 @@ impl Replica {
             };
         }
         if let Some(waiting) = stream.pending.get(&e.seq) {
-            return if waiting.hash() == hash {
+            return if waiting.open().map(|w| w.hash()).as_deref() == Some(hash.as_str()) {
                 Outcome::Duplicate
             } else {
                 self.freeze(&e.device)
@@ -1146,7 +1256,7 @@ impl Replica {
             {
                 return Outcome::Refused(Refused::PendingFull);
             }
-            stream.pending.insert(e.seq, e);
+            stream.pending.insert(e.seq, HeldEntry::new(&e));
             self.pending_total += 1;
             return Outcome::Pending;
         }
@@ -1204,11 +1314,11 @@ impl Replica {
                 .account_sign
                 .as_ref()
                 .is_some_and(|a| ruling_valid(&e.body, a));
-        let result = match self.corrections.get(&hash) {
-            Some(Value::Null) => Ok(()),
-            Some(body) => {
+        let result = match self.corrections.get(&hash).map(Sealed::open) {
+            Some(Some(Value::Null) | None) => Ok(()),
+            Some(Some(body)) => {
                 let mut fixed = e.clone();
-                fixed.body = body.clone();
+                fixed.body = body;
                 self.state.apply(&fixed, &hash)
             }
             None => self.state.apply(&e, &hash),
@@ -1216,14 +1326,15 @@ impl Replica {
         let ruling_body = ruling.then(|| (e.kind.clone(), e.body.clone()));
         self.hashes
             .insert((key.0.clone(), key.1, e.seq), hash.clone());
-        self.log.insert((key.0, key.1, e.seq), e);
+        self.log.insert((key.0, key.1, e.seq), HeldEntry::new(&e));
         match ruling_body {
             Some((k, b)) if k == kind::LOST => self.apply_lost(&b, now),
             Some((_, b)) => {
                 if let (Some(target), Some(replace)) =
                     (b.get("target").and_then(Value::as_str), b.get("replace"))
                 {
-                    self.corrections.insert(target.to_owned(), replace.clone());
+                    self.corrections
+                        .insert(target.to_owned(), Sealed::new(replace));
                     self.rebuild();
                 }
             }
@@ -1268,8 +1379,12 @@ impl Replica {
                 if out.len() >= limit {
                     return out;
                 }
-                if let Some(e) = self.log.get(&(d.clone(), *series, seq)) {
-                    out.push(e.clone());
+                if let Some(e) = self
+                    .log
+                    .get(&(d.clone(), *series, seq))
+                    .and_then(HeldEntry::open)
+                {
+                    out.push(e);
                 }
             }
         }
@@ -1277,8 +1392,13 @@ impl Replica {
     }
 
     /// Every entry held, for a device catching up from nothing.
-    pub fn entries(&self) -> impl Iterator<Item = &Entry> {
-        self.log.values()
+    pub fn entries(&self) -> impl Iterator<Item = Entry> + '_ {
+        self.log.values().filter_map(HeldEntry::open)
+    }
+
+    /// How many entries are held (without opening any).
+    pub fn entry_count(&self) -> usize {
+        self.log.len()
     }
 }
 
@@ -1350,6 +1470,38 @@ mod tests {
         fn below(&mut self, n: usize) -> usize {
             (self.next() % n as u64) as usize
         }
+    }
+
+    #[test]
+    fn nothing_of_a_message_is_held_in_the_clear_in_memory() {
+        let (_, mut ds, list) = account(2);
+        let secret = "the key is under the blue stone";
+        let first = write(
+            &mut ds[0],
+            kind::MESSAGE,
+            json!({"id": "m1", "conv": "c-secret-chat", "text": secret}),
+            10,
+        );
+        let waiting = write(
+            &mut ds[0],
+            kind::MESSAGE,
+            json!({"id": "m2", "conv": "c-secret-chat", "text": secret}),
+            11,
+        );
+        let mut r = Replica::new(list);
+        // One entry waits for the one before it, the other is applied: both places are checked.
+        assert_eq!(r.receive(waiting, 100), Outcome::Pending);
+        assert_eq!(r.receive(first, 100), Outcome::Applied);
+        let clear = |bytes: &[u8]| {
+            [secret.as_bytes(), b"c-secret-chat".as_slice()]
+                .iter()
+                .any(|needle| bytes.windows(needle.len()).any(|w| w == *needle))
+        };
+        assert!(r.log.values().all(|e| !clear(e.body.raw())));
+        assert!(r.state.messages.values().all(|m| !clear(m.body.raw())));
+        // It still reads back, and what is sent to another device is the plain entry.
+        assert_eq!(r.state().conversation("c-secret-chat").len(), 2);
+        assert_eq!(r.missing_for(&Summary::new(), 10).len(), 2);
     }
 
     #[test]
@@ -1642,7 +1794,7 @@ mod tests {
         let mut b = Replica::new(list);
         a.receive(ds[0].replica.entries().next().unwrap().clone(), 2);
         let mut state_b = a.state().clone();
-        state_b.settings.get_mut("nick:a").unwrap().value = json!("Rene\u{301}");
+        state_b.settings.get_mut("nick:a").unwrap().value = Sealed::new(&json!("Rene\u{301}"));
         assert_eq!(a.state().fingerprint(), state_b.fingerprint());
         b.receive(ds[0].replica.entries().next().unwrap().clone(), 2);
         assert_eq!(a.state().fingerprint(), b.state().fingerprint());
@@ -1669,7 +1821,7 @@ mod tests {
         let entries: Vec<Entry> = ds
             .iter()
             .take(2)
-            .flat_map(|d| d.replica.entries().cloned().collect::<Vec<_>>())
+            .flat_map(|d| d.replica.entries().collect::<Vec<_>>())
             .collect();
         for d in ds.iter_mut().take(2) {
             for e in &entries {
@@ -1862,7 +2014,7 @@ mod tests {
         );
         let mut a = Replica::new(list.clone());
         let mut b = Replica::new(list);
-        for e in ds[0].replica.entries().cloned().collect::<Vec<_>>() {
+        for e in ds[0].replica.entries().collect::<Vec<_>>() {
             a.receive(e.clone(), 2);
             b.receive(e, 2);
         }
@@ -1887,7 +2039,7 @@ mod tests {
             .unwrap()
             .get_mut("x")
             .unwrap()
-            .value = Some("😂".into());
+            .value = Sealed::new(&Some("😂".to_owned()));
         assert_ne!(a.state().fingerprint(), other.fingerprint());
     }
 

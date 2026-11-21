@@ -146,7 +146,6 @@ function Graph() {
   const svg = useRef(null);
   const cardRef = useRef(null);
   const [sel, setSel] = useState('core');
-  const [layer, setLayer] = useState(null);
   const [sc, setSc] = useState(0);
   const [step, setStep] = useState(0);
   const [play, setPlay] = useState(() => !reduced());
@@ -314,26 +313,12 @@ function Graph() {
   }, [!!modal, closeModal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const go = (i) => { setStep(i); setPlay(false); };
-  const chooseScenario = (i) => { setSc(i); setStep(0); setPlay(true); };
   const node = NODE[modal?.id || sel];
   const linked = useMemo(() => new Set(PAIRS.filter(([a, b]) => a === sel || b === sel).flatMap(([a, b]) => [a, b])), [sel]);
   const visited = useMemo(() => new Set(scenario.steps.slice(0, step + 1).map((s) => s[0])), [scenario, step]);
 
   return (
     <div className="arch" onPointerEnter={(e) => { if (e.pointerType === 'mouse') setHold(true); }} onPointerLeave={() => setHold(false)}>
-      <div className="arch-controls">
-        <div className="arch-scen" role="group" aria-label="Walk through a scenario">
-          {SCENARIOS.map((s, i) => (
-            <button key={s.id} type="button" className="chip" aria-pressed={i === sc} onClick={() => chooseScenario(i)}>{s.title}</button>
-          ))}
-        </div>
-        <div className="arch-legend" role="group" aria-label="Highlight a layer">
-          {LAYERS.map((l) => (
-            <button key={l.id} type="button" className="chip layer" style={{ '--h': l.hue }} aria-pressed={layer === l.id} onClick={() => setLayer(layer === l.id ? null : l.id)}><i aria-hidden="true" />{l.label}</button>
-          ))}
-        </div>
-      </div>
-
       <div className="arch-body">
         <div className="arch-graph" ref={wrap}>
           <svg className="arch-edges" ref={svg} width="1" height="1" aria-hidden="true">
@@ -346,7 +331,7 @@ function Graph() {
             <circle ref={dot} className="packet" r="7" cx="0" cy="0" style={{ opacity: 0 }} />
           </svg>
           {LAYERS.map((l) => (
-            <section key={l.id} className={`arch-layer${layer && layer !== l.id ? ' dim' : ''}`} style={{ '--h': l.hue }} aria-label={l.label}>
+            <section key={l.id} className="arch-layer" style={{ '--h': l.hue }} aria-label={l.label}>
               <h3><i aria-hidden="true" />{l.label}</h3>
               <div className="arch-nodes">
                 {NODES.filter((n) => n.layer === l.id).map((n, i) => (

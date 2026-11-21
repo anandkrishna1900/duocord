@@ -296,7 +296,6 @@ nav.links a:not(.btn):hover::after, nav.links a[aria-current="page"]::after { tr
 .arch-scen, .arch-legend { display: flex; flex-wrap: wrap; gap: 8px; }
 .arch-legend .chip { font-weight: 600; font-size: .82rem; padding: 7px 12px; color: var(--on-ink-soft); } .arch-legend .chip[aria-pressed="true"] { color: var(--ink); }
 .arch-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
-@media (min-width: 1000px) { .arch-body { grid-template-columns: minmax(0, 1.55fr) minmax(300px, 1fr); } .arch-panel { position: sticky; top: 96px; } }
 .arch-graph { position: relative; display: grid; gap: 14px; padding: 16px; border: 1px solid var(--line-ink2); border-radius: 20px; background: var(--ink2); }
 .arch-edges { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
 .edge { fill: none; stroke: rgba(243, 240, 232, .2); stroke-width: 1.5; transition: stroke .3s, stroke-width .3s; }
@@ -341,10 +340,60 @@ nav.links a:not(.btn):hover::after, nav.links a[aria-current="page"]::after { tr
 .timeline li { position: relative; opacity: 0; transform: translateY(14px); transition: opacity .6s ease, transform .6s cubic-bezier(.22, 1, .36, 1); } .timeline li.in { opacity: 1; transform: none; }
 .timeline li > button { position: relative; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; width: 100%; padding: 14px 16px; border: 1px solid var(--line-ink2); border-radius: 14px; background: var(--ink2); color: var(--on-ink); font: 800 1.05rem/1.3 var(--display); letter-spacing: -.01em; text-align: left; cursor: pointer; transition: border-color .2s, background .2s; }
 .timeline li > button:hover { border-color: var(--yellow); } .timeline li.open > button { background: var(--bone); color: var(--ink); border-color: var(--bone); }
+.timeline li > button > i { transition: transform .4s cubic-bezier(.22, 1, .36, 1); } .timeline li.open > button > i { transform: rotate(180deg); }
 .timeline li > button::before { content: ''; position: absolute; left: -22px; top: 50%; width: 12px; height: 12px; margin-top: -6px; border-radius: 50%; background: var(--ink); border: 2px solid var(--yellow); } .timeline li.open > button::before { background: var(--yellow); }
-.timeline b { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--yellow); color: var(--ink); font-size: .9rem; } .timeline i { font-style: normal; font-size: 1.3rem; }
-.tl-body { padding: 14px 18px 4px; color: var(--on-ink-soft); } .tl-body p { margin: 0 0 10px; max-width: 70ch; } .tl-body .why b { color: var(--yellow); }
+.timeline li > button > b { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--yellow); color: var(--ink); font-size: .9rem; } .timeline i { font-style: normal; font-size: 1.3rem; }
+.tl-wrap { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows .55s cubic-bezier(.22, 1, .36, 1), opacity .4s ease; } .timeline li.open .tl-wrap { grid-template-rows: 1fr; opacity: 1; } .tl-wrap > .tl-body { overflow: hidden; min-height: 0; }
+.tl-body { padding: 0 18px; color: var(--on-ink-soft); } .timeline li.open .tl-body { padding: 14px 18px 4px; } .tl-body { transition: padding .55s cubic-bezier(.22, 1, .36, 1); } .tl-body p { margin: 0 0 10px; max-width: 70ch; } .tl-body .why b { color: var(--yellow); }
 @media (prefers-reduced-motion: reduce) { .edge.live { animation: none; } .timeline li { opacity: 1; transform: none; transition: none; } .crate-bar i { transition: none; } .arch-node, .chip, .arch-caps button { transition: none; } .arch-node:hover { transform: none; } }
 
 .arch-layer h3 { position: relative; z-index: 2; width: fit-content; padding: 2px 10px 2px 0; background: var(--ink2); }
 @media (max-width: 600px) { .arch-node { flex-basis: 128px; padding: 10px 12px; } .arch-node strong { font-size: .92rem; } .arch-graph { padding: 12px; } .arch-panel { padding: 18px; } }
+
+/* architecture page, floating version: no box behind the map, an animated backdrop over the whole page, parts that float and react */
+.arch-page { position: relative; }
+.arch-page > section { position: relative; z-index: 1; }
+.arch-page .page-head, .arch-page .page-sec, .arch-page .page-next { background: transparent; }
+.arch-bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+.arch-bg > div { position: absolute; inset: 0; opacity: .9; }
+.arch-bg .pool { position: absolute; width: 60vmax; height: 60vmax; border-radius: 50%; filter: blur(40px); opacity: .5; }
+.arch-bg .p1 { left: -18vmax; top: -12vmax; background: radial-gradient(closest-side, rgba(255, 229, 0, .16), transparent); animation: pool-a 26s ease-in-out infinite alternate; }
+.arch-bg .p2 { right: -22vmax; bottom: -20vmax; background: radial-gradient(closest-side, rgba(110, 90, 255, .2), transparent); animation: pool-b 32s ease-in-out infinite alternate; }
+@keyframes pool-a { to { transform: translate3d(22vmax, 16vmax, 0) scale(1.15); } }
+@keyframes pool-b { to { transform: translate3d(-24vmax, -14vmax, 0) scale(1.1); } }
+.arch-graph { padding: 8px 0; border: 0; background: none; border-radius: 0; }
+.arch-layer h3 { background: none; padding: 2px 0; text-shadow: 0 0 6px var(--ink), 0 0 12px var(--ink), 0 0 18px var(--ink); }
+.arch-node { background: rgba(10, 10, 10, .82); box-shadow: 0 10px 30px rgba(0, 0, 0, .35); animation: node-float var(--dur, 6s) ease-in-out var(--delay, 0s) infinite alternate; transform: translate3d(var(--mx, 0px), var(--my, 0px), 0) scale(var(--s, 1)); transition: transform .35s cubic-bezier(.22, 1, .36, 1), border-color .2s, background .2s, color .2s, box-shadow .25s; will-change: transform; }
+@keyframes node-float { from { translate: 0 -5px; } to { translate: 0 5px; } }
+.arch-node:hover { transform: translate3d(var(--mx, 0px), var(--my, 0px), 0) scale(calc(var(--s, 1) + .03)); border-color: var(--yellow); box-shadow: 0 16px 40px rgba(255, 229, 0, .16); }
+.arch-node:active { transform: translate3d(var(--mx, 0px), var(--my, 0px), 0) scale(.96); }
+.arch-node.pop { animation: node-float var(--dur, 6s) ease-in-out var(--delay, 0s) infinite alternate, node-pop .6s cubic-bezier(.22, 1, .36, 1); }
+@keyframes node-pop { 0% { scale: .92; } 45% { scale: 1.08; } 100% { scale: 1; } }
+.arch-node::after { content: ''; position: absolute; inset: -2px; border-radius: 16px; border: 2px solid var(--yellow); opacity: 0; pointer-events: none; }
+.arch-node { position: relative; }
+.arch-node.pop::after { animation: node-ring .7s ease-out; }
+@keyframes node-ring { 0% { opacity: .9; transform: scale(1); } 100% { opacity: 0; transform: scale(1.35); } }
+.arch-panel { background: rgba(20, 20, 20, .85); backdrop-filter: blur(8px); }
+.arch-caps li.on button { background: rgba(20, 20, 20, .85); }
+.crates li, .timeline li > button, .arch-page .fcard.plain { background: rgba(20, 20, 20, .85); }
+@media (prefers-reduced-motion: reduce) { .arch-bg .pool { animation: none; } .arch-node, .arch-node.pop { animation: none; transform: none; } .arch-node:hover { transform: none; } .arch-node.pop::after { animation: none; } }
+
+.arch-nodes { justify-content: center; } .arch-node { max-width: 330px; }
+.arch-node:hover { transform: translate3d(var(--mx, 0px), var(--my, 0px), 0) scale(calc(var(--s, 1) + .012)); }
+
+/* Detail tile: grows out of the clicked part over a dimmed, blurred page. */
+.arch-modal { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 16px; background: rgba(5, 5, 5, .62); backdrop-filter: blur(6px); animation: modal-in .28s ease both; overflow-y: auto; }
+.arch-modal.out { animation: modal-out .24s ease both; }
+.arch-card { position: relative; width: min(560px, 100%); max-height: calc(100dvh - 32px); overflow-y: auto; padding: 26px 26px 22px; border: 1px solid var(--line-ink2); border-top: 3px solid var(--h, var(--yellow)); border-radius: 22px; background: #141414; box-shadow: 0 30px 90px rgba(0, 0, 0, .6), 0 0 60px -20px var(--h, var(--yellow)); animation: card-in .46s cubic-bezier(.22, 1, .36, 1) both; }
+.arch-modal.out .arch-card { animation: card-out .24s cubic-bezier(.4, 0, 1, 1) both; }
+.arch-card .close { position: absolute; top: 14px; right: 14px; width: 38px; height: 38px; font-size: 1.4rem; line-height: 1; }
+.arch-card h3 { margin: 4px 0 10px; font-size: 1.7rem; letter-spacing: -.02em; padding-right: 44px; } .arch-card p { margin: 0 0 12px; color: var(--on-ink-soft); }
+.arch-card ul { margin: 0 0 14px; padding-left: 1.15em; color: var(--on-ink-soft); } .arch-card li { margin: 5px 0; }
+.arch-card .where, .arch-card .limit { font-size: .92rem; } .arch-card b { color: var(--on-ink); } .arch-card .limit b { color: var(--yellow); }
+.card-in > * { animation: card-row .5s cubic-bezier(.22, 1, .36, 1) both; } .card-in > :nth-child(2) { animation-delay: .04s; } .card-in > :nth-child(3) { animation-delay: .08s; } .card-in > :nth-child(4) { animation-delay: .12s; } .card-in > :nth-child(5) { animation-delay: .16s; } .card-in > :nth-child(6) { animation-delay: .2s; } .card-in > :nth-child(7) { animation-delay: .24s; }
+.hop { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line-ink2); } .hop span { color: var(--on-ink-muted); font-weight: 700; font-size: .85rem; margin-right: 4px; }
+@keyframes modal-in { from { opacity: 0; } } @keyframes modal-out { to { opacity: 0; } }
+@keyframes card-in { from { opacity: 0; transform: scale(.35); } 60% { opacity: 1; } }
+@keyframes card-out { to { opacity: 0; transform: scale(.6); } }
+@keyframes card-row { from { opacity: 0; transform: translateY(10px); } }
+@media (prefers-reduced-motion: reduce) { .arch-modal, .arch-modal.out, .arch-card, .arch-modal.out .arch-card, .card-in > * { animation: none; } .tl-wrap, .tl-body, .timeline li > button > i { transition: none; } }

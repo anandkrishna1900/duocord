@@ -17,8 +17,23 @@ export interface EngineBridge {
   /** Tell the engine whether the page's relay sockets are online (it routes through contacts when they are not). */
   signalStatus?(online: boolean): Promise<void>;
   invoke(command: string, args?: Record<string, unknown>): Promise<unknown>;
+  /**
+   * Send a file whose bytes go across as they are (no base64 text inside a JSON command: for a 50 MB file that would be a
+   * 67 MB string). `details` names the person or group, the file's name and type. Only the desktop shell has this.
+   */
+  sendFileBytes?(details: FileSendDetails, bytes: Uint8Array): Promise<string>;
+  /** A stored file's bytes as they are, or `null` if it is no longer stored. */
+  loadFileBytes?(messageId: string): Promise<Uint8Array | null>;
   /** Subscribe to an engine-to-page event (`event`, `frame`, `close`, `signal-subscribe`, `signal-put`, `notify`, ...). */
   on(event: string, handler: (payload: unknown) => void): Promise<() => void>;
+}
+
+export interface FileSendDetails {
+  peer?: string;
+  group?: string;
+  name: string;
+  mime: string;
+  reply_to?: string;
 }
 
 export type PathName = 'direct_lan' | 'direct_nat' | 'relayed' | 'bluetooth' | 'unknown';
@@ -47,6 +62,21 @@ export class HostedEngine {
 
   signalStatus(online: boolean): Promise<void> {
     return this.bridge.signalStatus?.(online) ?? Promise.resolve();
+  }
+
+  /** Whether files can go to and from the engine as raw bytes (the desktop shell can; the plain-browser build cannot). */
+  get rawFiles(): boolean {
+    return typeof this.bridge.sendFileBytes === 'function' && typeof this.bridge.loadFileBytes === 'function';
+  }
+
+  sendFileBytes(details: FileSendDetails, bytes: Uint8Array): Promise<string> {
+    const send = this.bridge.sendFileBytes;
+    if (!send) return Promise.reject(new Error('raw files are not available'));
+    return send.call(this.bridge, details, bytes);
+  }
+
+  loadFileBytes(messageId: string): Promise<Uint8Array | null> {
+    return this.bridge.loadFileBytes?.(messageId) ?? Promise.resolve(null);
   }
 
   call<T = unknown>(command: string, args: Record<string, unknown> = {}): Promise<T> {
@@ -107,6 +137,12 @@ export class HostedEngine {
   }
 }
 
+function toHex(bytes: Uint8Array): string {
+  let out = '';
+  for (const b of bytes) out += b.toString(16).padStart(2, '0');
+  return out;
+}
+
 /** The real bridge: Tauri commands and events. Loaded lazily so unit tests never need the Tauri runtime. */
 export async function tauriEngineBridge(): Promise<EngineBridge> {
   const { invoke } = await import('@tauri-apps/api/core');
@@ -117,6 +153,15 @@ export async function tauriEngineBridge(): Promise<EngineBridge> {
     erase: () => invoke('engine_erase'),
     signalStatus: (online) => invoke('engine_signal_status', { online }),
     invoke: (command, args = {}) => invoke('engine_invoke', { command, args }),
+    sendFileBytes: (details, bytes) =>
+      invoke<string>('engine_send_file', bytes, { headers: { 'x-privcord-file': toHex(new TextEncoder().encode(JSON.stringify(details))) } }),
+    loadFileBytes: async (messageId) => {
+      try {
+        return new Uint8Array(await invoke<ArrayBuffer>('engine_load_file', { messageId }));
+      } catch {
+        return null;
+      }
+    },
     on: async (event, handler) => listen(`privcord://${event}`, (e) => handler(e.payload)),
   };
 }

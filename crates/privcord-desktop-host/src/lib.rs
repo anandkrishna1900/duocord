@@ -247,6 +247,40 @@ impl DesktopHost {
     }
 
     /// Run one command. Arguments are a JSON object; the result is JSON (`null` when there is nothing to return).
+    /// Sends a file whose bytes arrive as they are (the page hands them over raw, not as base64 text inside JSON, which
+    /// for a 50 MB file would be a 67 MB string). `args` carries `peer` or `group`, `name`, `mime` and maybe `reply_to`.
+    pub fn send_file_bytes(&self, args: &Value, data: Vec<u8>) -> Result<Value, HostError> {
+        let e = &self.engine;
+        let id = if let Some(group) = maybe_text(args, "group") {
+            e.send_group_file(
+                group,
+                text(args, "name")?,
+                text(args, "mime")?,
+                data,
+                maybe_text(args, "reply_to"),
+            )
+        } else {
+            e.send_file(
+                text(args, "peer")?,
+                text(args, "name")?,
+                text(args, "mime")?,
+                data,
+                maybe_text(args, "reply_to"),
+            )
+        }
+        .map_err(failed)?;
+        Ok(json!(id))
+    }
+
+    /// The bytes of a stored file as they are, or `None` if it is no longer stored.
+    pub fn load_file_bytes(&self, message_id: &str) -> Result<Option<Vec<u8>>, HostError> {
+        Ok(self
+            .engine
+            .load_file(message_id.to_owned())
+            .map_err(failed)?
+            .map(|f| f.data))
+    }
+
     pub fn invoke(&self, command: &str, args: &Value) -> Result<Value, HostError> {
         let e = &self.engine;
         match command {

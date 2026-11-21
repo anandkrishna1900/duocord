@@ -228,6 +228,45 @@ fn saved_network(app: &AppHandle) -> Option<Value> {
     Some(value)
 }
 
+/// Send a file whose bytes come as they are: the page hands the raw bytes over (no base64 text in a JSON command, which for
+/// a 50 MB file would be a 67 MB string) and the details (who, name, type) ride in a header as hex-encoded JSON.
+#[tauri::command]
+pub async fn engine_send_file(
+    request: tauri::ipc::Request<'_>,
+    state: State<'_, EngineState>,
+) -> Result<Value, String> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("expected the file's bytes".into());
+    };
+    let details: Value = request
+        .headers()
+        .get("x-privcord-file")
+        .and_then(|v| v.to_str().ok())
+        .and_then(unhex)
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .ok_or("missing file details")?;
+    let data = bytes.clone();
+    let host = running(&state)?;
+    tauri::async_runtime::spawn_blocking(move || host.send_file_bytes(&details, data))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// A stored file's bytes, handed back as they are (an ArrayBuffer in the page).
+#[tauri::command]
+pub async fn engine_load_file(
+    state: State<'_, EngineState>,
+    message_id: String,
+) -> Result<tauri::ipc::Response, String> {
+    let host = running(&state)?;
+    let bytes = tauri::async_runtime::spawn_blocking(move || host.load_file_bytes(&message_id))
+        .await
+        .map_err(|e| e.to_string())??;
+    bytes
+        .map(tauri::ipc::Response::new)
+        .ok_or_else(|| "that file is no longer stored".to_owned())
+}
+
 /// The window is gone (PrivCord stays in the tray): its WebRTC links went with it.
 pub fn page_closed(app: &AppHandle) {
     let peers: Vec<String> = LINKED

@@ -290,6 +290,21 @@ fn files_search_and_group_commands_work_through_json() {
         .unwrap();
     assert_eq!(B64.decode(loaded["data"].as_str().unwrap()).unwrap(), bytes);
 
+    // The same file as raw bytes (no base64 text in between), in both directions.
+    let raw_id = a
+        .host
+        .send_file_bytes(
+            &json!({ "peer": b_uid, "name": "raw.bin", "mime": "application/octet-stream" }),
+            bytes.clone(),
+        )
+        .unwrap()
+        .as_str()
+        .unwrap()
+        .to_owned();
+    pump(&a, &a_uid, &b, &b_uid);
+    assert_eq!(b.host.load_file_bytes(&raw_id).unwrap().unwrap(), bytes);
+    assert!(b.host.load_file_bytes("no-such-message").unwrap().is_none());
+
     // Search finds a text message.
     a.host
         .invoke(

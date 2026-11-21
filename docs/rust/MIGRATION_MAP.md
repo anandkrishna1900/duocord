@@ -11,10 +11,10 @@ Status meanings: **Ported, tested** = the Rust implementation exists and is chec
 | Ported, tested | 66 | 9861 |
 | Partly ported | 1 | 2312 |
 | Not yet ported | 0 | 0 |
-| Stays (UI) | 93 | 17331 |
-| Stays (platform adapter) | 64 | 12519 |
+| Stays (UI) | 94 | 17360 |
+| Stays (platform adapter) | 65 | 12666 |
 | Replaced by a library | 4 | 333 |
-| **All mapped files** | **228** | **42356** |
+| **All mapped files** | **230** | **42532** |
 
 Ported does not mean retired: the TypeScript and Kotlin versions stay in production until the apps call the Rust engine (M7 desktop, M8 Android) and the compatibility gates pass (PRD section 16).
 
@@ -111,11 +111,12 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 | `apps/desktop/src/lib/engine.ts` | 2312 | `EnginePhase`, `Trust`, `ConnState`, `ContactRecord`, `LastMessage`, `ContactView` +17 | The desktop chat engine | engine: every rule, the chat list (last message, unread, delivery detail), group views, search, backups, invites, signaling, groups, files, channels, mesh, deletion. Left in TypeScript: starting and driving the WebRTC links and the Bluetooth bridge, turning events into screen state, notices and toasts, settings | Engine/Adapter | Partly ported | M7: rewire onto the engine; the WebRTC and Bluetooth driving becomes the adapter | engine integration tests |
 | `apps/desktop/src/lib/engineApi.ts` | 127 | `DeviceReceipt`, `SendResult`, `ChatEngineApi` | The interface the screens use to talk to a chat engine (TypeScript or Rust) | Platform seam (stays) | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/desktop/src/lib/engineBridge.test.ts` | 65 | (none) | Page side of the hosted engine: ordered inbound calls, Busy retry, Tauri events | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; M7 seam (page not rewired yet) | n/a |
-| `apps/desktop/src/lib/engineBridge.ts` | 122 | `EngineBridge`, `PathName`, `LinkKindName`, `HostedEngine`, `tauriEngineBridge` | Page side of the hosted engine: ordered inbound calls, Busy retry, Tauri events | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; M7 seam (page not rewired yet) | n/a |
+| `apps/desktop/src/lib/engineBridge.ts` | 167 | `EngineBridge`, `FileSendDetails`, `PathName`, `LinkKindName`, `HostedEngine`, `tauriEngineBridge` | Page side of the hosted engine: ordered inbound calls, Busy retry, Tauri events | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; M7 seam (page not rewired yet) | n/a |
+| `apps/desktop/src/lib/engineBridgeRaw.test.ts` | 43 | (none) | Page side of the hosted engine: ordered inbound calls, Busy retry, Tauri events | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; M7 seam (page not rewired yet) | n/a |
 | `apps/desktop/src/lib/format.ts` | 73 | `formatTime`, `formatDay`, `formatLastSeen`, `initials`, `avatarHue`, `truncateMiddle` +1 | Presentation helpers, UI settings, themes, notifications bridge | UI / adapter (stays) | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/lib/hosted/e2e.test.ts` | 360 | (none) | End to end: two hosted engines on real Rust engine processes | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/desktop/src/lib/hosted/enable.ts` | 13 | `hostedEngineAvailable`, `hostedEngineEnabled` | The desktop chat engine on the Rust engine: commands, state, identity migration, the on/off switch | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; opt-in until M9 | n/a |
-| `apps/desktop/src/lib/hosted/hostedEngine.ts` | 971 | `HostedDeps`, `ENGINE_IDENTITY_KEY`, `friendly`, `HostedChatEngine`, `shapePrefs`, `shapeReceipts` +1 | The desktop chat engine on the Rust engine: commands, state, identity migration, the on/off switch | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; opt-in until M9 | n/a |
+| `apps/desktop/src/lib/hosted/hostedEngine.ts` | 989 | `HostedDeps`, `ENGINE_IDENTITY_KEY`, `friendly`, `HostedChatEngine`, `shapePrefs`, `shapeReceipts` +1 | The desktop chat engine on the Rust engine: commands, state, identity migration, the on/off switch | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; opt-in until M9 | n/a |
 | `apps/desktop/src/lib/hosted/legacyIdentity.ts` | 29 | `legacySecretsHex`, `seedEngineIdentity` | The desktop chat engine on the Rust engine: commands, state, identity migration, the on/off switch | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; opt-in until M9 | n/a |
 | `apps/desktop/src/lib/hosted/linkByScan.test.ts` | 55 | (none) | Linking a new device by scanning: the commands sent and the stages shown | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/desktop/src/lib/hosted/prefsExtras.test.ts` | 26 | (none) | Guards how the screens read silent chats, device receipts and mesh hops from the engine | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays | n/a |
@@ -172,8 +173,8 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 |---|---:|---|---|---|---|---|---|---|
 | `apps/desktop/src-tauri/src/autobackup.rs` | 166 | `status_path`, `passphrase`, `now_ms`, `run`, `start`, `view` +6 | Weekly automatic backups: keeps the passphrase in the credential store, runs the check | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/desktop/src-tauri/src/ble.rs` | 168 | `BleEvent`, `BleLink`, `max_chunk`, `write`, `disconnect`, `payload_size` +3 | Native BLE central | BLE adapter | Adapter | Stays (platform adapter) | Stays | n/a |
-| `apps/desktop/src-tauri/src/engine_host.rs` | 538 | `hex`, `unhex`, `KeyringSecure`, `load_identity`, `save_identity`, `delete_identity` +34 | Hosts the Rust engine in the shell: keyring secret store, events to the page | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; M7 seam (page not rewired yet) | n/a |
-| `apps/desktop/src-tauri/src/lib.rs` | 313 | `page_entry`, `secret_get`, `secret_set`, `secret_delete`, `BleState`, `unhex` +10 | Tauri shell: commands, keyring, notifications | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; hosts the engine from M7 | n/a |
+| `apps/desktop/src-tauri/src/engine_host.rs` | 577 | `hex`, `unhex`, `KeyringSecure`, `load_identity`, `save_identity`, `delete_identity` +36 | Hosts the Rust engine in the shell: keyring secret store, events to the page | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; M7 seam (page not rewired yet) | n/a |
+| `apps/desktop/src-tauri/src/lib.rs` | 315 | `page_entry`, `secret_get`, `secret_set`, `secret_delete`, `BleState`, `unhex` +10 | Tauri shell: commands, keyring, notifications | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; hosts the engine from M7 | n/a |
 | `apps/desktop/src-tauri/src/main.rs` | 5 | `main` | Tauri shell: commands, keyring, notifications | Desktop adapter + engine host | Adapter | Stays (platform adapter) | Stays; hosts the engine from M7 | n/a |
 | `apps/desktop/src-tauri/src/tray.rs` | 158 | `flag`, `set_flag`, `has_flag`, `close_to_tray`, `show_main`, `toggle_quick` +6 | Tray icon, close to tray, start at login, one instance | Desktop adapter | Adapter | Stays (platform adapter) | Stays | n/a |
 
@@ -183,7 +184,7 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 |---|---:|---|---|---|---|---|---|---|
 | `apps/android/app/src/main/java/com/duochat/app/AppConfig.kt` | 30 | `AppConfig` | Android shell and the loader for the Rust core | UI / platform | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/CrashLog.kt` | 105 | `CrashLog` | Android shell and the loader for the Rust core | UI / platform | UI | Stays (UI) | Stays | n/a |
-| `apps/android/app/src/main/java/com/duochat/app/DuoChatApp.kt` | 19 | `DuoChatApp` | Android shell and the loader for the Rust core | UI / platform | UI | Stays (UI) | Stays | n/a |
+| `apps/android/app/src/main/java/com/duochat/app/DuoChatApp.kt` | 25 | `DuoChatApp` | Android shell and the loader for the Rust core | UI / platform | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/MainActivity.kt` | 472 | `MainActivity`, `RootScreen`, `exists` | Android shell and the loader for the Rust core | UI / platform | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/RustCore.kt` | 16 | `RustCore` | Android shell and the loader for the Rust core | UI / platform | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/ble/AndroidMeshRadio.kt` | 476 | `AndroidMeshRadio` | Android Bluetooth radio, permissions, link | BLE adapter | Adapter | Stays (platform adapter) | Stays | n/a |
@@ -246,7 +247,7 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 | `apps/android/app/src/main/java/com/duochat/app/ui/AppViewModel.kt` | 469 | `AppViewModel` | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/ui/BackupSection.kt` | 147 | `BackupSection`, `AutomaticBackups` | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/ui/ChannelsDialog.kt` | 90 | `ChannelsDialog` | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
-| `apps/android/app/src/main/java/com/duochat/app/ui/ChatScreen.kt` | 1796 | `ChatScreen`, `Banner`, `MessageList`, `DaySeparator`, `MessageBubble`, `FileContent` +15 | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
+| `apps/android/app/src/main/java/com/duochat/app/ui/ChatScreen.kt` | 1784 | `ChatScreen`, `Banner`, `MessageList`, `DaySeparator`, `MessageBubble`, `FileContent` +15 | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/ui/Clipboard.kt` | 34 | `copySensitive` | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/ui/DeviceLink.kt` | 476 | `DevicesSection`, `RemoveDeviceDialog`, `LinkHostDialog`, `LinkJoinContent`, `Digits`, `endText` | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/ui/GroupScreens.kt` | 423 | `NewGroupScreen`, `FriendCheckRow`, `GroupDetailsScreen`, `FriendDetailsDialog` | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
@@ -255,6 +256,7 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 | `apps/android/app/src/main/java/com/duochat/app/ui/LockScreen.kt` | 83 | `LockScreen` | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/ui/ManualConnectDialog.kt` | 507 | `ManualMode`, `ManualConnectDialog`, `ModeChip`, `CodeBlock` | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/ui/MediaSave.kt` | 52 | (none) | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
+| `apps/android/app/src/main/java/com/duochat/app/ui/MemoryMedia.kt` | 30 | `BytesMediaDataSource`, `memoryMediaSource` | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/ui/Motion.kt` | 182 | `Motion`, `routeDepth`, `screenTransition`, `arrive`, `pressScale`, `SwipeToReply` | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/ui/Onboarding.kt` | 343 | `Step`, `OnboardingScreen`, `ShowPhrase`, `ConfirmPhrase`, `RestorePhrase`, `Fact` +1 | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/ui/PrivacyCards.kt` | 226 | `PrivacyCheckupCard`, `NetworkHostsCard`, `formatSize`, `StorageByChatCard`, `SealedChip`, `DevicesStrip` +2 | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
@@ -264,4 +266,4 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 | `apps/android/app/src/main/java/com/duochat/app/ui/SettingsDialog.kt` | 1101 | `SettingsDialog`, `SectionTitle`, `DetailRow`, `ToggleRow`, `ChoiceChip`, `parseColor` +2 | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/ui/StatusScreens.kt` | 125 | `LoadingScreen`, `FatalScreen` | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/ui/Theme.kt` | 241 | `figtree`, `style`, `mix`, `ensureReadable`, `onColor`, `scheme` +4 | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
-| `apps/android/app/src/main/java/com/duochat/app/ui/WaveformDecoder.kt` | 80 | `WaveformDecoder` | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
+| `apps/android/app/src/main/java/com/duochat/app/ui/WaveformDecoder.kt` | 85 | `WaveformDecoder` | Compose screens | UI | UI | Stays (UI) | Stays | n/a |

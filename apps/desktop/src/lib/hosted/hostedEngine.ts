@@ -673,9 +673,16 @@ export class HostedChatEngine implements ChatEngineApi {
       const tooBig = validateFileSize(file.bytes.length);
       if (tooBig) return { ok: false, error: tooBig };
       if (file.bytes.length > MAX_FILE_BYTES) return { ok: false, error: 'That file is too big.' };
-      const args = { name: file.name, mime: file.mime || 'application/octet-stream', data: toBase64(file.bytes), reply_to: replyToId };
-      if (this.kindOf(convId) === 'group') await this.engine.call('send_group_file', { group: convId, ...args });
-      else await this.engine.call('send_file', { peer: convId, ...args });
+      const mime = file.mime || 'application/octet-stream';
+      const group = this.kindOf(convId) === 'group';
+      if (this.engine.rawFiles) {
+        // The bytes themselves, not a base64 text: a big file never becomes a giant string.
+        await this.engine.sendFileBytes({ ...(group ? { group: convId } : { peer: convId }), name: file.name, mime, reply_to: replyToId }, file.bytes);
+      } else {
+        const args = { name: file.name, mime, data: toBase64(file.bytes), reply_to: replyToId };
+        if (group) await this.engine.call('send_group_file', { group: convId, ...args });
+        else await this.engine.call('send_file', { peer: convId, ...args });
+      }
       this.scheduleRefresh();
       return { ok: true };
     } catch (e) {
@@ -684,6 +691,17 @@ export class HostedChatEngine implements ChatEngineApi {
   }
 
   async getFile(messageId: string): Promise<{ blob: Blob; meta: FileMeta } | null> {
+    if (this.engine.rawFiles) {
+      const raw = await this.engine.loadFileBytes(messageId);
+      const known = this.snapshot?.conversations.flatMap((c) => c.messages).find((m) => m.id === messageId);
+      if (raw && known) {
+        return {
+          blob: new Blob([raw as Uint8Array<ArrayBuffer>], { type: known.file_mime }),
+          meta: { name: known.text, mime: known.file_mime, size: raw.length, sha256: '' },
+        };
+      }
+      if (!raw) return null;
+    }
     const file = await this.engine.call<{ name: string; mime: string; data: string } | null>('load_file', { message_id: messageId }).catch(() => null);
     if (!file) return null;
     const bytes = fromBase64(file.data);

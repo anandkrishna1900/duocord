@@ -271,6 +271,8 @@ pub fn run() {
         ble_commands::ble_disconnect,
         engine_host::engine_start,
         engine_host::engine_invoke,
+        engine_host::engine_send_file,
+        engine_host::engine_load_file,
         engine_host::engine_stop,
         engine_host::engine_seed_identity,
         engine_host::engine_erase,

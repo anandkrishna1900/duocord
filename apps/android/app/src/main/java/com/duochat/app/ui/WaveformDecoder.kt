@@ -15,14 +15,19 @@ object WaveformDecoder {
     private const val MAX_SAMPLES = 8_000_000
 
     suspend fun peaks(file: File, buckets: Int): FloatArray? = withContext(Dispatchers.Default) {
-        runCatching { decode(file, buckets) }.getOrNull()
+        runCatching { decode({ it.setDataSource(file.path) }, buckets) }.getOrNull()
     }
 
-    private fun decode(file: File, buckets: Int): FloatArray? {
+    /** The same from a voice note held in memory (nothing is written to storage). */
+    suspend fun peaks(bytes: ByteArray, buckets: Int): FloatArray? = withContext(Dispatchers.Default) {
+        runCatching { decode({ it.setDataSource(BytesMediaDataSource(bytes)) }, buckets) }.getOrNull()
+    }
+
+    private fun decode(open: (MediaExtractor) -> Unit, buckets: Int): FloatArray? {
         val extractor = MediaExtractor()
         var codec: MediaCodec? = null
         try {
-            extractor.setDataSource(file.path)
+            open(extractor)
             val track = (0 until extractor.trackCount).firstOrNull {
                 extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
             } ?: return null

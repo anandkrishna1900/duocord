@@ -968,28 +968,19 @@ private fun FileContent(
         value = withContext(Dispatchers.IO) { loadFile(message.messageId)?.second?.let { decodeUpright(it, 1200) } }
         if (value == null) imageFailed = true
     }
-    // Video: decrypted to a short-lived cache file (the player needs a path), shown with a poster frame and
-    // played in place when tapped. The file is deleted when the bubble leaves the screen.
-    val videoFile by produceState<java.io.File?>(null, message.messageId, arrived, wanted) {
+    // Video: read from the encrypted database into memory and played from there, with a poster frame, in place when
+    // tapped. Nothing decrypted is written to the phone's storage; the bytes go when the bubble leaves the screen.
+    val videoBytes by produceState<ByteArray?>(null, message.messageId, arrived, wanted) {
         if (!isVideo || !arrived || !wanted) return@produceState
-        value = withContext(Dispatchers.IO) {
-            val bytes = loadFile(message.messageId)?.second ?: return@withContext null
-            java.io.File(context.cacheDir, "preview-${message.messageId}").also { it.writeBytes(bytes) }
-        }
+        value = withContext(Dispatchers.IO) { loadFile(message.messageId)?.second }
     }
-    // Capture the file this effect is for: reading `videoFile` inside onDispose would see the NEW file when the key
-    // changes (null -> file) and delete the preview the moment it was written.
-    androidx.compose.runtime.DisposableEffect(videoFile) {
-        val f = videoFile
-        onDispose { f?.delete() }
-    }
-    val poster by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, videoFile) {
-        val f = videoFile ?: return@produceState
+    val poster by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, videoBytes) {
+        val f = videoBytes ?: return@produceState
         value = withContext(Dispatchers.IO) {
             runCatching {
                 val r = android.media.MediaMetadataRetriever()
                 try {
-                    r.setDataSource(f.path)
+                    r.setDataSource(BytesMediaDataSource(f))
                     r.getFrameAtTime(0)?.asImageBitmap()
                 } finally {
                     r.release()
@@ -1025,19 +1016,22 @@ private fun FileContent(
             }
             isVideo && wanted -> Box(
                 Modifier.fillMaxWidth().heightIn(min = 140.dp, max = 280.dp).clip(mediaShape).background(Color.Black)
-                    .combinedClickable(onClick = { if (videoFile != null) playing = true }, onLongClick = onLongPress),
+                    .combinedClickable(onClick = { if (videoBytes != null) playing = true }, onLongClick = onLongPress),
                 contentAlignment = Alignment.Center,
             ) {
-                val file = videoFile
+                val file = videoBytes
                 if (playing && file != null) {
                     androidx.compose.ui.viewinterop.AndroidView(
                         factory = { c ->
-                            android.widget.VideoView(c).apply {
-                                setMediaController(android.widget.MediaController(c).also { it.setAnchorView(this) })
-                                setVideoPath(file.path)
-                                setOnPreparedListener { start() }
+                            androidx.media3.ui.PlayerView(c).apply {
+                                player = androidx.media3.exoplayer.ExoPlayer.Builder(c).build().also { p ->
+                                    p.setMediaSource(memoryMediaSource(file))
+                                    p.prepare()
+                                    p.playWhenReady = true
+                                }
                             }
                         },
+                        onRelease = { it.player?.release() },
                         modifier = Modifier.fillMaxWidth().heightIn(min = 140.dp, max = 280.dp),
                     )
                 } else {
@@ -1668,11 +1662,9 @@ private var nowPlaying: java.lang.ref.WeakReference<androidx.media3.exoplayer.Ex
 @Composable
 private fun VoiceNote(messageId: String, arrived: Boolean, size: Int, color: Color, loadFile: suspend (String) -> Pair<FileMeta, ByteArray>?) {
     val context = LocalContext.current
-    val file by produceState<java.io.File?>(null, messageId, arrived) {
-        value = withContext(Dispatchers.IO) {
-            val bytes = loadFile(messageId)?.second ?: return@withContext null
-            java.io.File(context.cacheDir, "audio-$messageId").also { it.writeBytes(bytes) }
-        }
+    // Read from the encrypted database into memory and played from there: nothing decrypted is written to storage.
+    val file by produceState<ByteArray?>(null, messageId, arrived) {
+        value = withContext(Dispatchers.IO) { loadFile(messageId)?.second }
     }
     var player by remember { mutableStateOf<androidx.media3.exoplayer.ExoPlayer?>(null) }
     var isPlaying by remember { mutableStateOf(false) }
@@ -1685,12 +1677,8 @@ private fun VoiceNote(messageId: String, arrived: Boolean, size: Int, color: Col
         if (value == null) value = WaveformDecoder.peaks(f, WAVE_BARS)?.also { waveformCache[messageId] = it }
     }
     androidx.compose.runtime.DisposableEffect(file) {
-        // Capture the file this effect is for. Reading `file` inside onDispose saw the NEW file when the key changed
-        // (null -> file), so the decrypted voice note was deleted the moment it was written: "can't be played".
-        val f = file
         onDispose {
             player?.release(); player = null; isPlaying = false
-            f?.delete()
         }
     }
     // Follows the playhead every frame while playing, so the bar glides instead of stepping.
@@ -1714,7 +1702,7 @@ private fun VoiceNote(messageId: String, arrived: Boolean, size: Int, color: Col
                     Toast.makeText(context, "This voice note can't be played", Toast.LENGTH_SHORT).show()
                 }
             })
-            p.setMediaItem(androidx.media3.common.MediaItem.fromUri(android.net.Uri.fromFile(f)))
+            p.setMediaSource(memoryMediaSource(f))
             p.setPlaybackSpeed(speed)
             p.prepare()
             player = p

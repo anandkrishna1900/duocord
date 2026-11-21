@@ -138,6 +138,19 @@ private fun RootScreen(viewModel: AppViewModel) {
             com.duochat.app.data.parseWhatsNew(viewModel.insight("whats_new", com.duochat.app.data.jsonString(AppConfig.APP_VERSION)))
         } else null
     }
+    // A newer build, found once when the app starts (never while Hide my IP or Tor is on; "Later" snoozes it for 3 days).
+    var update by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<com.duochat.app.data.UpdateInfo?>(null) }
+    LaunchedEffect(settings.updateChecks, settings.network.forceRelay, settings.network.torMode) {
+        if (settings.updateChecks && com.duochat.app.data.AppUpdate.mayCheck(settings.network) && System.currentTimeMillis() >= settings.updateSnoozedUntil) {
+            update = com.duochat.app.AppUpdater.latest().getOrNull()
+        }
+    }
+    update?.let { info ->
+        com.duochat.app.ui.UpdateDialog(info) {
+            update = null
+            viewModel.updateSettings { copy(updateSnoozedUntil = System.currentTimeMillis() + 3 * 24 * 60 * 60 * 1000L) }
+        }
+    }
     // Tell the engine which conversation is on screen (it marks messages read and stays quiet about them).
     val openChatId = route.takeIf { it.startsWith("chat:") }?.removePrefix("chat:")
     LaunchedEffect(openChatId, state?.phase) { if (state?.phase == EnginePhase.READY) viewModel.setOpenChat(openChatId) }

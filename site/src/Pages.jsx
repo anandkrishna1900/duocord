@@ -323,7 +323,7 @@ export function DownloadPage({ Go, repo, reduce, dlRef, dlOn }) {
           <h1>Get PrivCord</h1>
           <p className="sub">Free. Pick your platform.</p>
           <div className="dl">
-            <div className="dl-row"><div><h3><Icon d={P.mon} />Windows</h3><p>Installer for Windows 10 and 11 (64-bit). Downloads the file directly.</p></div>{link('Download for Windows', 'Windows/PrivCord_0.1.0_x64-setup.exe')}</div>
+            <div className="dl-row"><div><h3><Icon d={P.mon} />Windows</h3><p>Installer for Windows 10 and 11 (64-bit). Downloads the file directly.</p></div>{link('Download for Windows', 'Windows/PrivCord-setup.exe')}</div>
             <div className="dl-row"><div><h3><Icon d={P.ph} />Android</h3><p>One APK for Android phones. Downloads the file directly.</p></div>{link('Download for Android', 'Android/PrivCord.apk')}</div>
           </div>
         </div>

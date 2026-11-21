@@ -40,6 +40,10 @@ data class AppSettings(
     val lastBackupAt: Long = 0L,
     /** The app version whose "What's new" was last shown (empty before the first run). */
     val lastSeenVersion: String = "",
+    /** Look for a new version when the app starts (contacts GitHub; never done while Hide my IP or Tor is on). */
+    val updateChecks: Boolean = true,
+    /** "Later" on the update prompt: do not ask again before this time (milliseconds). */
+    val updateSnoozedUntil: Long = 0L,
     val network: NetworkConfig = NetworkConfig(),
 )
 
@@ -86,6 +90,7 @@ class SettingsRepository(context: Context) {
         .put("panicWipe", s.panicWipe).put("appLock", s.appLock)
         .put("mutedChats", JSONArray(s.mutedChats.toList()))
         .put("lastBackupAt", s.lastBackupAt).put("lastSeenVersion", s.lastSeenVersion)
+        .put("updateChecks", s.updateChecks).put("updateSnoozedUntil", s.updateSnoozedUntil)
         .put("network", s.network.toJson())
 
     private fun load(): AppSettings {
@@ -120,6 +125,8 @@ class SettingsRepository(context: Context) {
             mutedChats = o.optJSONArray("mutedChats")?.let { a -> (0 until a.length()).map { a.getString(it) }.toSet() } ?: emptySet(),
             lastBackupAt = o.optLong("lastBackupAt", 0L),
             lastSeenVersion = o.optString("lastSeenVersion", ""),
+            updateChecks = o.optBoolean("updateChecks", true),
+            updateSnoozedUntil = o.optLong("updateSnoozedUntil", 0L),
             network = NetworkConfig.fromJson(o.optString("network", "").ifEmpty { null }, fallback = AppConfig.defaultNetworkConfig()),
         )
     }

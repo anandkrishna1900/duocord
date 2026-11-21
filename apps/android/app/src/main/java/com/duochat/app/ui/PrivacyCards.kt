@@ -94,8 +94,9 @@ fun NetworkHostsCard(rows: List<HostRow>) {
                 }
             }
             Text(
-                "That is the whole list: no analytics, no update check, no ads, no account server. Your messages go phone to phone; " +
-                    "the hosts above only help two phones find each other, and see sealed data they cannot read.",
+                "That is the whole list: no analytics, no ads, no account server. The one other host is github.com, only to look for a " +
+                    "new version at start (Settings: you can turn that off, and it never runs with Hide my IP or Tor on). Your messages " +
+                    "go phone to phone; the hosts above only help two phones find each other, and see sealed data they cannot read.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

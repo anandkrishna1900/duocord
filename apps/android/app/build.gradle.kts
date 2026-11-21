@@ -46,8 +46,9 @@ android {
         buildConfigString("PRIVCORD_TURN_USERNAME", System.getenv("PRIVCORD_TURN_USERNAME") ?: "")
         buildConfigString("PRIVCORD_TURN_CREDENTIAL", System.getenv("PRIVCORD_TURN_CREDENTIAL") ?: "")
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        // The automatic builds pass their run number, so every build is newer than the last (updates need that).
+        versionCode = (project.findProperty("duochat.versionCode") as String?)?.toIntOrNull() ?: 1
+        versionName = (project.findProperty("duochat.versionName") as String?) ?: "0.1.0"
 
         // Only the languages the app speaks: drops the libraries' translations for every other language.
         resourceConfigurations += listOf("en", "es", "fr")

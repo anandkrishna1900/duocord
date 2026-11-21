@@ -31,6 +31,14 @@
       "capabilities": ["default"]
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "REPLACE_WITH_THE_UPDATER_PUBLIC_KEY",
+      "endpoints": ["https://github.com/raiden6767/PrivCord/releases/download/Windows/latest.json"],
+      "windows": { "installMode": "passive" },
+      "requireSignedVersion": true
+    }
+  },
   "bundle": {
     "active": true,
     "targets": ["nsis"],

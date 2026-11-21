@@ -14,6 +14,7 @@ import { DeviceRow } from './DeviceRow';
 import { AutoBackupControl } from './AutoBackupControl';
 import { LAST_BACKUP_KEY, PrivacyCheckup } from './PrivacyCheckup';
 import { NetworkTransparency } from './NetworkTransparency';
+import { UpdateCheck } from './UpdateControl';
 import { StorageByChat } from './StorageByChat';
 import { NO_PREFS } from '../lib/engine';
 import { formatBytes } from '../lib/format';
@@ -629,6 +630,17 @@ export function SettingsDialog({
 
         {section === 'about' ? (
           <section className="settings-section">
+            {isTauri() ? (
+              <div className="card-box">
+                <Toggle
+                  checked={settings.updateChecks}
+                  onChange={(value) => updateSettings({ updateChecks: value })}
+                  label="Check for updates"
+                  description="Looks for a new version when the app starts and offers to install it. This contacts GitHub, which can see your IP address, so it stays off while Hide my IP or Tor mode is on."
+                />
+                <UpdateCheck />
+              </div>
+            ) : null}
             <WhatsNew engine={engine} />
             <SupportTools engine={engine} />
             <StorageByChat state={state} engine={engine} />

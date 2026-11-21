@@ -6,7 +6,7 @@ name: Test builds
 on:
   push:
     branches: [main]
-    paths-ignore: ['site/**', '*.md']
+    paths-ignore: ['site/**', '*.md', '.gitignore', '.github/workflows/pages.yml']
   workflow_dispatch:
     inputs:
       publish:
@@ -46,7 +46,8 @@ jobs:
           else
             echo '{"version":"0.1.${{ github.run_number }}"}' > apps/desktop/ci-version.conf.json
           fi
-          npm run tauri:build -- --config ci-version.conf.json
+          # Call the workspace directly: the root script forwards arguments to a second npm, which would take --config itself.
+          npm --workspace @duochat/desktop run tauri:build -- --config ci-version.conf.json
       - uses: actions/upload-artifact@v7
         with:
           name: duochat-windows-unsigned

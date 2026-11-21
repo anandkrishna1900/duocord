@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Head, Next } from './Pages.jsx';
+import DotGrid from './rb/DotGrid.jsx';
 
 /*
  * The architecture page: an interactive map of how PrivCord is built. Layers as rows, parts as buttons, edges drawn between
@@ -139,9 +140,10 @@ function Graph() {
   const wrap = useRef(null);
   const nodeEls = useRef({});
   const pathEls = useRef({});
+  const info = useRef({});
   const dot = useRef(null);
-  const [paths, setPaths] = useState([]);
-  const [size, setSize] = useState({ w: 0, h: 0 });
+  const svg = useRef(null);
+  const panelRef = useRef(null);
   const [sel, setSel] = useState('core');
   const [layer, setLayer] = useState(null);
   const [sc, setSc] = useState(0);
@@ -149,30 +151,35 @@ function Graph() {
   const [play, setPlay] = useState(() => !reduced());
   const [seen, setSeen] = useState(false);
   const [hold, setHold] = useState(false);
+  const [pop, setPop] = useState(null);
   const scenario = SCENARIOS[sc];
   const current = scenario.steps[step][0];
   const prev = step > 0 ? scenario.steps[step - 1][0] : null;
   const running = play && seen && !hold;
 
+  // Edges are redrawn from the measured positions of the parts, so they follow the parts as they float and drift.
   const measure = useCallback(() => {
     const box = wrap.current?.getBoundingClientRect();
     if (!box) return;
+    if (svg.current) {
+      svg.current.setAttribute('width', box.width.toFixed(0));
+      svg.current.setAttribute('height', box.height.toFixed(0));
+    }
     const rect = (id) => {
       const r = nodeEls.current[id]?.getBoundingClientRect();
       return r ? { x: r.left - box.left + r.width / 2, top: r.top - box.top, bottom: r.bottom - box.top, mid: r.top - box.top + r.height / 2 } : null;
     };
-    const next = [];
     for (const [a, b] of PAIRS) {
       const ra = rect(a);
       const rb = rect(b);
-      if (!ra || !rb) continue;
-      const upper = ra.mid <= rb.mid ? [a, ra, b, rb] : [b, rb, a, ra];
-      const [ua, ura, ub, urb] = upper;
+      const el = pathEls.current[edgeKey(a, b)];
+      if (!ra || !rb || !el) continue;
+      const aFirst = ra.mid <= rb.mid;
+      const [ua, ura, ub, urb] = aFirst ? [a, ra, b, rb] : [b, rb, a, ra];
       const dy = Math.max(24, (urb.top - ura.bottom) / 2);
-      next.push({ key: edgeKey(a, b), a: ua, b: ub, d: `M ${ura.x.toFixed(1)} ${ura.bottom.toFixed(1)} C ${ura.x.toFixed(1)} ${(ura.bottom + dy).toFixed(1)}, ${urb.x.toFixed(1)} ${(urb.top - dy).toFixed(1)}, ${urb.x.toFixed(1)} ${urb.top.toFixed(1)}` });
+      info.current[edgeKey(a, b)] = { a: ua, b: ub };
+      el.setAttribute('d', `M ${ura.x.toFixed(1)} ${ura.bottom.toFixed(1)} C ${ura.x.toFixed(1)} ${(ura.bottom + dy).toFixed(1)}, ${urb.x.toFixed(1)} ${(urb.top - dy).toFixed(1)}, ${urb.x.toFixed(1)} ${urb.top.toFixed(1)}`);
     }
-    setPaths(next);
-    setSize({ w: box.width, h: box.height });
   }, []);
 
   useLayoutEffect(() => {
@@ -186,9 +193,48 @@ function Graph() {
   useEffect(() => {
     const el = wrap.current;
     if (!el || typeof IntersectionObserver !== 'function') { setSeen(true); return undefined; }
-    const io = new IntersectionObserver(([e]) => setSeen(e.isIntersecting), { threshold: 0.3 });
+    const io = new IntersectionObserver(([e]) => setSeen(e.isIntersecting), { threshold: 0.05 });
     io.observe(el);
     return () => io.disconnect();
+  }, []);
+
+  // While the map is on screen the parts float, so the edges are redrawn every frame (15 rectangles, cheap).
+  useEffect(() => {
+    if (!seen || reduced()) return undefined;
+    let raf = 0;
+    const loop = () => { measure(); raf = requestAnimationFrame(loop); };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [seen, measure]);
+
+  // Near the pointer the parts lean towards it a little and grow; away from it they settle back.
+  useEffect(() => {
+    const box = wrap.current;
+    if (!box || reduced()) return undefined;
+    const move = (e) => {
+      if (e.pointerType !== 'mouse') return;
+      for (const el of Object.values(nodeEls.current)) {
+        if (!el) continue;
+        const r = el.getBoundingClientRect();
+        const dx = e.clientX - (r.left + r.width / 2);
+        const dy = e.clientY - (r.top + r.height / 2);
+        const d = Math.hypot(dx, dy);
+        const k = Math.max(0, 1 - d / 190);
+        el.style.setProperty('--mx', `${(dx * 0.16 * k).toFixed(1)}px`);
+        el.style.setProperty('--my', `${(dy * 0.16 * k).toFixed(1)}px`);
+        el.style.setProperty('--s', (1 + k * Math.min(0.07, 14 / r.width)).toFixed(3));
+      }
+    };
+    const leave = () => {
+      for (const el of Object.values(nodeEls.current)) {
+        el?.style.setProperty('--mx', '0px');
+        el?.style.setProperty('--my', '0px');
+        el?.style.setProperty('--s', '1');
+      }
+    };
+    box.addEventListener('pointermove', move);
+    box.addEventListener('pointerleave', leave);
+    return () => { box.removeEventListener('pointermove', move); box.removeEventListener('pointerleave', leave); };
   }, []);
 
   // Advance the stepper while it is playing, on screen and not being touched.
@@ -210,17 +256,17 @@ function Graph() {
     if (!d) return undefined;
     d.style.opacity = '0';
     if (!prev || reduced()) return undefined;
-    const p = pathEls.current[edgeKey(prev, current)];
-    const info = paths.find((x) => x.key === edgeKey(prev, current));
-    if (!p || !info || typeof p.getTotalLength !== 'function') return undefined;
-    const len = p.getTotalLength();
-    const forward = info.a === prev;
+    const key = edgeKey(prev, current);
     const t0 = performance.now();
     let raf = 0;
     const tick = (now) => {
+      const p = pathEls.current[key];
+      const edge = info.current[key];
+      if (!p || !edge || typeof p.getTotalLength !== 'function') return;
+      const len = p.getTotalLength();
       const t = Math.min(1, (now - t0) / 1100);
       const e = 1 - Math.pow(1 - t, 3);
-      const pt = p.getPointAtLength((forward ? e : 1 - e) * len);
+      const pt = p.getPointAtLength((edge.a === prev ? e : 1 - e) * len);
       d.setAttribute('cx', pt.x.toFixed(1));
       d.setAttribute('cy', pt.y.toFixed(1));
       d.style.opacity = '1';
@@ -228,12 +274,13 @@ function Graph() {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [prev, current, paths]);
+  }, [prev, current]);
 
-  const panelRef = useRef(null);
   const pick = (id) => {
     setSel(id);
     setPlay(false);
+    setPop(id);
+    setTimeout(() => setPop((p) => (p === id ? null : p)), 700);
     const p = panelRef.current;
     if (p && matchMedia('(max-width: 999px)').matches) requestAnimationFrame(() => p.scrollIntoView({ block: 'nearest', behavior: reduced() ? 'auto' : 'smooth' }));
   };
@@ -260,11 +307,12 @@ function Graph() {
 
       <div className="arch-body">
         <div className="arch-graph" ref={wrap}>
-          <svg className="arch-edges" width={size.w} height={size.h} viewBox={`0 0 ${size.w || 1} ${size.h || 1}`} aria-hidden="true">
-            {paths.map((p) => {
-              const onStep = prev && p.key === edgeKey(prev, current);
-              const touched = p.a === sel || p.b === sel;
-              return <path key={p.key} ref={(e) => { pathEls.current[p.key] = e; }} d={p.d} className={`edge${touched ? ' touched' : ''}${onStep ? ' live' : ''}`} />;
+          <svg className="arch-edges" ref={svg} width="1" height="1" aria-hidden="true">
+            {PAIRS.map(([a, b]) => {
+              const key = edgeKey(a, b);
+              const onStep = prev && key === edgeKey(prev, current);
+              const touched = a === sel || b === sel;
+              return <path key={key} ref={(e) => { pathEls.current[key] = e; }} d="M0 0" className={`edge${touched ? ' touched' : ''}${onStep ? ' live' : ''}`} />;
             })}
             <circle ref={dot} className="packet" r="7" cx="0" cy="0" style={{ opacity: 0 }} />
           </svg>
@@ -272,12 +320,13 @@ function Graph() {
             <section key={l.id} className={`arch-layer${layer && layer !== l.id ? ' dim' : ''}`} style={{ '--h': l.hue }} aria-label={l.label}>
               <h3><i aria-hidden="true" />{l.label}</h3>
               <div className="arch-nodes">
-                {NODES.filter((n) => n.layer === l.id).map((n) => (
+                {NODES.filter((n) => n.layer === l.id).map((n, i) => (
                   <button
                     key={n.id}
                     type="button"
                     ref={(e) => { nodeEls.current[n.id] = e; }}
-                    className={`arch-node${sel === n.id ? ' sel' : ''}${linked.has(n.id) && sel !== n.id ? ' linked' : ''}${current === n.id ? ' now' : ''}${visited.has(n.id) ? ' seen' : ''}`}
+                    className={`arch-node${sel === n.id ? ' sel' : ''}${linked.has(n.id) && sel !== n.id ? ' linked' : ''}${current === n.id ? ' now' : ''}${visited.has(n.id) ? ' seen' : ''}${pop === n.id ? ' pop' : ''}`}
+                    style={{ '--dur': `${4.6 + ((n.id.length * 7 + i * 3) % 9) * 0.35}s`, '--delay': `${-((n.id.charCodeAt(0) + i * 5) % 11) * 0.45}s` }}
                     aria-pressed={sel === n.id}
                     onClick={() => pick(n.id)}
                   >
@@ -377,9 +426,27 @@ function Timeline() {
   );
 }
 
+/** Drifting dots across the whole page, with two slow light pools behind them (React Bits DotGrid plus CSS). */
+function Backdrop() {
+  const [on, setOn] = useState(true);
+  useEffect(() => {
+    const f = () => setOn(!document.hidden);
+    document.addEventListener('visibilitychange', f);
+    return () => document.removeEventListener('visibilitychange', f);
+  }, []);
+  const small = typeof matchMedia === 'function' && matchMedia('(max-width: 700px)').matches;
+  return (
+    <div className="arch-bg" aria-hidden="true">
+      <i className="pool p1" /><i className="pool p2" />
+      {!reduced() && <DotGrid dotSize={small ? 3 : 4} gap={small ? 30 : 24} baseColor="#2b2b2b" activeColor="#ffe500" proximity={150} shockRadius={340} shockStrength={5} glow={0} paused={!on} />}
+    </div>
+  );
+}
+
 export function ArchitecturePage({ Go, repo }) {
   return (
-    <>
+    <div className="arch-page">
+      <Backdrop />
       <Head eyebrow="Architecture" title="How PrivCord is built" lead="One Rust engine, thin screens on top, five small ports underneath, and a handful of optional helpers in the world. Click a part, or let the packet show you the way." />
       <section className="page-sec">
         <div className="wrap">
@@ -417,6 +484,6 @@ export function ArchitecturePage({ Go, repo }) {
         </div>
       </section>
       <Next Go={Go} items={[['how', 'How it works'], ['features', 'Features'], ['faq', 'Questions']]} />
-    </>
+    </div>
   );
 }

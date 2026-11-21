@@ -348,3 +348,34 @@ nav.links a:not(.btn):hover::after, nav.links a[aria-current="page"]::after { tr
 
 .arch-layer h3 { position: relative; z-index: 2; width: fit-content; padding: 2px 10px 2px 0; background: var(--ink2); }
 @media (max-width: 600px) { .arch-node { flex-basis: 128px; padding: 10px 12px; } .arch-node strong { font-size: .92rem; } .arch-graph { padding: 12px; } .arch-panel { padding: 18px; } }
+
+/* architecture page, floating version: no box behind the map, an animated backdrop over the whole page, parts that float and react */
+.arch-page { position: relative; }
+.arch-page > section { position: relative; z-index: 1; }
+.arch-page .page-head, .arch-page .page-sec, .arch-page .page-next { background: transparent; }
+.arch-bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+.arch-bg > div { position: absolute; inset: 0; opacity: .9; }
+.arch-bg .pool { position: absolute; width: 60vmax; height: 60vmax; border-radius: 50%; filter: blur(40px); opacity: .5; }
+.arch-bg .p1 { left: -18vmax; top: -12vmax; background: radial-gradient(closest-side, rgba(255, 229, 0, .16), transparent); animation: pool-a 26s ease-in-out infinite alternate; }
+.arch-bg .p2 { right: -22vmax; bottom: -20vmax; background: radial-gradient(closest-side, rgba(110, 90, 255, .2), transparent); animation: pool-b 32s ease-in-out infinite alternate; }
+@keyframes pool-a { to { transform: translate3d(22vmax, 16vmax, 0) scale(1.15); } }
+@keyframes pool-b { to { transform: translate3d(-24vmax, -14vmax, 0) scale(1.1); } }
+.arch-graph { padding: 8px 0; border: 0; background: none; border-radius: 0; }
+.arch-layer h3 { background: none; padding: 2px 0; text-shadow: 0 0 6px var(--ink), 0 0 12px var(--ink), 0 0 18px var(--ink); }
+.arch-node { background: rgba(10, 10, 10, .82); box-shadow: 0 10px 30px rgba(0, 0, 0, .35); animation: node-float var(--dur, 6s) ease-in-out var(--delay, 0s) infinite alternate; transform: translate3d(var(--mx, 0px), var(--my, 0px), 0) scale(var(--s, 1)); transition: transform .35s cubic-bezier(.22, 1, .36, 1), border-color .2s, background .2s, color .2s, box-shadow .25s; will-change: transform; }
+@keyframes node-float { from { translate: 0 -5px; } to { translate: 0 5px; } }
+.arch-node:hover { transform: translate3d(var(--mx, 0px), var(--my, 0px), 0) scale(calc(var(--s, 1) + .03)); border-color: var(--yellow); box-shadow: 0 16px 40px rgba(255, 229, 0, .16); }
+.arch-node:active { transform: translate3d(var(--mx, 0px), var(--my, 0px), 0) scale(.96); }
+.arch-node.pop { animation: node-float var(--dur, 6s) ease-in-out var(--delay, 0s) infinite alternate, node-pop .6s cubic-bezier(.22, 1, .36, 1); }
+@keyframes node-pop { 0% { scale: .92; } 45% { scale: 1.08; } 100% { scale: 1; } }
+.arch-node::after { content: ''; position: absolute; inset: -2px; border-radius: 16px; border: 2px solid var(--yellow); opacity: 0; pointer-events: none; }
+.arch-node { position: relative; }
+.arch-node.pop::after { animation: node-ring .7s ease-out; }
+@keyframes node-ring { 0% { opacity: .9; transform: scale(1); } 100% { opacity: 0; transform: scale(1.35); } }
+.arch-panel { background: rgba(20, 20, 20, .85); backdrop-filter: blur(8px); }
+.arch-caps li.on button { background: rgba(20, 20, 20, .85); }
+.crates li, .timeline li > button, .arch-page .fcard.plain { background: rgba(20, 20, 20, .85); }
+@media (prefers-reduced-motion: reduce) { .arch-bg .pool { animation: none; } .arch-node, .arch-node.pop { animation: none; transform: none; } .arch-node:hover { transform: none; } .arch-node.pop::after { animation: none; } }
+
+.arch-nodes { justify-content: center; } .arch-node { max-width: 330px; }
+.arch-node:hover { transform: translate3d(var(--mx, 0px), var(--my, 0px), 0) scale(calc(var(--s, 1) + .012)); }

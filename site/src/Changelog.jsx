@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { Head, Next } from './Pages.jsx';
 import log from './changelog.json';
 
@@ -33,6 +33,44 @@ const headlineOf = (items) => items.reduce((best, e) => (weight(e) > weight(best
 function Tags({ e }) {
   const tags = tagsOf(e);
   return tags.length ? <span className="cl-tags">{tags.map((t) => <span key={t} className={`cl-tag t-${t}`}>{LABEL[t]}</span>)}</span> : null;
+}
+
+/** One day. A button opens it; the body slides open (and the steps rise in one by one) unless the visitor asked for less motion. */
+function DayTile({ d, items, last, plain, repo }) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  const head = headlineOf(items);
+  const more = items.length - 1;
+  return (
+    <div className="cl-tile" data-open={open ? '' : undefined}>
+      <button type="button" className="cl-open" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}>
+        <time dateTime={d} className="cl-tdate">{tile(d)}<span className="cl-time">{clock(items[0].date)}</span>{d === last && plain ? <span className="cl-new">Latest</span> : null}</time>
+        <span className="cl-head">{head.title}</span>
+        <span className="cl-meta"><Tags e={head} /><span>{more > 0 ? `+${more} more · ${items.length} changes` : '1 change'}</span></span>
+      </button>
+      <div className="cl-reveal" id={id} role="region" aria-label={`Everything on ${tile(d)}`} inert={open ? undefined : ''} aria-hidden={!open}>
+        <div className="cl-clip">
+          <div className="cl-body" tabIndex={open ? 0 : -1}>
+            <ul>
+              {items.map((e, i) => (
+                <li key={e.sha} style={{ '--i': Math.min(i, 8) }}>
+                  <p className="cl-at"><time dateTime={e.date}>{clock(e.date)} {zone(e.date)}</time></p>
+                  <h3>{e.title}</h3>
+                  <Tags e={e} />
+                  {e.summary ? <p className="cl-sum">{e.summary}</p> : null}
+                  {e.details.length ? <ul className="cl-steps">{e.details.map((x) => <li key={x}>{x}</li>)}</ul> : null}
+                  <p className="cl-links">
+                    {e.pr ? <a href={`${repo}/pull/${e.pr}`}>Pull request #{e.pr}</a> : null}
+                    <a href={`${repo}/commit/${e.sha}`}>Commit {e.sha.slice(0, 7)}</a>
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function ChangelogPage({ Go, repo }) {
@@ -92,36 +130,7 @@ export function ChangelogPage({ Go, repo }) {
             <section key={m} className="cl-month" aria-label={m}>
               <h2 className="cl-mhead">{m}</h2>
               <div className="cl-grid">
-                {list.map(({ d, items }) => {
-                  const head = headlineOf(items);
-                  const more = items.length - 1;
-                  return (
-                    <details key={d} className="cl-tile">
-                      <summary>
-                        <time dateTime={d} className="cl-tdate">{tile(d)}<span className="cl-time">{clock(items[0].date)}</span>{d === last && filter === 'all' && !from && !to ? <span className="cl-new">Latest</span> : null}</time>
-                        <span className="cl-head">{head.title}</span>
-                        <span className="cl-meta"><Tags e={head} /><span>{more > 0 ? `+${more} more · ${items.length} changes` : '1 change'}</span></span>
-                      </summary>
-                      <div className="cl-body" tabIndex={0} aria-label={`Everything on ${tile(d)}`}>
-                        <ul>
-                          {items.map((e) => (
-                            <li key={e.sha}>
-                              <p className="cl-at"><time dateTime={e.date}>{clock(e.date)} {zone(e.date)}</time></p>
-                              <h3>{e.title}</h3>
-                              <Tags e={e} />
-                              {e.summary ? <p className="cl-sum">{e.summary}</p> : null}
-                              {e.details.length ? <ul className="cl-steps">{e.details.map((x) => <li key={x}>{x}</li>)}</ul> : null}
-                              <p className="cl-links">
-                                {e.pr ? <a href={`${repo}/pull/${e.pr}`}>Pull request #{e.pr}</a> : null}
-                                <a href={`${repo}/commit/${e.sha}`}>Commit {e.sha.slice(0, 7)}</a>
-                              </p>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </details>
-                  );
-                })}
+                {list.map(({ d, items }) => <DayTile key={d} d={d} items={items} last={last} plain={filter === 'all' && !from && !to} repo={repo} />)}
               </div>
             </section>
           ))}

@@ -14,7 +14,8 @@ pub mod signaling;
 
 pub use api::{
     AnswerStatus, AnswerView, ContactView, ConversationSummary, DeliveryDetail, EngineEvent,
-    GroupView, InviteView, LastMessage, LegacyGroupView, RequestView, SignalMessage, Snapshot,
+    GroupView, InviteView, LastMessage, LegacyGroupView, MessagePage, RequestView, SignalMessage,
+    Snapshot,
 };
 pub use core::{lan::LanPeer, Core, LinkSecurity, Ports};
 pub use core::{InvitePreview, RestoreSummary, SearchHit};

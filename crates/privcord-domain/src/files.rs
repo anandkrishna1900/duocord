@@ -330,7 +330,8 @@ struct Incoming {
     next: usize,
 }
 
-/// Receiving side, one per peer link. Chunks must arrive in order (the data channel is ordered); anything out of
+/// Receiving side, one per peer link. Chunks must arrive in order (the data channel is ordered; one we already hold is
+/// skipped); anything out of
 /// order, the wrong size, over the file size or failing the SHA-256 check aborts that transfer.
 #[derive(Debug, Default)]
 pub struct FileAssembler {
@@ -370,11 +371,46 @@ impl FileAssembler {
         BeginOutcome::Ok
     }
 
+    /// Start a transfer from bytes already held (a checkpoint of an earlier attempt). `bytes` must be a whole number of
+    /// chunks and shorter than the file, or the transfer starts from nothing instead.
+    pub fn begin_from(&mut self, offer: FileOffer, bytes: Vec<u8>) -> BeginOutcome {
+        let usable =
+            !bytes.is_empty() && bytes.len() < offer.size && bytes.len() % FILE_CHUNK_BYTES == 0;
+        let held = if usable { bytes } else { Vec::new() };
+        let key = offer.message_id.to_string();
+        let outcome = self.begin(offer);
+        if outcome == BeginOutcome::Ok {
+            if let Some(t) = self.active.get_mut(&key) {
+                t.next = held.len() / FILE_CHUNK_BYTES;
+                t.bytes = held;
+            }
+        }
+        outcome
+    }
+
+    /// The bytes received so far, in whole chunks, with the SHA-256 the offer promised: what a checkpoint keeps.
+    pub fn partial(&self, id: &MessageId) -> Option<(&FileOffer, &[u8])> {
+        let t = self.active.get(id.as_str())?;
+        (t.next > 0).then_some((&t.offer, t.bytes.as_slice()))
+    }
+
+    /// Ids of the transfers in progress.
+    pub fn active_ids(&self) -> Vec<MessageId> {
+        self.active
+            .values()
+            .map(|t| t.offer.message_id.clone())
+            .collect()
+    }
+
     pub fn chunk(&mut self, frame: &FileChunk) -> AssembleResult {
         let key = frame.message_id.to_string();
         let Some(t) = self.active.get_mut(&key) else {
             return AssembleResult::Failed(DeclineReason::BadFile);
         };
+        // A chunk we already hold (a sender that does not know where we resumed sends from the start): skip it.
+        if frame.index < t.next {
+            return AssembleResult::More;
+        }
         let Some(data) = codec::decode(&frame.data) else {
             self.active.remove(&key);
             return AssembleResult::Failed(DeclineReason::BadFile);

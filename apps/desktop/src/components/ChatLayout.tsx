@@ -592,6 +592,8 @@ export function ChatLayout({
             <MessageList
               convId={selected ?? ''}
               messages={messages}
+              earlier={(selected && state.earlier?.[selected]) || 0}
+              onLoadEarlier={engine?.loadEarlier && selected ? () => engine.loadEarlier!(selected) : undefined}
               isGroup={group !== null || channel !== null}
               canReply={channel === null}
               onMute={channel ? (uid) => engine?.muteSender(uid) : undefined}

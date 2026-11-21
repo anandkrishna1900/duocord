@@ -143,10 +143,12 @@ impl Wipe<'_> {
                 for p in self.core.peers.values_mut() {
                     p.files.clear();
                 }
+                self.core.drop_all_partials();
                 Ok((StepStatus::Erased, None))
             }
             "messages.erase" => {
                 let r = self.storage(StorageOp::Erase(EraseScope::Messages));
+                self.core.drop_all_partials();
                 if r.is_ok() {
                     self.core.messages.clear();
                     self.core.outbox.clear();
@@ -165,7 +167,10 @@ impl Wipe<'_> {
                 }
                 r
             }
-            "attachments.erase" => self.storage(StorageOp::Erase(EraseScope::Files)),
+            "attachments.erase" => {
+                self.core.drop_all_partials();
+                self.storage(StorageOp::Erase(EraseScope::Files))
+            }
             "queues.erase" => {
                 let r = self.storage(StorageOp::Erase(EraseScope::Outbox));
                 if r.is_ok() {
@@ -214,6 +219,7 @@ impl Wipe<'_> {
         };
         match id {
             "conv.transfers.cancel" => {
+                self.core.drop_all_partials();
                 if let Some(u) = self.peer_of() {
                     for (_, p) in self
                         .core
@@ -228,6 +234,7 @@ impl Wipe<'_> {
             }
             "conv.messages.erase" => {
                 let r = self.storage(StorageOp::Erase(EraseScope::Conversation(conv.clone())));
+                self.core.drop_all_partials();
                 if r.is_ok() {
                     self.forget_messages_where(|c| *c != conv);
                 }

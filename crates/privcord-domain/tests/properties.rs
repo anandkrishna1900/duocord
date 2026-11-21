@@ -158,3 +158,42 @@ proptest! {
         prop_assert!(matches!(last, AssembleResult::Failed(_)));
     }
 }
+
+#[test]
+fn a_transfer_resumed_from_held_chunks_finishes_and_skips_repeats() {
+    use privcord_domain::{
+        files::{file_chunks, AssembleResult, BeginOutcome, FileAssembler},
+        limits::FILE_CHUNK_BYTES,
+    };
+    let bytes: Vec<u8> = (0..FILE_CHUNK_BYTES * 3 + 5)
+        .map(|i| (i % 251) as u8)
+        .collect();
+    let id = MessageId::new("f").unwrap();
+    let offer = FileOffer::make(
+        id.clone(),
+        None,
+        "a.bin",
+        "application/octet-stream",
+        &bytes,
+        5,
+        None,
+    )
+    .unwrap();
+    let mut asm = FileAssembler::new();
+    // Two whole chunks are held: the transfer asks for the third.
+    let held = bytes[..FILE_CHUNK_BYTES * 2].to_vec();
+    assert_eq!(asm.begin_from(offer.clone(), held), BeginOutcome::Ok);
+    assert_eq!(asm.next_index(&id), Some(2));
+    // A sender starting from the top repeats chunks 0 and 1: skipped, not an error.
+    let mut last = AssembleResult::More;
+    for c in file_chunks(&id, &bytes) {
+        last = asm.chunk(&c);
+    }
+    match last {
+        AssembleResult::Done { bytes: out, .. } => assert_eq!(out, bytes),
+        other => panic!("{other:?}"),
+    }
+    // Held bytes that are not whole chunks are not trusted: the transfer starts from nothing.
+    assert_eq!(asm.begin_from(offer, vec![1; 100]), BeginOutcome::Ok);
+    assert_eq!(asm.next_index(&id), Some(0));
+}

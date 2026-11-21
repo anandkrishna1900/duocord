@@ -20,7 +20,7 @@ import { HostedEngine, type EngineBridge } from '../engineBridge';
 import { uidMatchesKeys, type DeviceIdentity } from '../identity';
 import type { FileMeta, LocalStore, StoredMessage } from '../localDb';
 import { HostedRuntime, type RuntimeOptions } from './runtime';
-import { shapeState, type SnapshotJson } from './shape';
+import { shapeState, type MessageJson, type SnapshotJson } from './shape';
 
 export interface HostedDeps {
   bridge: EngineBridge;
@@ -48,6 +48,10 @@ export const ENGINE_IDENTITY_KEY = 'engine-identity-v1';
 
 const LOOKUP_WAIT_MS = 42_000;
 const REFRESH_DELAY_MS = 30;
+/** Messages of each chat the snapshot carries: the screens stay as fast on a long history as on a short one. */
+const WINDOW = 200;
+/** Older messages loaded by one tap on "Load earlier". */
+const PAGE = 100;
 
 /** The engine's error names, in words (the Android adapter has the same table). */
 export function friendly(error: unknown): string {
@@ -105,6 +109,8 @@ export class HostedChatEngine implements ChatEngineApi {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private refreshing = false;
   private again = false;
+  /** Per chat: how many messages before the window the person has asked to see. Fetched again on every refresh, so the view stays in one piece as the window moves. */
+  private extra = new Map<string, number>();
   private current: Promise<void> = Promise.resolve();
   private lookup: { resolve: (p: { uid: string; name: string; safetyNumber: string; already: boolean }) => void; reject: (e: Error) => void } | null = null;
   private off: (() => void) | null = null;
@@ -182,7 +188,8 @@ export class HostedChatEngine implements ChatEngineApi {
         do {
           this.again = false;
           try {
-            const next = await this.engine.snapshot<SnapshotJson>();
+            const next = await this.engine.snapshot<SnapshotJson>(WINDOW);
+            await this.addEarlier(next);
             // Never go back to an older picture than the one on screen.
             if (!this.snapshot || next.seq >= this.snapshot.seq) this.snapshot = next;
             this.runtime?.setOwnUid(next.own_uid ?? '');
@@ -197,6 +204,29 @@ export class HostedChatEngine implements ChatEngineApi {
       }
     })();
     return this.current;
+  }
+
+  /** Put the pages the person asked for in front of each chat's window, and say how many are still not loaded. */
+  private async addEarlier(next: SnapshotJson): Promise<void> {
+    for (const [id, limit] of this.extra) {
+      const conv = next.conversations.find((c) => c.id === id);
+      const first = conv?.messages[0]?.id;
+      if (!conv || !first) continue;
+      try {
+        const page = await this.engine.messagesBefore<{ messages: MessageJson[]; more: boolean }>(id, first, limit);
+        conv.messages = [...page.messages, ...conv.messages];
+        const left = next.older?.find((o) => o.conversation === id);
+        if (left) left.count = page.more ? Math.max(left.count - page.messages.length, 1) : 0;
+      } catch {
+        // The window alone is still a true picture.
+      }
+    }
+  }
+
+  /** Show another page of a chat's older messages. */
+  async loadEarlier(convId: string): Promise<void> {
+    this.extra.set(convId, (this.extra.get(convId) ?? 0) + PAGE);
+    await this.refresh();
   }
 
   clearNotice(): void {
@@ -887,6 +917,7 @@ export class HostedChatEngine implements ChatEngineApi {
   async clearLocalData(): Promise<void> {
     await this.localStore.clearAll();
     this.snapshot = null;
+    this.extra.clear();
     this.emit();
   }
 

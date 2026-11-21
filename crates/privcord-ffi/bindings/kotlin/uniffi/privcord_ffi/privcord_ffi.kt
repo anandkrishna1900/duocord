@@ -1238,6 +1238,8 @@ internal interface UniffiLib : Library {
     ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_message_receipts_json(`ptr`: Pointer,`messageId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    fun uniffi_privcord_ffi_fn_method_privcordengine_messages_before(`ptr`: Pointer,`conversation`: RustBuffer.ByValue,`before`: RustBuffer.ByValue,`limit`: Int,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     fun uniffi_privcord_ffi_fn_method_privcordengine_next_event(`ptr`: Pointer,`timeoutMs`: Int,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_privcord_ffi_fn_method_privcordengine_own_card(`ptr`: Pointer,`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1323,6 +1325,8 @@ internal interface UniffiLib : Library {
     fun uniffi_privcord_ffi_fn_method_privcordengine_signal_blob(`ptr`: Pointer,`mailbox`: RustBuffer.ByValue,`blob`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_privcord_ffi_fn_method_privcordengine_snapshot(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    fun uniffi_privcord_ffi_fn_method_privcordengine_snapshot_recent(`ptr`: Pointer,`perChat`: Int,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_privcord_ffi_fn_method_privcordengine_start_device_link(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -1592,6 +1596,8 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_message_receipts_json(
     ): Short
+    fun uniffi_privcord_ffi_checksum_method_privcordengine_messages_before(
+    ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_next_event(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_own_card(
@@ -1677,6 +1683,8 @@ internal interface UniffiLib : Library {
     fun uniffi_privcord_ffi_checksum_method_privcordengine_signal_blob(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_snapshot(
+    ): Short
+    fun uniffi_privcord_ffi_checksum_method_privcordengine_snapshot_recent(
     ): Short
     fun uniffi_privcord_ffi_checksum_method_privcordengine_start_device_link(
     ): Short
@@ -1878,6 +1886,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_message_receipts_json() != 58819.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_messages_before() != 17750.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_next_event() != 14644.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -2005,6 +2016,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_snapshot() != 20760.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_snapshot_recent() != 44688.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_privcord_ffi_checksum_method_privcordengine_start_device_link() != 15845.toShort()) {
@@ -3550,6 +3564,11 @@ public interface PrivcordEngineInterface {
     fun `messageReceiptsJson`(`messageId`: kotlin.String): kotlin.String
     
     /**
+     * Up to `limit` messages of a chat before the message `before` (the newest when it is empty), oldest first.
+     */
+    fun `messagesBefore`(`conversation`: kotlin.String, `before`: kotlin.String?, `limit`: kotlin.UInt): MessagePageDto
+    
+    /**
      * Wait up to `timeout_ms` for the next event. `None` means nothing happened. Call it from a background thread
      * and turn it into a Flow; each call takes the next event in order.
      */
@@ -3746,6 +3765,12 @@ public interface PrivcordEngineInterface {
      * Everything a recreated UI needs, so it never depends on having seen every event.
      */
     fun `snapshot`(): SnapshotDto
+    
+    /**
+     * The same, with only the newest `per_chat` messages of each chat; `older` says how many were left out. Keeps the
+     * size of a snapshot (and the time to make it) the same however long the history grows.
+     */
+    fun `snapshotRecent`(`perChat`: kotlin.UInt): SnapshotDto
     
     /**
      * On the device holding the account key: start linking a new device. Returns the code to show as a QR code.
@@ -4453,6 +4478,22 @@ open class PrivcordEngine: Disposable, AutoCloseable, PrivcordEngineInterface {
 
     
     /**
+     * Up to `limit` messages of a chat before the message `before` (the newest when it is empty), oldest first.
+     */
+    @Throws(FfiException::class)override fun `messagesBefore`(`conversation`: kotlin.String, `before`: kotlin.String?, `limit`: kotlin.UInt): MessagePageDto {
+            return FfiConverterTypeMessagePageDto.lift(
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_messages_before(
+        it, FfiConverterString.lower(`conversation`),FfiConverterOptionalString.lower(`before`),FfiConverterUInt.lower(`limit`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
      * Wait up to `timeout_ms` for the next event. `None` means nothing happened. Call it from a background thread
      * and turn it into a Flow; each call takes the next event in order.
      */override fun `nextEvent`(`timeoutMs`: kotlin.UInt): EventDto? {
@@ -5087,6 +5128,23 @@ open class PrivcordEngine: Disposable, AutoCloseable, PrivcordEngineInterface {
     uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_snapshot(
         it, _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * The same, with only the newest `per_chat` messages of each chat; `older` says how many were left out. Keeps the
+     * size of a snapshot (and the time to make it) the same however long the history grows.
+     */
+    @Throws(FfiException::class)override fun `snapshotRecent`(`perChat`: kotlin.UInt): SnapshotDto {
+            return FfiConverterTypeSnapshotDto.lift(
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_privcord_ffi_fn_method_privcordengine_snapshot_recent(
+        it, FfiConverterUInt.lower(`perChat`),_status)
 }
     }
     )
@@ -6911,6 +6969,76 @@ public object FfiConverterTypeMessageDto: FfiConverterRustBuffer<MessageDto> {
 
 
 /**
+ * A page of one chat's history, oldest first.
+ */
+data class MessagePageDto (
+    var `messages`: List<MessageDto>, 
+    /**
+     * Messages older than the first of these are still to load.
+     */
+    var `more`: kotlin.Boolean
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeMessagePageDto: FfiConverterRustBuffer<MessagePageDto> {
+    override fun read(buf: ByteBuffer): MessagePageDto {
+        return MessagePageDto(
+            FfiConverterSequenceTypeMessageDto.read(buf),
+            FfiConverterBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: MessagePageDto) = (
+            FfiConverterSequenceTypeMessageDto.allocationSize(value.`messages`) +
+            FfiConverterBoolean.allocationSize(value.`more`)
+    )
+
+    override fun write(value: MessagePageDto, buf: ByteBuffer) {
+            FfiConverterSequenceTypeMessageDto.write(value.`messages`, buf)
+            FfiConverterBoolean.write(value.`more`, buf)
+    }
+}
+
+
+
+data class OlderDto (
+    var `conversation`: kotlin.String, 
+    var `count`: kotlin.ULong
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeOlderDto: FfiConverterRustBuffer<OlderDto> {
+    override fun read(buf: ByteBuffer): OlderDto {
+        return OlderDto(
+            FfiConverterString.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: OlderDto) = (
+            FfiConverterString.allocationSize(value.`conversation`) +
+            FfiConverterULong.allocationSize(value.`count`)
+    )
+
+    override fun write(value: OlderDto, buf: ByteBuffer) {
+            FfiConverterString.write(value.`conversation`, buf)
+            FfiConverterULong.write(value.`count`, buf)
+    }
+}
+
+
+
+/**
  * What a person sees before saving a friend.
  */
 data class PreviewDto (
@@ -7227,7 +7355,11 @@ data class SnapshotDto (
      */
     var `syncLost`: kotlin.ULong, 
     var `scheduled`: List<ScheduledDto>, 
-    var `usage`: UsageDto
+    var `usage`: UsageDto, 
+    /**
+     * Chats whose older messages a windowed snapshot left out, and how many (`messages_before` loads them).
+     */
+    var `older`: List<OlderDto>
 ) {
     
     companion object
@@ -7258,6 +7390,7 @@ public object FfiConverterTypeSnapshotDto: FfiConverterRustBuffer<SnapshotDto> {
             FfiConverterULong.read(buf),
             FfiConverterSequenceTypeScheduledDto.read(buf),
             FfiConverterTypeUsageDto.read(buf),
+            FfiConverterSequenceTypeOlderDto.read(buf),
         )
     }
 
@@ -7280,7 +7413,8 @@ public object FfiConverterTypeSnapshotDto: FfiConverterRustBuffer<SnapshotDto> {
             FfiConverterBoolean.allocationSize(value.`holdsAccountKey`) +
             FfiConverterULong.allocationSize(value.`syncLost`) +
             FfiConverterSequenceTypeScheduledDto.allocationSize(value.`scheduled`) +
-            FfiConverterTypeUsageDto.allocationSize(value.`usage`)
+            FfiConverterTypeUsageDto.allocationSize(value.`usage`) +
+            FfiConverterSequenceTypeOlderDto.allocationSize(value.`older`)
     )
 
     override fun write(value: SnapshotDto, buf: ByteBuffer) {
@@ -7303,6 +7437,7 @@ public object FfiConverterTypeSnapshotDto: FfiConverterRustBuffer<SnapshotDto> {
             FfiConverterULong.write(value.`syncLost`, buf)
             FfiConverterSequenceTypeScheduledDto.write(value.`scheduled`, buf)
             FfiConverterTypeUsageDto.write(value.`usage`, buf)
+            FfiConverterSequenceTypeOlderDto.write(value.`older`, buf)
     }
 }
 
@@ -9748,6 +9883,34 @@ public object FfiConverterSequenceTypeMessageDto: FfiConverterRustBuffer<List<Me
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeMessageDto.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeOlderDto: FfiConverterRustBuffer<List<OlderDto>> {
+    override fun read(buf: ByteBuffer): List<OlderDto> {
+        val len = buf.getInt()
+        return List<OlderDto>(len) {
+            FfiConverterTypeOlderDto.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<OlderDto>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeOlderDto.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<OlderDto>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeOlderDto.write(it, buf)
         }
     }
 }

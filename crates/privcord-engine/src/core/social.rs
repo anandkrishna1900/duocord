@@ -30,7 +30,7 @@ pub struct SearchHit {
 
 impl Core {
     /// Everyone in a conversation except us (the people a delete or a reaction must reach).
-    fn conversation_others(&self, conversation: &ConversationId) -> Vec<UserId> {
+    pub(super) fn conversation_others(&self, conversation: &ConversationId) -> Vec<UserId> {
         match conversation {
             ConversationId::Direct(p) => vec![p.clone()],
             ConversationId::Group(g) => self

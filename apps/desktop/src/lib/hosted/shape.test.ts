@@ -114,3 +114,12 @@ describe('shapeState details', () => {
     expect(state.answer?.status).toBe('failed');
   });
 });
+
+describe('a windowed snapshot', () => {
+  it('says how many older messages of each chat are not loaded', () => {
+    const chat = real.conversations[0]!.id;
+    const state = shapeState({ ...real, older: [{ conversation: chat, count: 42 }, { conversation: 'other', count: 0 }] }, ctx());
+    expect(state.earlier).toEqual({ [chat]: 42 });
+    expect(shapeState(real, ctx()).earlier).toEqual({});
+  });
+});

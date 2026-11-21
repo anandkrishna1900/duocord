@@ -186,6 +186,29 @@ fn two_hosted_engines_pair_connect_and_exchange_a_message_through_json() {
     pump(&a, &a_uid, &b, &b_uid);
     assert!(snapshot_text(&b).contains("hello from the hosted engine"));
 
+    // The windowed snapshot and the page of older messages, as the page asks for them.
+    let recent = b
+        .host
+        .invoke("snapshot_recent", &json!({ "per_chat": 0 }))
+        .unwrap();
+    assert_eq!(recent["older"][0]["count"], 1);
+    assert_eq!(
+        recent["conversations"][0]["messages"]
+            .as_array()
+            .unwrap()
+            .len(),
+        0
+    );
+    let page = b
+        .host
+        .invoke(
+            "messages_before",
+            &json!({ "conversation": a_uid, "before": null, "limit": 10 }),
+        )
+        .unwrap();
+    assert_eq!(page["messages"][0]["text"], "hello from the hosted engine");
+    assert_eq!(page["more"], false);
+
     // `WRITE_FIXTURE=1 cargo test -p privcord-desktop-host` refreshes the real snapshot the page's TypeScript tests read.
     if std::env::var_os("WRITE_FIXTURE").is_some() {
         let snapshot = b.host.invoke("snapshot", &json!({})).unwrap();

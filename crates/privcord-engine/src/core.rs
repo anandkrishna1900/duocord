@@ -7,7 +7,7 @@
 //! state snapshots and events.
 
 use crate::{
-    api::{ContactView, EngineEvent, GroupView, Snapshot},
+    api::{ContactView, DeliveryDetail, EngineEvent, GroupView, MessagePage, Snapshot},
     error::ErrorCode,
     events::{EventHub, EventStream},
 };
@@ -72,6 +72,7 @@ mod prefs;
 mod privacy;
 mod receipts;
 mod removal;
+mod resume;
 mod scheduled;
 mod signaling;
 mod snapshots;
@@ -263,6 +264,8 @@ pub struct Core {
     /// The storage port as wrapped by the sync recorder.
     recorder: Arc<sync::Recorder>,
     sealed: signaling::SealedState,
+    /// Files offered again whose receiver has not said where it is yet: (who, message) -> when to send it all.
+    file_waits: std::collections::HashMap<(UserId, MessageId), i64>,
     /// Channel mailboxes we are listening on (the adapter opens the sockets).
     channel_subscribed: HashSet<String>,
     /// The name each person gave in a channel message (they are not contacts).
@@ -342,6 +345,7 @@ impl Core {
             account: None,
             recorder,
             sealed: signaling::SealedState::default(),
+            file_waits: std::collections::HashMap::new(),
             channel_subscribed: HashSet::new(),
             channel_people: BTreeMap::new(),
             pending_group: PendingGroupBuffer::default(),
@@ -879,8 +883,12 @@ impl Core {
             p.session = None;
             p.pq = None;
             p.early_hello = None;
+        }
+        self.checkpoint_files(peer);
+        if let Some(p) = self.peers.get_mut(peer) {
             p.files.clear();
         }
+        self.retry_files_now(peer);
         self.step(peer, ConnectionEvent::Closed);
         if self
             .peers
@@ -895,8 +903,12 @@ impl Core {
         if let Some(p) = self.peers.get_mut(peer) {
             p.session = None;
             p.pq = None;
+        }
+        self.checkpoint_files(peer);
+        if let Some(p) = self.peers.get_mut(peer) {
             p.files.clear();
         }
+        self.retry_files_now(peer);
         self.step(peer, ConnectionEvent::Failed(reason));
         if !matches!(
             self.peers.get(peer).map(|p| p.state),
@@ -1281,6 +1293,7 @@ impl Core {
             Some("react") => self.on_react_frame(&Self::person_of(peer), frame),
             Some("file_offer") => self.on_file_offer(peer, frame),
             Some("file_chunk") => self.on_file_chunk(peer, frame),
+            Some("file_have") => self.on_file_have(peer, frame),
             Some("devices") => self.on_device_notice(peer, frame),
             Some("privacy") => {
                 self.note_devices(peer, frame);
@@ -1651,9 +1664,21 @@ impl Core {
             } else {
                 RETRY_AFTER_MS
             };
-            let all_sent = frames.iter().all(|f| self.send_secure(peer, f));
+            // A file offered again goes as its offer alone: the receiver may hold part of it already and says where it
+            // is (`file_have`); `tick_file_waits` sends it all if no answer comes.
+            let again = file_frames.is_some() && entry.attempts > 0;
+            let all_sent = frames
+                .iter()
+                .take(if again { 1 } else { usize::MAX })
+                .all(|f| self.send_secure(peer, f));
             if !all_sent {
                 return;
+            }
+            if again {
+                self.file_waits.insert(
+                    (peer.clone(), entry.message_id.clone()),
+                    now + resume::HAVE_WAIT_MS,
+                );
             }
             if let Some(frames) = file_frames {
                 self.hub.publish(EngineEvent::FileQueued {
@@ -1816,6 +1841,7 @@ impl Core {
         self.tick_device_notices();
         self.tick_key_handover();
         self.tick_media();
+        self.tick_file_waits();
         self.tick_sealed();
         self.tick_group_mesh();
         self.tick_channels();
@@ -2561,10 +2587,11 @@ impl Core {
             self.send_ack(peer, &id, at);
             return;
         }
+        let held = self.take_partial(&offer);
         let outcome = self
             .peers
             .get_mut(peer)
-            .map(|p| p.files.begin(offer))
+            .map(|p| p.files.begin_from(offer, held))
             .unwrap_or(BeginOutcome::Busy);
         match outcome {
             BeginOutcome::Ok => {
@@ -2572,6 +2599,7 @@ impl Core {
                     None => Some(ConversationId::Direct(who.clone())),
                     Some(g) => GroupId::new(g.as_str()).ok().map(ConversationId::Group),
                 };
+                self.send_have(peer, &id);
                 if let Some(conversation) = conversation {
                     self.hub.publish(EngineEvent::FileIncoming {
                         conversation,
@@ -2605,6 +2633,10 @@ impl Core {
         };
         match result {
             AssembleResult::More => {
+                let next = self.peers.get(peer).and_then(|p| p.files.next_index(&id));
+                if next.is_some_and(|n| n % resume::PART_EVERY == 0) {
+                    self.save_partial(peer, &id);
+                }
                 let fraction = self
                     .peers
                     .get(peer)
@@ -2619,10 +2651,12 @@ impl Core {
             }
             AssembleResult::Failed(reason) => {
                 self.finish_progress(&id);
+                self.drop_partial(&id);
                 self.decline(peer, &id, reason);
             }
             AssembleResult::Done { offer, bytes } => {
                 self.finish_progress(&id);
+                self.drop_partial(&id);
                 self.store_received_file(peer, *offer, bytes);
             }
         }
@@ -2983,6 +3017,93 @@ impl Core {
     /* ---------------------------------------------------------------- state */
 
     pub fn snapshot(&self) -> Snapshot {
+        self.snapshot_window(None)
+    }
+
+    /// The snapshot with only the newest `per_chat` messages of each chat, so it stays the same size however long the
+    /// history grows. What was left out is counted in `older` and comes by `messages_before`.
+    pub fn snapshot_recent(&self, per_chat: usize) -> Snapshot {
+        self.snapshot_window(Some(per_chat))
+    }
+
+    /// Up to `limit` messages of a chat that came before `before` (the newest ones when `before` is `None`), oldest
+    /// first.
+    pub fn messages_before(
+        &self,
+        conversation: &ConversationId,
+        before: Option<&MessageId>,
+        limit: usize,
+    ) -> Result<MessagePage, ErrorCode> {
+        let mut all: Vec<ChatMessage> = self
+            .messages
+            .values()
+            .filter(|m| &m.conversation == conversation)
+            .map(|m| m.message.clone())
+            .collect();
+        sort_messages(&mut all);
+        let end = match before {
+            None => all.len(),
+            Some(id) => all
+                .iter()
+                .position(|m| &m.message_id == id)
+                .ok_or(ErrorCode::UnknownMessage)?,
+        };
+        let start = end.saturating_sub(limit);
+        let messages: Vec<ChatMessage> = all.drain(start..end).collect();
+        let files = messages
+            .iter()
+            .filter(|m| m.kind == MessageKind::File)
+            .filter_map(|m| {
+                let info = self.ports.storage.file_info(&m.message_id).ok().flatten()?;
+                Some((m.message_id.clone(), info))
+            })
+            .collect();
+        let reactions = messages
+            .iter()
+            .filter_map(|m| {
+                let r = self.reactions.get(&m.message_id)?;
+                Some((
+                    m.message_id.clone(),
+                    r.iter().map(|(u, e)| (u.clone(), e.clone())).collect(),
+                ))
+            })
+            .collect();
+        let deleted = messages
+            .iter()
+            .filter(|m| self.deleted.contains(&m.message_id))
+            .map(|m| m.message_id.clone())
+            .collect();
+        let total = match conversation {
+            ConversationId::Group(_) => self.conversation_others(conversation).len(),
+            _ => 1,
+        };
+        let deliveries = messages
+            .iter()
+            .filter_map(|m| {
+                let pending = self
+                    .outbox
+                    .iter()
+                    .filter(|o| o.message_id == m.message_id)
+                    .count();
+                (pending > 0).then(|| DeliveryDetail {
+                    message_id: m.message_id.clone(),
+                    pending,
+                    total,
+                })
+            })
+            .collect();
+        Ok(MessagePage {
+            more: start > 0,
+            own_uid: self.uid.clone(),
+            messages,
+            files,
+            reactions,
+            deleted,
+            deliveries,
+        })
+    }
+
+    fn snapshot_window(&self, window: Option<usize>) -> Snapshot {
         let removals = self.pending_removals();
         // Safety numbers cover the account key, which every device of the account knows.
         let own = self.account.as_ref().map(|(sign, _)| sign);
@@ -3032,10 +3153,16 @@ impl Core {
             }
         }
         let mut messages = Vec::with_capacity(index.len());
+        let mut older = Vec::new();
         for &i in index.values() {
             if let Some((c, v)) = lists.get_mut(i) {
                 sort_messages(v);
-                messages.push(((*c).clone(), std::mem::take(v)));
+                let mut kept = std::mem::take(v);
+                if let Some(n) = window.filter(|n| kept.len() > *n) {
+                    older.push(((*c).clone(), kept.len() - n));
+                    kept.drain(..kept.len() - n);
+                }
+                messages.push(((*c).clone(), kept));
             }
         }
         let groups = self.groups.as_ref().map_or_else(Vec::new, |g| {
@@ -3146,6 +3273,7 @@ impl Core {
             sync_lost: self.sync_lost(),
             scheduled: self.scheduled(),
             usage,
+            older,
         }
     }
 

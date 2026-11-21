@@ -88,8 +88,14 @@ export class HostedEngine {
     return this.ordered('signal_blob', { mailbox, blob });
   }
 
-  snapshot<T = unknown>(): Promise<T> {
-    return this.call<T>('snapshot');
+  /** Everything the screens show; with `perChat`, only the newest messages of each chat (`older` counts the rest). */
+  snapshot<T = unknown>(perChat?: number): Promise<T> {
+    return perChat === undefined ? this.call<T>('snapshot') : this.call<T>('snapshot_recent', { per_chat: perChat });
+  }
+
+  /** Up to `limit` messages of a chat before `before` (the newest when empty), oldest first. */
+  messagesBefore<T = unknown>(conversation: string, before: string | null, limit: number): Promise<T> {
+    return this.call<T>('messages_before', { conversation, before, limit });
   }
 
   sendMessage(peer: string, text: string, replyTo?: string): Promise<string> {

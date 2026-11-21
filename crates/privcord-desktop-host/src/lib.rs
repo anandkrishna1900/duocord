@@ -533,6 +533,19 @@ impl DesktopHost {
             "wipe_everything" => json_of(&e.wipe_everything().map_err(failed)?),
             // everything the screens show
             "snapshot" => json_of(&e.snapshot().map_err(failed)?),
+            // the same with only the newest messages of each chat, and the older ones a page at a time
+            "snapshot_recent" => json_of(
+                &e.snapshot_recent(number(args, "per_chat")?)
+                    .map_err(failed)?,
+            ),
+            "messages_before" => json_of(
+                &e.messages_before(
+                    text(args, "conversation")?,
+                    maybe_text(args, "before"),
+                    number(args, "limit")?,
+                )
+                .map_err(failed)?,
+            ),
             other => Err(format!("unknown command `{other}`")),
         }
     }

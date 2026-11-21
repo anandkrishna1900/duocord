@@ -296,8 +296,13 @@ export function MessageList({
   onDetails,
   focusId,
   onFocused,
+  earlier = 0,
+  onLoadEarlier,
 }: {
   convId: string;
+  /** Older messages of this chat that are not loaded yet, and a way to load another page of them. */
+  earlier?: number;
+  onLoadEarlier?: () => Promise<void>;
   /** Message to scroll to and flash (from search). */
   focusId?: string | null;
   onFocused?: () => void;
@@ -360,6 +365,23 @@ export function MessageList({
     const copied = await copyText(text);
     setCopyStatus(copied ? 'copied' : 'failed');
     window.setTimeout(() => setCopyStatus(null), 1800);
+  }
+
+  const [loadingEarlier, setLoadingEarlier] = useState(false);
+  /** Load a page of older messages and keep what the person is reading where it was. */
+  async function loadEarlier() {
+    const element = scrollRef.current;
+    if (!onLoadEarlier || !element || loadingEarlier) return;
+    const fromBottom = element.scrollHeight - element.scrollTop;
+    setLoadingEarlier(true);
+    try {
+      await onLoadEarlier();
+    } finally {
+      setLoadingEarlier(false);
+      requestAnimationFrame(() => {
+        element.scrollTop = element.scrollHeight - fromBottom;
+      });
+    }
   }
 
   function toBottom(behavior: ScrollBehavior = 'auto') {
@@ -435,6 +457,11 @@ export function MessageList({
   return (
     <div className="message-scroll" ref={scrollRef} onScroll={onScroll} onWheel={onWheel} onTouchMove={() => { if (scrollRef.current && scrollRef.current.scrollHeight - scrollRef.current.scrollTop - scrollRef.current.clientHeight > 120) pinnedRef.current = false; }}>
       <div className="message-inner" ref={innerRef}>
+        {earlier > 0 && onLoadEarlier ? (
+          <button type="button" className="load-earlier" disabled={loadingEarlier} onClick={() => void loadEarlier()}>
+            {loadingEarlier ? 'Loading…' : `Load earlier messages (${earlier})`}
+          </button>
+        ) : null}
         {messages.map((message, index) => {
           const day = formatDay(message.clientCreatedAt);
           const showDay = day !== lastDay;

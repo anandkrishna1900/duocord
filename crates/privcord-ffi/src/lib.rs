@@ -620,6 +620,24 @@ pub struct SnapshotDto {
     pub sync_lost: u64,
     pub scheduled: Vec<ScheduledDto>,
     pub usage: UsageDto,
+    /// Chats whose older messages a windowed snapshot left out, and how many (`messages_before` loads them).
+    pub older: Vec<OlderDto>,
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct OlderDto {
+    pub conversation: String,
+    pub count: u64,
+}
+
+/// A page of one chat's history, oldest first.
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct MessagePageDto {
+    pub messages: Vec<MessageDto>,
+    /// Messages older than the first of these are still to load.
+    pub more: bool,
 }
 
 /// Another device of ours heard on the local network.
@@ -1706,197 +1724,53 @@ impl PrivcordEngine {
 
     /// Everything a recreated UI needs, so it never depends on having seen every event.
     pub fn snapshot(&self) -> Result<SnapshotDto, FfiError> {
-        let s = pollster::block_on(self.handle.snapshot())?;
-        let own = s
+        Ok(snapshot_dto(pollster::block_on(self.handle.snapshot())?))
+    }
+
+    /// The same, with only the newest `per_chat` messages of each chat; `older` says how many were left out. Keeps the
+    /// size of a snapshot (and the time to make it) the same however long the history grows.
+    pub fn snapshot_recent(&self, per_chat: u32) -> Result<SnapshotDto, FfiError> {
+        let n = usize::try_from(per_chat).unwrap_or(usize::MAX);
+        Ok(snapshot_dto(pollster::block_on(
+            self.handle.snapshot_recent(n),
+        )?))
+    }
+
+    /// Up to `limit` messages of a chat before the message `before` (the newest when it is empty), oldest first.
+    pub fn messages_before(
+        &self,
+        conversation: String,
+        before: Option<String>,
+        limit: u32,
+    ) -> Result<MessagePageDto, FfiError> {
+        let conv = self.conversation_id(&conversation)?;
+        let before = before
+            .filter(|b| !b.is_empty())
+            .map(|b| MessageId::new(b).map_err(|_| FfiError::InvalidArgument))
+            .transpose()?;
+        let page = pollster::block_on(self.handle.messages_before(
+            conv,
+            before,
+            usize::try_from(limit).unwrap_or(usize::MAX),
+        ))?;
+        let own = page
             .own_uid
             .as_ref()
             .map(ToString::to_string)
             .unwrap_or_default();
-        let summaries: std::collections::HashMap<
-            ConversationId,
-            privcord_engine::ConversationSummary,
-        > = s
-            .summaries
-            .iter()
-            .map(|x| (x.conversation.clone(), x.clone()))
-            .collect();
-        let deliveries: std::collections::HashMap<privcord_domain::MessageId, (usize, usize)> = s
-            .deliveries
-            .iter()
-            .map(|d| (d.message_id.clone(), (d.pending, d.total)))
-            .collect();
-        let deleted: std::collections::HashSet<_> = s.deleted.iter().cloned().collect();
-        let files: std::collections::HashMap<_, _> = s.files.iter().cloned().collect();
-        let reactions: std::collections::HashMap<_, _> = s
-            .reactions
-            .iter()
-            .map(|(id, r)| {
-                (
-                    id.clone(),
-                    r.iter()
-                        .map(|(u, e)| (u.to_string(), e.clone()))
-                        .collect::<std::collections::BTreeMap<String, String>>(),
-                )
-            })
-            .collect();
-        let friends: std::collections::BTreeSet<String> =
-            s.contacts.iter().map(|c| c.uid.to_string()).collect();
-        Ok(SnapshotDto {
-            seq: s.seq,
-            own_uid: s.own_uid.map(|u| u.to_string()),
-            contacts: s
-                .contacts
-                .into_iter()
-                .map(|c| ContactDto {
-                    uid: c.uid.to_string(),
-                    name: c.name,
-                    display_name: c.display_name,
-                    introduced_by: c.introduced_by.map(|u| u.to_string()),
-                    verified: c.trust == ContactTrust::Verified,
-                    checked: c.checked,
-                    safety_number: c.safety_number,
-                    link: c.connection.into(),
-                    can_message: c.can_message,
-                })
-                .collect(),
-            channels: s.channels,
-            muted: s.muted.iter().map(ToString::to_string).collect(),
-            invite: s.invite.map(|i| InviteDto {
-                words: i.words,
-                expires_at: i.expires_at,
-            }),
-            requests: s
-                .requests
-                .into_iter()
-                .map(|r| RequestDto {
-                    uid: r.uid.to_string(),
-                    name: r.name,
-                    safety_number: r.safety_number,
-                })
-                .collect(),
-            answer: s.answer.map(|a| AnswerDto {
-                uid: a.uid.to_string(),
-                status: match a.status {
-                    privcord_engine::AnswerStatus::Sent => AnswerState::Sent,
-                    privcord_engine::AnswerStatus::Failed => AnswerState::Failed,
-                },
-            }),
-            lookup_pending: s.lookup_pending,
-            groups: s
-                .groups
-                .into_iter()
-                .map(|g| GroupDto {
-                    id: g.group_id,
-                    name: g.name,
-                    created_by: g.created_by,
-                    members: g
-                        .members
-                        .into_iter()
-                        .map(|(uid, admin)| GroupMemberDto { uid, admin })
-                        .collect(),
-                    am_admin: g.am_admin,
-                    full: g.full,
-                    max_members: u32::try_from(g.max_members).unwrap_or(u32::MAX),
-                    connected: u32::try_from(g.connected).unwrap_or(u32::MAX),
-                })
-                .collect(),
-            conversations: s
+        let view = MessageView::new(
+            &page.files,
+            &page.deleted,
+            &page.reactions,
+            &page.deliveries,
+            &own,
+        );
+        Ok(MessagePageDto {
+            more: page.more,
+            messages: page
                 .messages
                 .into_iter()
-                .map(|(conv, msgs): (ConversationId, _)| ConversationDto {
-                    last: summaries.get(&conv).and_then(|x| x.last.as_ref()).map(|l| {
-                        LastMessageDto {
-                            text: l.text.clone(),
-                            at: l.at,
-                            own: l.own,
-                            sender: l.sender.to_string(),
-                        }
-                    }),
-                    unread: summaries
-                        .get(&conv)
-                        .map_or(0, |x| u32::try_from(x.unread).unwrap_or(u32::MAX)),
-                    id: conv.storage_key(),
-                    messages: msgs
-                        .into_iter()
-                        .map(|m| MessageDto {
-                            id: m.message_id.to_string(),
-                            sender: m.sender_id.to_string(),
-                            text: m.text,
-                            created_at: m.client_created_at,
-                            delivery: m.delivery_state.into(),
-                            reply_to: m.reply_to.map(|r| r.id),
-                            is_file: m.kind == privcord_domain::message::MessageKind::File,
-                            file_mime: files
-                                .get(&m.message_id)
-                                .map_or_else(String::new, |f| f.mime.clone()),
-                            file_size: files.get(&m.message_id).map_or(0, |f| f.size),
-                            deleted: deleted.contains(&m.message_id),
-                            reactions: chips(reactions.get(&m.message_id), &own),
-                            pending: deliveries
-                                .get(&m.message_id)
-                                .map_or(0, |d| u32::try_from(d.0).unwrap_or(u32::MAX)),
-                            total: deliveries
-                                .get(&m.message_id)
-                                .map_or(0, |d| u32::try_from(d.1).unwrap_or(u32::MAX)),
-                        })
-                        .collect(),
-                })
-                .collect(),
-            queued: u64::try_from(s.queued).unwrap_or(u64::MAX),
-            channel_people: s
-                .channel_people
-                .iter()
-                .map(|(u, n)| ChannelPersonDto {
-                    uid: u.to_string(),
-                    name: n.clone(),
-                })
-                .collect(),
-            legacy_groups: s
-                .legacy_groups
-                .iter()
-                .map(|g| {
-                    let (friends, others): (Vec<_>, Vec<_>) =
-                        g.members.iter().partition(|u| friends.contains(u.as_str()));
-                    LegacyGroupDto {
-                        old_id: g.old_id.clone(),
-                        name: g.name.clone(),
-                        members: friends.into_iter().map(ToString::to_string).collect(),
-                        missing: u32::try_from(others.len()).unwrap_or(u32::MAX),
-                    }
-                })
-                .collect(),
-            devices: s
-                .devices
-                .iter()
-                .map(|d| DeviceDto {
-                    id: d.id.clone(),
-                    name: d.name.clone(),
-                    added_at: d.added_at,
-                    this_device: d.this_device,
-                    last_seen: d.last_seen,
-                    stale: d.stale,
-                    removal_at: d.removal_at,
-                })
-                .collect(),
-            holds_account_key: s.holds_account_key,
-            sync_lost: s.sync_lost,
-            usage: UsageDto {
-                messages: s.usage.messages,
-                files: s.usage.files,
-                file_bytes: s.usage.file_bytes,
-                contacts: s.usage.contacts,
-                sync_entries: s.usage.sync_entries,
-            },
-            scheduled: s
-                .scheduled
-                .iter()
-                .map(|m| ScheduledDto {
-                    id: m.id.clone(),
-                    target: m.target.clone(),
-                    group: m.group,
-                    text: m.text.clone(),
-                    at: m.at,
-                })
+                .map(|m| message_dto(m, &view))
                 .collect(),
         })
     }
@@ -2137,6 +2011,224 @@ pub fn import_legacy_android(
         &own_uid,
         &FilesAdapter(files),
     )
+}
+
+/// What the screens show beside a message's text, looked up by message id.
+struct MessageView {
+    files: std::collections::HashMap<MessageId, privcord_ports::FileInfo>,
+    deleted: std::collections::HashSet<MessageId>,
+    reactions: std::collections::HashMap<MessageId, std::collections::BTreeMap<String, String>>,
+    deliveries: std::collections::HashMap<MessageId, (usize, usize)>,
+    own: String,
+}
+
+impl MessageView {
+    fn new(
+        files: &[(MessageId, privcord_ports::FileInfo)],
+        deleted: &[MessageId],
+        reactions: &[(MessageId, Vec<(UserId, String)>)],
+        deliveries: &[privcord_engine::DeliveryDetail],
+        own: &str,
+    ) -> Self {
+        Self {
+            files: files.iter().cloned().collect(),
+            deleted: deleted.iter().cloned().collect(),
+            reactions: reactions
+                .iter()
+                .map(|(id, r)| {
+                    (
+                        id.clone(),
+                        r.iter().map(|(u, e)| (u.to_string(), e.clone())).collect(),
+                    )
+                })
+                .collect(),
+            deliveries: deliveries
+                .iter()
+                .map(|d| (d.message_id.clone(), (d.pending, d.total)))
+                .collect(),
+            own: own.to_owned(),
+        }
+    }
+}
+
+fn message_dto(m: privcord_domain::message::ChatMessage, v: &MessageView) -> MessageDto {
+    let file = v.files.get(&m.message_id);
+    let (pending, total) = v.deliveries.get(&m.message_id).copied().unwrap_or((0, 0));
+    MessageDto {
+        id: m.message_id.to_string(),
+        sender: m.sender_id.to_string(),
+        text: m.text,
+        created_at: m.client_created_at,
+        delivery: m.delivery_state.into(),
+        reply_to: m.reply_to.map(|r| r.id),
+        is_file: m.kind == privcord_domain::message::MessageKind::File,
+        file_mime: file.map_or_else(String::new, |f| f.mime.clone()),
+        file_size: file.map_or(0, |f| f.size),
+        deleted: v.deleted.contains(&m.message_id),
+        reactions: chips(v.reactions.get(&m.message_id), &v.own),
+        pending: u32::try_from(pending).unwrap_or(u32::MAX),
+        total: u32::try_from(total).unwrap_or(u32::MAX),
+    }
+}
+
+fn snapshot_dto(s: privcord_engine::Snapshot) -> SnapshotDto {
+    let own = s
+        .own_uid
+        .as_ref()
+        .map(ToString::to_string)
+        .unwrap_or_default();
+    let summaries: std::collections::HashMap<ConversationId, privcord_engine::ConversationSummary> =
+        s.summaries
+            .iter()
+            .map(|x| (x.conversation.clone(), x.clone()))
+            .collect();
+    let view = MessageView::new(&s.files, &s.deleted, &s.reactions, &s.deliveries, &own);
+    let friends: std::collections::BTreeSet<String> =
+        s.contacts.iter().map(|c| c.uid.to_string()).collect();
+    SnapshotDto {
+        seq: s.seq,
+        own_uid: s.own_uid.map(|u| u.to_string()),
+        contacts: s
+            .contacts
+            .into_iter()
+            .map(|c| ContactDto {
+                uid: c.uid.to_string(),
+                name: c.name,
+                display_name: c.display_name,
+                introduced_by: c.introduced_by.map(|u| u.to_string()),
+                verified: c.trust == ContactTrust::Verified,
+                checked: c.checked,
+                safety_number: c.safety_number,
+                link: c.connection.into(),
+                can_message: c.can_message,
+            })
+            .collect(),
+        channels: s.channels,
+        muted: s.muted.iter().map(ToString::to_string).collect(),
+        invite: s.invite.map(|i| InviteDto {
+            words: i.words,
+            expires_at: i.expires_at,
+        }),
+        requests: s
+            .requests
+            .into_iter()
+            .map(|r| RequestDto {
+                uid: r.uid.to_string(),
+                name: r.name,
+                safety_number: r.safety_number,
+            })
+            .collect(),
+        answer: s.answer.map(|a| AnswerDto {
+            uid: a.uid.to_string(),
+            status: match a.status {
+                privcord_engine::AnswerStatus::Sent => AnswerState::Sent,
+                privcord_engine::AnswerStatus::Failed => AnswerState::Failed,
+            },
+        }),
+        lookup_pending: s.lookup_pending,
+        groups: s
+            .groups
+            .into_iter()
+            .map(|g| GroupDto {
+                id: g.group_id,
+                name: g.name,
+                created_by: g.created_by,
+                members: g
+                    .members
+                    .into_iter()
+                    .map(|(uid, admin)| GroupMemberDto { uid, admin })
+                    .collect(),
+                am_admin: g.am_admin,
+                full: g.full,
+                max_members: u32::try_from(g.max_members).unwrap_or(u32::MAX),
+                connected: u32::try_from(g.connected).unwrap_or(u32::MAX),
+            })
+            .collect(),
+        conversations: s
+            .messages
+            .into_iter()
+            .map(|(conv, msgs): (ConversationId, _)| ConversationDto {
+                last: summaries
+                    .get(&conv)
+                    .and_then(|x| x.last.as_ref())
+                    .map(|l| LastMessageDto {
+                        text: l.text.clone(),
+                        at: l.at,
+                        own: l.own,
+                        sender: l.sender.to_string(),
+                    }),
+                unread: summaries
+                    .get(&conv)
+                    .map_or(0, |x| u32::try_from(x.unread).unwrap_or(u32::MAX)),
+                id: conv.storage_key(),
+                messages: msgs.into_iter().map(|m| message_dto(m, &view)).collect(),
+            })
+            .collect(),
+        queued: u64::try_from(s.queued).unwrap_or(u64::MAX),
+        channel_people: s
+            .channel_people
+            .iter()
+            .map(|(u, n)| ChannelPersonDto {
+                uid: u.to_string(),
+                name: n.clone(),
+            })
+            .collect(),
+        legacy_groups: s
+            .legacy_groups
+            .iter()
+            .map(|g| {
+                let (friends, others): (Vec<_>, Vec<_>) =
+                    g.members.iter().partition(|u| friends.contains(u.as_str()));
+                LegacyGroupDto {
+                    old_id: g.old_id.clone(),
+                    name: g.name.clone(),
+                    members: friends.into_iter().map(ToString::to_string).collect(),
+                    missing: u32::try_from(others.len()).unwrap_or(u32::MAX),
+                }
+            })
+            .collect(),
+        devices: s
+            .devices
+            .iter()
+            .map(|d| DeviceDto {
+                id: d.id.clone(),
+                name: d.name.clone(),
+                added_at: d.added_at,
+                this_device: d.this_device,
+                last_seen: d.last_seen,
+                stale: d.stale,
+                removal_at: d.removal_at,
+            })
+            .collect(),
+        holds_account_key: s.holds_account_key,
+        sync_lost: s.sync_lost,
+        older: s
+            .older
+            .iter()
+            .map(|(c, n)| OlderDto {
+                conversation: c.storage_key(),
+                count: u64::try_from(*n).unwrap_or(u64::MAX),
+            })
+            .collect(),
+        usage: UsageDto {
+            messages: s.usage.messages,
+            files: s.usage.files,
+            file_bytes: s.usage.file_bytes,
+            contacts: s.usage.contacts,
+            sync_entries: s.usage.sync_entries,
+        },
+        scheduled: s
+            .scheduled
+            .iter()
+            .map(|m| ScheduledDto {
+                id: m.id.clone(),
+                target: m.target.clone(),
+                group: m.group,
+                text: m.text.clone(),
+                at: m.at,
+            })
+            .collect(),
+    }
 }
 
 fn chips(

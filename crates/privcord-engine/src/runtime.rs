@@ -7,7 +7,7 @@
 
 use crate::core::InvitePreview;
 use crate::{
-    api::Snapshot,
+    api::{MessagePage, Snapshot},
     core::{Core, LinkSecurity, Ports},
     error::ErrorCode,
     events::EventStream,
@@ -113,6 +113,13 @@ enum Command {
         text: String,
     },
     Snapshot(Reply<Snapshot>),
+    SnapshotRecent(usize, Reply<Snapshot>),
+    MessagesBefore {
+        conversation: ConversationId,
+        before: Option<MessageId>,
+        limit: usize,
+        reply: Reply<MessagePage>,
+    },
     Shutdown(oneshot::Sender<()>),
 }
 
@@ -576,6 +583,13 @@ fn pump(core: &mut Core, cmd: Command) -> bool {
         Command::LinkDown { peer } => core.link_down(&peer),
         Command::Frame { peer, text } => core.frame_received(&peer, &text),
         Command::Snapshot(r) => drop(r.send(Ok(core.snapshot()))),
+        Command::SnapshotRecent(n, r) => drop(r.send(Ok(core.snapshot_recent(n)))),
+        Command::MessagesBefore {
+            conversation,
+            before,
+            limit,
+            reply,
+        } => drop(reply.send(core.messages_before(&conversation, before.as_ref(), limit))),
         Command::Shutdown(done) => {
             core.shutdown();
             let _ = done.send(());
@@ -751,6 +765,28 @@ impl EngineHandle {
     }
     pub async fn snapshot(&self) -> Result<Snapshot, ErrorCode> {
         self.ask(Command::Snapshot).await
+    }
+
+    /// The snapshot with only the newest `per_chat` messages of each chat (`Snapshot::older` counts the rest).
+    pub async fn snapshot_recent(&self, per_chat: usize) -> Result<Snapshot, ErrorCode> {
+        self.ask(|reply| Command::SnapshotRecent(per_chat, reply))
+            .await
+    }
+
+    /// Up to `limit` messages of a chat before `before` (the newest when `None`), oldest first.
+    pub async fn messages_before(
+        &self,
+        conversation: ConversationId,
+        before: Option<MessageId>,
+        limit: usize,
+    ) -> Result<MessagePage, ErrorCode> {
+        self.ask(|reply| Command::MessagesBefore {
+            conversation,
+            before,
+            limit,
+            reply,
+        })
+        .await
     }
 
     /// An adapter reports that a link to a contact is up and that the engine must encrypt the frames itself.

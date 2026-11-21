@@ -321,3 +321,229 @@ fn a_group_file_reaches_every_member_and_survives_a_restart() {
     let again = start("bob-2", storage, secure, clock, false);
     assert_eq!(file_of(&again, &id).unwrap().bytes, data);
 }
+
+/// Delivers frames one at a time, stopping after `limit` from `from` to `to` (a link that dies mid-transfer).
+fn pump_limited(a: &mut Node, b: &mut Node, limit: usize) -> usize {
+    let (au, bu) = (a.uid.clone(), b.uid.clone());
+    let mut n = 0;
+    loop {
+        let (fa, fb) = (a.transport.drain(), b.transport.drain());
+        if fa.is_empty() && fb.is_empty() {
+            return n;
+        }
+        for (_, f) in fa {
+            if n >= limit {
+                return n;
+            }
+            n += 1;
+            b.core.frame_received(&au, &f);
+        }
+        for (_, f) in fb {
+            a.core.frame_received(&bu, &f);
+        }
+    }
+}
+
+#[test]
+fn a_transfer_cut_short_resumes_from_the_checkpoint_after_a_restart() {
+    let clock = FakeClock::at(1_700_000_000_000);
+    let (mut a, mut b) = (node("alice", &clock), node("bob", &clock));
+    befriend(&mut a, &mut b);
+    let data = sample(12_288 * 130); // 130 chunks: a checkpoint at 64 and at 128
+    let id = a
+        .core
+        .send_file(
+            &b.uid,
+            "big.bin",
+            "application/octet-stream",
+            data.clone(),
+            None,
+        )
+        .unwrap();
+    let (au, bu) = (a.uid.clone(), b.uid.clone());
+    a.transport.set_connected(&bu, true);
+    b.transport.set_connected(&au, true);
+    a.core.link_up(&bu, ConnectionPath::DirectLan).unwrap();
+    b.core.link_up(&au, ConnectionPath::DirectLan).unwrap();
+    // The handshakes, the offer and 100 of the chunks get through, then the link dies.
+    let delivered = pump_limited(&mut a, &mut b, 120);
+    assert!(delivered >= 100);
+    assert!(file_of(&b, &id).is_none());
+    // Bob crashes (no goodbye, so only the periodic checkpoint exists); Alice sees the link go.
+    a.core.link_down(&bu);
+    a.transport.drain();
+    b.transport.drain();
+
+    // Bob restarts from the same storage.
+    let (storage, secure, bclock) = (b.storage.clone(), b.secure.clone(), b.clock.clone());
+    let mut b = start("bob-2", storage, secure, bclock, false);
+    a.transport.set_connected(&bu, true);
+    b.transport.set_connected(&au, true);
+    a.core.link_up(&bu, ConnectionPath::DirectLan).unwrap();
+    b.core.link_up(&au, ConnectionPath::DirectLan).unwrap();
+    // Count the big frames from Alice (each is one chunk).
+    let mut resent = 0;
+    loop {
+        let (fa, fb) = (a.transport.drain(), b.transport.drain());
+        if fa.is_empty() && fb.is_empty() {
+            break;
+        }
+        for (_, f) in fa {
+            resent += usize::from(f.len() > 10_000);
+            b.core.frame_received(&au, &f);
+        }
+        for (_, f) in fb {
+            a.core.frame_received(&bu, &f);
+        }
+    }
+    assert_eq!(file_of(&b, &id).expect("file arrived").bytes, data);
+    assert_eq!(state_of(&a, &id), DeliveryState::Delivered);
+    // Only what followed the checkpoint at chunk 64 went again (66 of 130), not the whole file.
+    assert!((60..=70).contains(&resent), "resent {resent} chunks");
+}
+
+#[test]
+fn a_receiver_that_never_says_where_it_is_still_gets_the_whole_file() {
+    let clock = FakeClock::at(1_700_000_000_000);
+    let (mut a, mut b) = (node("alice", &clock), node("bob", &clock));
+    befriend(&mut a, &mut b);
+    let data = sample(12_288 * 20);
+    let id = a
+        .core
+        .send_file(
+            &b.uid,
+            "old.bin",
+            "application/octet-stream",
+            data.clone(),
+            None,
+        )
+        .unwrap();
+    let (au, bu) = (a.uid.clone(), b.uid.clone());
+    a.transport.set_connected(&bu, true);
+    b.transport.set_connected(&au, true);
+    a.core.link_up(&bu, ConnectionPath::DirectLan).unwrap();
+    b.core.link_up(&au, ConnectionPath::DirectLan).unwrap();
+    pump_limited(&mut a, &mut b, 8); // handshakes and a few chunks, then the link dies
+    a.core.link_down(&bu);
+    b.core.link_down(&au);
+    a.transport.drain();
+    b.transport.drain();
+    a.core.link_up(&bu, ConnectionPath::DirectLan).unwrap();
+    b.core.link_up(&au, ConnectionPath::DirectLan).unwrap();
+    // The link sets itself up (two rounds), Alice offers the file again, and from then on everything Bob says is lost
+    // (as if his version did not know `file_have`), so Alice's wait runs out.
+    for round in 0..6 {
+        for (_, f) in a.transport.drain() {
+            b.core.frame_received(&au, &f);
+        }
+        for (_, f) in b.transport.drain() {
+            if round < 2 {
+                a.core.frame_received(&bu, &f);
+            }
+        }
+    }
+    assert!(file_of(&b, &id).is_none());
+    clock.advance(11_000);
+    a.core.tick();
+    // Now Bob's answers get through again (the acknowledgement among them).
+    let mut all = [&mut a, &mut b];
+    pump(&mut all);
+    let [a, b] = all;
+    assert_eq!(file_of(b, &id).expect("file arrived").bytes, data);
+    assert_eq!(state_of(a, &id), DeliveryState::Delivered);
+}
+
+#[test]
+fn a_windowed_snapshot_keeps_its_size_and_pages_give_back_the_rest() {
+    use privcord_domain::ConversationId;
+    let clock = FakeClock::at(1_700_000_000_000);
+    let (mut a, mut b) = (node("alice", &clock), node("bob", &clock));
+    befriend(&mut a, &mut b);
+    let mut all = [&mut a, &mut b];
+    link(&mut all, 0, 1);
+    let [a, b] = all;
+    for i in 0..30 {
+        clock.advance(10);
+        a.core.send_message(&b.uid, &format!("m{i}"), None).unwrap();
+        let mut all = [&mut *a, &mut *b];
+        pump(&mut all);
+    }
+    let conv = ConversationId::Direct(a.uid.clone());
+    let full: Vec<_> = b
+        .core
+        .snapshot()
+        .messages
+        .into_iter()
+        .flat_map(|(_, v)| v)
+        .collect();
+    assert_eq!(full.len(), 30);
+    assert!(b.core.snapshot().older.is_empty());
+
+    let recent = b.core.snapshot_recent(10);
+    let kept: Vec<_> = recent
+        .messages
+        .iter()
+        .flat_map(|(_, v)| v.clone())
+        .collect();
+    assert_eq!(kept, full[20..]);
+    assert_eq!(recent.older, vec![(conv.clone(), 20)]);
+    assert_eq!(recent.usage.messages, 30, "usage still counts everything");
+
+    // Walk back through the rest, ten at a time.
+    let p1 = b
+        .core
+        .messages_before(&conv, Some(&kept[0].message_id), 10)
+        .unwrap();
+    assert_eq!(p1.messages, full[10..20]);
+    assert!(p1.more);
+    let p2 = b
+        .core
+        .messages_before(&conv, Some(&p1.messages[0].message_id), 10)
+        .unwrap();
+    assert_eq!(p2.messages, full[..10]);
+    assert!(!p2.more);
+    // No anchor: the newest page. An unknown anchor is an error, not an empty page.
+    assert_eq!(
+        b.core.messages_before(&conv, None, 5).unwrap().messages,
+        full[25..]
+    );
+    let unknown = privcord_domain::MessageId::new("nope").unwrap();
+    assert!(b.core.messages_before(&conv, Some(&unknown), 5).is_err());
+}
+
+#[test]
+fn erasing_a_chat_also_erases_a_saved_part_of_a_file() {
+    use privcord_domain::ConversationId;
+    use privcord_ports::Storage;
+    let clock = FakeClock::at(1_700_000_000_000);
+    let (mut a, mut b) = (node("alice", &clock), node("bob", &clock));
+    befriend(&mut a, &mut b);
+    let id = a
+        .core
+        .send_file(
+            &b.uid,
+            "big.bin",
+            "application/octet-stream",
+            sample(12_288 * 130),
+            None,
+        )
+        .unwrap();
+    let (au, bu) = (a.uid.clone(), b.uid.clone());
+    a.transport.set_connected(&bu, true);
+    b.transport.set_connected(&au, true);
+    a.core.link_up(&bu, ConnectionPath::DirectLan).unwrap();
+    b.core.link_up(&au, ConnectionPath::DirectLan).unwrap();
+    pump_limited(&mut a, &mut b, 100);
+    let held = || {
+        b.storage
+            .kv(&format!("file.part.{id}.d"))
+            .unwrap()
+            .is_some_and(|v| !v.is_empty())
+    };
+    assert!(held(), "a part of the file was saved");
+    let report = b
+        .core
+        .kill_switch_conversation(ConversationId::Direct(au.clone()), false);
+    assert!(report.summarize().complete, "{report:?}");
+    assert!(!held(), "the saved part went with the chat");
+}

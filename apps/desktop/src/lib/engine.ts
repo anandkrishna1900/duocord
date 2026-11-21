@@ -296,6 +296,8 @@ export interface ChatState {
   contacts: ContactView[];
   groups: GroupView[];
   messages: Record<string, UiMessage[]>;
+  /** Hosted engine: how many older messages of a chat are not loaded yet (absent or 0: all are). */
+  earlier?: Record<string, number>;
   signaling: SignalingStatus;
   storageBackend: 'sqlite' | 'browser';
   /** Messages waiting for someone to come online. */

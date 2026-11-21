@@ -20,7 +20,7 @@ import AnimatedContent from './rb/AnimatedContent.jsx';
 import FadeContent from './rb/FadeContent.jsx';
 
 const REPO = 'https://github.com/__REPO__';
-const EXE = `${REPO}/releases/download/Windows/PrivCord_0.1.0_x64-setup.exe`;
+const EXE = `${REPO}/releases/download/Windows/PrivCord-setup.exe`;
 const APK = `${REPO}/releases/download/Android/PrivCord.apk`;
 
 

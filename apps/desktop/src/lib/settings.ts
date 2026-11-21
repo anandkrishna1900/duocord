@@ -19,6 +19,10 @@ export interface AppSettings {
   groupOnly: boolean;
   /** Panic wipe: pressing Ctrl+Shift+Backspace three times quickly erases everything on this device, with no questions. */
   panicWipe: boolean;
+  /** Look for a new version when the app starts (contacts GitHub; never while Hide my IP or Tor mode is on). */
+  updateChecks: boolean;
+  /** "Later" on the update prompt: do not ask again before this time (milliseconds since 1970). */
+  updateSnoozedUntil: number;
 }
 
 export const ACCENTS = [
@@ -38,6 +42,8 @@ const DEFAULTS: AppSettings = {
   displayName: '',
   groupOnly: false,
   panicWipe: false,
+  updateChecks: true,
+  updateSnoozedUntil: 0,
 };
 
 export function parseSettings(raw: string | null): AppSettings {
@@ -64,6 +70,9 @@ export function parseSettings(raw: string | null): AppSettings {
       palette: typeof parsed.palette === 'string' && (parsed.palette === DEFAULT_PALETTE || themeById(parsed.palette)) ? parsed.palette : DEFAULT_PALETTE,
       groupOnly: typeof parsed.groupOnly === 'boolean' ? parsed.groupOnly : DEFAULTS.groupOnly,
       panicWipe: typeof parsed.panicWipe === 'boolean' ? parsed.panicWipe : DEFAULTS.panicWipe,
+      updateChecks: typeof parsed.updateChecks === 'boolean' ? parsed.updateChecks : DEFAULTS.updateChecks,
+      updateSnoozedUntil:
+        typeof parsed.updateSnoozedUntil === 'number' && Number.isFinite(parsed.updateSnoozedUntil) ? parsed.updateSnoozedUntil : DEFAULTS.updateSnoozedUntil,
       displayName:
         typeof parsed.displayName === 'string'
           ? parsed.displayName.trim().slice(0, 40)

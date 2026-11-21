@@ -6,6 +6,8 @@ mod ble;
 mod engine_host;
 #[cfg(desktop)]
 mod tray;
+#[cfg(desktop)]
+mod updater;
 
 const SERVICE: &str = "com.duochat.desktop";
 
@@ -242,6 +244,9 @@ pub fn run() {
             })
             .build(),
     );
+    // In-app updates: the settings (public key, where to look) are in tauri.conf.json under plugins.updater.
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
     let builder = builder.plugin(tauri_plugin_notification::init()).setup(|app| {
         #[cfg(desktop)]
         {
@@ -265,6 +270,8 @@ pub fn run() {
         tray::set_close_to_tray,
         tray::set_start_at_login,
         tray::open_main,
+        updater::update_check,
+        updater::update_install,
         ble_commands::ble_capabilities,
         ble_commands::ble_connect,
         ble_commands::ble_write,

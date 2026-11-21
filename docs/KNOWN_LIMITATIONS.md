@@ -113,6 +113,18 @@ Local kill switch activation operates strictly within the local device boundary:
 - **Voice-note waveforms** are drawn from the file on each device (the engine cannot decode audio). Very long voice notes are cut off at about three minutes for the waveform on Android; playback is not affected.
 - **Diagnostics export** holds counts and yes/no answers only, never text, names, keys or ids, and is checked by a test. Read it before sending it to anyone.
 
+## 12b. Updates
+- **Windows** checks a signed `latest.json` on this project's `Windows` release and runs the installer only if its signature
+  matches the public key built into the app (the key pair is made once; the private half is a repository secret). The version
+  in the signature must match the announced one, so an old signed build cannot be passed off as new.
+- **Android** reads `android.json` on the `Android` release, streams the APK into Android's installer and asks you to confirm.
+  Android installs it only if it is signed with the same key as the installed app; the checksum only catches a damaged download.
+  Only the 64-bit APK is published, so 32-bit phones are not offered updates. Until a release key is set up, test builds are
+  signed with the public test key, which anyone can use: do not rely on this for a real release.
+- A check contacts github.com, which sees your IP address. It runs once at start, can be turned off (Settings), and never runs
+  while Hide my IP or Tor mode is on. "Later" hides the prompt for three days.
+- Every merged change becomes a new build, so updates are frequent until releases are cut by hand.
+
 ## 13. Project status
 - PrivCord has **not been independently audited**. The protocol is covered by tests, shared test vectors and fuzzing in CI, and the code has been reviewed by its maintainers and by AI-assisted review, which is not a substitute for an outside audit.
 - It is maintained by two people. Windows and Android only.

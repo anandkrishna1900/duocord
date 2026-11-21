@@ -15,8 +15,9 @@ function hostOf(url: string): string {
 }
 
 /**
- * Every internet host this device may talk to, from the settings that decide it. The app has no analytics, no update
- * check and no other servers; chats between friends go device to device.
+ * Every internet host this device may talk to for connecting, from the settings that decide it. The app has no analytics
+ * and no other servers except GitHub for the optional update check (see lib/updates.ts); chats between friends go device
+ * to device.
  */
 export function networkHosts(n: NetworkConfig): HostRow[] {
   const rows: HostRow[] = [];

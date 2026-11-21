@@ -31,6 +31,14 @@
       "capabilities": ["default"]
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDgzODBCODA2MUJCQTk1OEUKUldTT2xib2JCcmlBZzdpekJCemx2dVZ5aFdMUm1QVE9zd0RtOXRPbnUwUHFOQ2djS0ZORjFGcjEK",
+      "endpoints": ["https://github.com/raiden6767/PrivCord/releases/download/Windows/latest.json"],
+      "windows": { "installMode": "passive" },
+      "requireSignedVersion": true
+    }
+  },
   "bundle": {
     "active": true,
     "targets": ["nsis"],

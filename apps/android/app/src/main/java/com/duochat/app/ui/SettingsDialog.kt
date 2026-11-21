@@ -847,6 +847,15 @@ val storageJson by androidx.compose.runtime.produceState("[]", state.messages) {
                 )
                 Spacer(Modifier.height(20.dp))
 
+SectionTitle("Updates")
+                ToggleRow(
+                    "Check for updates",
+                    "Looks for a new version when the app starts and offers to install it. This contacts GitHub, which can see your IP address, so it stays off while Hide my IP or Tor mode is on.",
+                    settings.updateChecks,
+                ) { onUpdateSettings { copy(updateChecks = it) } }
+                UpdateCheckRow(settings.network)
+                Spacer(Modifier.height(20.dp))
+
 SectionTitle("About PrivCord")
                 Text(
                     "Private messaging for friends and groups, with no accounts and no server.",

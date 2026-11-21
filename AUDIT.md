@@ -22,6 +22,7 @@ on both apps (Android through uniffi, Windows through Tauri).
 | 4 | Untrusted input parsing (frames, cards, files, sync log, Bluetooth reassembly) | `fuzz/fuzz_targets`, the parsers they call | |
 | 5 | Platform boundary: uniffi (Android) and Tauri commands (Windows) | `crates/privcord-ffi`, `crates/privcord-desktop-host`, `apps/desktop/src-tauri` | 4,200 |
 | 6 | Relay (optional, self-hosted) | `relay/` | about 330 JS |
+| 7 | Update mechanism: Windows signed `latest.json` (`apps/desktop/src-tauri/src/updater.rs`, `tauri.conf.json`) and Android in-app installer (`AppUpdater.kt`, `AppUpdate.kt`), plus the publishing job `.github/workflows/test-builds.yml` | | |
 
 Out of scope unless you want them: the landing page (`site/`), the legacy TypeScript engine (browser development and
 end-to-end tests only), the legacy Kotlin "classic" flavour, the third-party libraries themselves (WebRTC, SQLCipher,

@@ -30,7 +30,10 @@ fn row(i: usize) -> StoredMessage {
 #[test]
 #[ignore = "timing run, see the file header"]
 fn real_store_with_history() {
-    let n: usize = std::env::var("PERF_MESSAGES").ok().and_then(|v| v.parse().ok()).unwrap_or(20_000);
+    let n: usize = std::env::var("PERF_MESSAGES")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(20_000);
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("privcord.db");
     let db = SqliteStorage::open_encrypted(&path, &[7u8; 32]).unwrap();
@@ -38,10 +41,16 @@ fn real_store_with_history() {
     // Bulk: the way a restore or a catch-up writes (one transaction).
     let t = Instant::now();
     for chunk in (0..n).collect::<Vec<_>>().chunks(500) {
-        let ops: Vec<StorageOp> = chunk.iter().map(|&i| StorageOp::InsertMessage(row(i))).collect();
+        let ops: Vec<StorageOp> = chunk
+            .iter()
+            .map(|&i| StorageOp::InsertMessage(row(i)))
+            .collect();
         db.apply(&ops).unwrap();
     }
-    println!("bulk insert {n} messages (500 per transaction): {:.2?}", t.elapsed());
+    println!(
+        "bulk insert {n} messages (500 per transaction): {:.2?}",
+        t.elapsed()
+    );
 
     // One message at a time: what sending or receiving one message costs.
     let t = Instant::now();
@@ -49,10 +58,17 @@ fn real_store_with_history() {
     for i in 0..singles {
         db.apply(&[StorageOp::InsertMessage(row(n + i))]).unwrap();
     }
-    println!("single-message write, history {n}: {:.2?} per write", t.elapsed() / singles as u32);
+    println!(
+        "single-message write, history {n}: {:.2?} per write",
+        t.elapsed() / singles as u32
+    );
 
     // Startup: load everything.
     let t = Instant::now();
     let all = db.messages().unwrap();
-    println!("load all {} messages (startup): {:.2?}", all.len(), t.elapsed());
+    println!(
+        "load all {} messages (startup): {:.2?}",
+        all.len(),
+        t.elapsed()
+    );
 }

@@ -11,10 +11,10 @@ Status meanings: **Ported, tested** = the Rust implementation exists and is chec
 | Ported, tested | 66 | 9859 |
 | Partly ported | 1 | 2310 |
 | Not yet ported | 0 | 0 |
-| Stays (UI) | 93 | 17195 |
+| Stays (UI) | 93 | 17199 |
 | Stays (platform adapter) | 61 | 12139 |
 | Replaced by a library | 4 | 333 |
-| **All mapped files** | **225** | **41836** |
+| **All mapped files** | **225** | **41840** |
 
 Ported does not mean retired: the TypeScript and Kotlin versions stay in production until the apps call the Rust engine (M7 desktop, M8 Android) and the compatibility gates pass (PRD section 16).
 
@@ -158,7 +158,7 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 | `apps/desktop/src/lib/storage.test.ts` | 17 | (none) | Small pure helpers for the screens: privacy checkup, pinned chats, the hosts the app contacts | Desktop UI | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/lib/storage.ts` | 41 | `ChatStorage`, `storageByChat` | Small pure helpers for the screens: privacy checkup, pinned chats, the hosts the app contacts | Desktop UI | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/lib/themes.test.ts` | 64 | (none) | Presentation helpers, UI settings, themes, notifications bridge | UI / adapter (stays) | UI | Stays (UI) | Stays | n/a |
-| `apps/desktop/src/lib/themes.ts` | 160 | `ThemeDef`, `THEMES`, `DEFAULT_PALETTE`, `classicTheme`, `APRICOT`, `themeById` +6 | Presentation helpers, UI settings, themes, notifications bridge | UI / adapter (stays) | UI | Stays (UI) | Stays | n/a |
+| `apps/desktop/src/lib/themes.ts` | 162 | `ThemeDef`, `THEMES`, `DEFAULT_PALETTE`, `classicTheme`, `APRICOT`, `themeById` +6 | Presentation helpers, UI settings, themes, notifications bridge | UI / adapter (stays) | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/lib/waveform.test.ts` | 22 | (none) | Voice-note waveform bars, receipt and nearby wording, quick-send and drop-to-send target lists | Desktop UI | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/lib/waveform.ts` | 43 | `bucketPeaks`, `playedBars`, `waveformFor` | Voice-note waveform bars, receipt and nearby wording, quick-send and drop-to-send target lists | Desktop UI | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/main.tsx` | 18 | (none) | App shell | UI | UI | Stays (UI) | Stays | n/a |
@@ -201,7 +201,7 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 | `apps/android/app/src/main/java/com/duochat/app/data/Preferences.kt` | 112 | `AppSettings`, `SettingsRepository` | App settings storage | UI state (stays) | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/data/QuickWins.kt` | 179 | `minutesLabel`, `HostRow`, `CheckupItem`, `ChatStorage`, `objects`, `parseCheckup` +28 | Small pure helpers for the screens: pinned chats, hosts the app contacts, privacy checkup | UI state (stays) | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/data/Social.kt` | 106 | `deleteFrame`, `reactFrame`, `parseDelete`, `ReactionEvent`, `parseReact`, `ReactionChip` +3 | Delete/react frames, backup | domain::social, crypto::backup | Domain/Crypto | Ported, tested | M8 | n/a |
-| `apps/android/app/src/main/java/com/duochat/app/data/Themes.kt` | 68 | `ThemeDef`, `themeById`, `channel`, `mixColors`, `luminance`, `contrastRatio` +2 | Themes | UI | UI | Stays (UI) | Stays | n/a |
+| `apps/android/app/src/main/java/com/duochat/app/data/Themes.kt` | 70 | `ThemeDef`, `themeById`, `channel`, `mixColors`, `luminance`, `contrastRatio` +2 | Themes | UI | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/data/Waveform.kt` | 21 | `waveformPeaks` | Voice-note waveform: peak per bar from decoded samples (drawing only) | UI state (stays) | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/data/local/DuoDatabase.kt` | 358 | `MessageEntity`, `OutboxEntity`, `ContactEntity`, `KvEntity`, `GroupLogEntity`, `DuoDao` +1 | Room database | storage::SqliteStorage; privcord-import (Room importer, Keystore decryptor supplied by the app) | Storage | Ported, tested | M8: after the importer has run on every install | importer tests on generated Room v7 fixtures |
 | `apps/android/app/src/main/java/com/duochat/app/engine/BackgroundPolicy.kt` | 94 | `BackgroundPolicy` | Reports battery, network and screen state to the shared background policy and passes its decision on | domain::background (decision); platform adapter (reading the phone) | Adapter | Stays (platform adapter) | Stays | n/a |

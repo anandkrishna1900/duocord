@@ -9,7 +9,7 @@ const YELLOW = '#ffe500';
 
 /* The menu pages: each one goes deeper than its short section on the home page. */
 
-function Head({ eyebrow, title, lead }) {
+export function Head({ eyebrow, title, lead }) {
   return (
     <section className="page-head">
       <div className="wrap">
@@ -21,7 +21,7 @@ function Head({ eyebrow, title, lead }) {
   );
 }
 
-function Next({ Go, items }) {
+export function Next({ Go, items }) {
   return (
     <section className="page-next">
       <div className="wrap">

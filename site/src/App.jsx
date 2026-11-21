@@ -1,6 +1,7 @@
 import Gallery from './Gallery.jsx';
 import StepStack from './StepStack.jsx';
 import { Icon, P, FEATURES, STEPS, FAQ, COMPARE } from './data.jsx';
+import { ArchitecturePage } from './Architecture.jsx';
 import { FeaturesPage, HowPage, ScreensPage, ComparePage, FaqPage, DownloadPage, AboutPage, DonatePage } from './Pages.jsx';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
@@ -44,8 +45,8 @@ function useOnScreen(ref, page) {
   return on;
 }
 
-const NAV = [['features', 'Features'], ['how', 'How it works'], ['screens', 'Screens'], ['compare', 'Compare'], ['faq', 'FAQ'], ['about', 'About'], ['donate', 'Donate']];
-const TITLES = { home: 'PrivCord: private encrypted messenger with no phone number or account', features: 'Features: PrivCord', how: 'How it works: PrivCord', screens: 'Screens: PrivCord', compare: 'How PrivCord compares', faq: 'Questions people ask: PrivCord', download: 'Get PrivCord for Windows and Android', about: 'About the maker: PrivCord', donate: 'Support PrivCord: donate' };
+const NAV = [['features', 'Features'], ['how', 'How it works'], ['architecture', 'Architecture'], ['screens', 'Screens'], ['compare', 'Compare'], ['faq', 'FAQ'], ['about', 'About'], ['donate', 'Donate']];
+const TITLES = { home: 'PrivCord: private encrypted messenger with no phone number or account', features: 'Features: PrivCord', how: 'How it works: PrivCord', architecture: 'Architecture: how PrivCord is built', screens: 'Screens: PrivCord', compare: 'How PrivCord compares', faq: 'Questions people ask: PrivCord', download: 'Get PrivCord for Windows and Android', about: 'About the maker: PrivCord', donate: 'Support PrivCord: donate' };
 // Real addresses: /features/, /how/, ... Each is also a pre-built HTML file (scripts/pages.mjs), so a link, a refresh or a search
 // engine lands on the right page; inside the site, clicks switch pages without reloading. ROOT is wherever the site lives
 // (the domain root, or /PrivCord/ on a project page), worked out from the address we were opened at.
@@ -304,6 +305,7 @@ export default function App() {
           )}
           {route === 'features' && <FeaturesPage Go={Go} />}
           {route === 'how' && <HowPage Go={Go} />}
+          {route === 'architecture' && <ArchitecturePage Go={Go} repo={REPO} />}
           {route === 'screens' && <ScreensPage Go={Go} asset={asset} />}
           {route === 'compare' && <ComparePage Go={Go} />}
           {route === 'faq' && <FaqPage Go={Go} />}

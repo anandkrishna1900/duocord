@@ -5,6 +5,7 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 const PAGES = {
   features: ['Features: PrivCord', 'Direct end-to-end encrypted chats, groups of up to 10, one account on many devices, files and voice notes, and an experimental Bluetooth mesh.'],
   how: ['How it works: PrivCord', 'Install, write down 12 words, add a friend with a QR code or six words, and chat device to device.'],
+  architecture: ['Architecture: how PrivCord is built', 'An interactive map of PrivCord: the shared Rust engine, ports and adapters, how a message travels, the crates, the steps taken and the design decisions.'],
   screens: ['Screens: PrivCord', 'Real screenshots of PrivCord on Windows and Android.'],
   compare: ['How PrivCord compares', 'PrivCord next to Signal, Session and Briar: accounts, servers, Bluetooth and audits.'],
   faq: ['Questions people ask: PrivCord', 'Accounts, servers, offline use, platforms, lost phones, licence and audits.'],

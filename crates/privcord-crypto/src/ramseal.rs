@@ -33,7 +33,7 @@ impl RamSeal {
     /// The nonce, then the ciphertext and tag.
     pub fn seal(&self, label: &str, plaintext: &[u8]) -> Result<Vec<u8>, CryptoError> {
         // A fresh random 96-bit nonce for every seal (the key lives for one run, so a repeat is out of reach).
-        let mut iv = [0u8; aead::IV_BYTES];
+        let mut iv = crate::kdf::blank::<{ aead::IV_BYTES }>();
         OsEntropy.fill(&mut iv)?;
         let ct = aead::encrypt(&*self.key, &iv, plaintext, label.as_bytes())?;
         let mut out = Vec::with_capacity(iv.len() + ct.len());

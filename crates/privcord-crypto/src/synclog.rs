@@ -2030,9 +2030,9 @@ mod tests {
         a.receive(thumbs, 4);
         let mut other = a.state().clone();
         let empty = b.state().fingerprint();
-        assert_ne!(
-            a.state().fingerprint(),
-            empty,
+        // `assert!(a != b)`, not `assert_ne!`: a failing assert_ne would print both fingerprints.
+        assert!(
+            a.state().fingerprint() != empty,
             "a reaction changes the fingerprint"
         );
         // A different reaction gives a different fingerprint too.

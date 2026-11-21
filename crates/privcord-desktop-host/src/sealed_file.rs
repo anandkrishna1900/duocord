@@ -52,7 +52,10 @@ mod tests {
         assert!(!file.windows(7).any(|w| w == b"hunter2"));
         assert_eq!(open(&key, &file).unwrap(), plain);
         assert!(open(&new_key().unwrap(), &file).is_none(), "another key");
-        assert!(open(&key, plain).is_none(), "an old plain-text file is not ours");
+        assert!(
+            open(&key, plain).is_none(),
+            "an old plain-text file is not ours"
+        );
         assert!(!is_sealed(plain));
     }
 }

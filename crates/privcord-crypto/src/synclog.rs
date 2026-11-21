@@ -276,6 +276,9 @@ fn put_lww<K: Ord, T>(map: &mut BTreeMap<K, Lww<T>>, key: K, next: Lww<T>) {
     }
 }
 
+/// Who reacted how, last writer wins; the emoji is sealed in memory (`None`: taken back).
+type Reaction = Lww<Sealed<Option<String>>>;
+
 /// One group's signed events as canonical text, each sealed in memory, kept apart by a hash of the text. Written out as
 /// the sorted list of texts, so the stored and hashed form is the same as for a plain set.
 #[derive(Debug, Clone, Default)]
@@ -326,7 +329,7 @@ pub struct State {
     /// Messages read on some device: read everywhere (risk 21).
     seen: BTreeSet<String>,
     /// message → who → their reaction (`None`: taken back).
-    reactions: BTreeMap<String, BTreeMap<String, Lww<Sealed<Option<String>>>>>,
+    reactions: BTreeMap<String, BTreeMap<String, Reaction>>,
     read: BTreeMap<String, Hlc>,
     settings: BTreeMap<String, Lww<Sealed<Value>>>,
     /// How far our own messages got with the person they went to (1 delivered, 2 read): the furthest any device saw.

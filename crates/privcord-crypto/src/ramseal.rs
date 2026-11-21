@@ -24,7 +24,11 @@ impl std::fmt::Debug for RamSeal {
 }
 
 /// AES-256-GCM under `key` with a fresh random nonce: the nonce, then the ciphertext and tag. `label` is bound in.
-pub fn seal_with_key(key: &[u8; 32], label: &str, plaintext: &[u8]) -> Result<Vec<u8>, CryptoError> {
+pub fn seal_with_key(
+    key: &[u8; 32],
+    label: &str,
+    plaintext: &[u8],
+) -> Result<Vec<u8>, CryptoError> {
     // A fresh random 96-bit nonce for every seal.
     let mut iv = crate::kdf::blank::<{ aead::IV_BYTES }>();
     OsEntropy.fill(&mut iv)?;

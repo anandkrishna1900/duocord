@@ -36,10 +36,10 @@ class FilesTest {
     }
 
     @Test
-    fun `handles exactly 8 MB and refuses one byte more`() {
+    fun `handles exactly 50 MB and refuses one byte more`() {
         assertTrue(assemble(bytesOf(MAX_FILE_BYTES)) is AssembleResult.Done)
         assertNull(validateFileSize(MAX_FILE_BYTES))
-        assertEquals("Files can be at most 8.0 MB.", validateFileSize(MAX_FILE_BYTES + 1))
+        assertEquals("Files can be at most 50.0 MB.", validateFileSize(MAX_FILE_BYTES + 1))
         assertEquals("That file is empty.", validateFileSize(0))
         assertTrue(runCatching { FileOffer.create("m", null, "x", "a/b", bytesOf(MAX_FILE_BYTES + 1), 1L, null) }.isFailure)
         val big = JSONObject().put("v", 1).put("kind", "file_offer").put("messageId", "big").put("name", "x").put("mime", "a/b")

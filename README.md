@@ -13,6 +13,7 @@
 **Website: [PrivCord, the private messenger with no account and no phone number](https://raiden6767.github.io/PrivCord/)**
  · [Features](https://raiden6767.github.io/PrivCord/features/)
  · [How it works](https://raiden6767.github.io/PrivCord/how/)
+ · [Architecture, an interactive map](https://raiden6767.github.io/PrivCord/architecture/)
  · [FAQ](https://raiden6767.github.io/PrivCord/faq/)
  · [Download for Windows and Android](https://raiden6767.github.io/PrivCord/download/)
  · [Support PrivCord](https://raiden6767.github.io/PrivCord/donate/)

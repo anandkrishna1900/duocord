@@ -52,7 +52,7 @@ describe('file transfer', () => {
     const r = await transfer(bytesOf(MAX_FILE_BYTES));
     expect(r.status).toBe('done');
     expect(validateFileSize(MAX_FILE_BYTES)).toBeNull();
-    expect(validateFileSize(MAX_FILE_BYTES + 1)).toMatch(/at most 8\.0 MB/);
+    expect(validateFileSize(MAX_FILE_BYTES + 1)).toMatch(/at most 50\.0 MB/);
     expect(validateFileSize(0)).toMatch(/empty/);
     await expect(makeFileOffer({ messageId: 'm', name: 'x', mime: 'a/b', bytes: bytesOf(MAX_FILE_BYTES + 1), clientCreatedAt: 1 })).rejects.toThrow();
     const rx = new FileAssembler();

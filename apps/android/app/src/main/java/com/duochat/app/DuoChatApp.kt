@@ -11,6 +11,8 @@ class DuoChatApp : Application() {
         CrashLog.install(this)
         com.duochat.app.engine.EngineHost.app = this
         DuoNotifications.ensureChannel(this)
+        // A safety net for phones that stop the background service: a short check about every 15 minutes.
+        com.duochat.app.notifications.BackgroundCheck.schedule(this)
         PeerConnectionFactoryHolder.initialize(this)
         android.util.Log.i("DuoChat", "Rust core: ${RustCore.status}")
     }

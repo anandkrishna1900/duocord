@@ -469,6 +469,19 @@ impl Core {
             } else {
                 // A file (voice note, photo, anything): its offer and every chunk, each sealed to the member, in order.
                 // Both helpers get the same sealed copies; the member keeps the first of each and skips repeats.
+                // Handed on member to member as one sealed blob per frame: only files of the size older versions took.
+                let too_big = self
+                    .ports
+                    .storage
+                    .file_info(&entry.message_id)
+                    .ok()
+                    .flatten()
+                    .is_some_and(|i| {
+                        i.size > privcord_domain::limits::LEGACY_MAX_FILE_BYTES as u64
+                    });
+                if too_big {
+                    continue;
+                }
                 let Some(frames) = self.outbox_frames(&entry.message_id) else {
                     continue;
                 };

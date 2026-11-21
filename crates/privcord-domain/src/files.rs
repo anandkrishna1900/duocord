@@ -323,16 +323,48 @@ pub enum AssembleResult {
     Failed(DeclineReason),
 }
 
+/// Where the bytes of a file being received wait until it is whole. The default keeps them as they are; the engine gives
+/// it one that keeps every chunk sealed in memory.
+pub trait ChunkStore: Send + std::fmt::Debug {
+    /// Adds the next chunk.
+    fn push(&mut self, chunk: &[u8]);
+    /// Chunks `from..to` (by number) as one buffer.
+    fn range(&self, from: usize, to: usize) -> Vec<u8>;
+    /// Everything held, in order. The store is empty afterwards.
+    fn take(&mut self) -> Vec<u8>;
+}
+
+/// The plain store: the bytes in one buffer.
+#[derive(Debug, Default)]
+pub struct PlainChunks(Vec<u8>);
+
+impl ChunkStore for PlainChunks {
+    fn push(&mut self, chunk: &[u8]) {
+        self.0.extend_from_slice(chunk);
+    }
+    fn range(&self, from: usize, to: usize) -> Vec<u8> {
+        let (a, b) = (
+            from * FILE_CHUNK_BYTES,
+            (to * FILE_CHUNK_BYTES).min(self.0.len()),
+        );
+        self.0.get(a..b).map(<[u8]>::to_vec).unwrap_or_default()
+    }
+    fn take(&mut self) -> Vec<u8> {
+        std::mem::take(&mut self.0)
+    }
+}
+
 #[derive(Debug)]
 struct Incoming {
     offer: FileOffer,
-    bytes: Vec<u8>,
+    bytes: Box<dyn ChunkStore>,
+    /// Bytes held (whole chunks, except after the last one).
+    held: usize,
     next: usize,
 }
 
 /// Receiving side, one per peer link. Chunks must arrive in order (the data channel is ordered; one we already hold is
-/// skipped); anything out of
-/// order, the wrong size, over the file size or failing the SHA-256 check aborts that transfer.
+/// skipped); anything out of order, the wrong size, over the file size or failing the SHA-256 check aborts that transfer.
 #[derive(Debug, Default)]
 pub struct FileAssembler {
     active: HashMap<String, Incoming>,
@@ -359,12 +391,13 @@ impl FileAssembler {
         if !restart && self.active.len() >= MAX_INCOMING_PER_PEER {
             return BeginOutcome::Busy;
         }
-        let capacity = offer.size;
+        // Nothing is reserved for the whole file: an offer is only a claim until the chunks arrive.
         self.active.insert(
             key,
             Incoming {
                 offer,
-                bytes: Vec::with_capacity(capacity.min(MAX_FILE_BYTES)),
+                bytes: Box::<PlainChunks>::default(),
+                held: 0,
                 next: 0,
             },
         );
@@ -374,24 +407,47 @@ impl FileAssembler {
     /// Start a transfer from bytes already held (a checkpoint of an earlier attempt). `bytes` must be a whole number of
     /// chunks and shorter than the file, or the transfer starts from nothing instead.
     pub fn begin_from(&mut self, offer: FileOffer, bytes: Vec<u8>) -> BeginOutcome {
+        self.begin_with(offer, bytes, Box::<PlainChunks>::default())
+    }
+
+    /// Like `begin_from`, keeping the bytes in `store`.
+    pub fn begin_with(
+        &mut self,
+        offer: FileOffer,
+        bytes: Vec<u8>,
+        store: Box<dyn ChunkStore>,
+    ) -> BeginOutcome {
         let usable =
             !bytes.is_empty() && bytes.len() < offer.size && bytes.len() % FILE_CHUNK_BYTES == 0;
-        let held = if usable { bytes } else { Vec::new() };
         let key = offer.message_id.to_string();
         let outcome = self.begin(offer);
         if outcome == BeginOutcome::Ok {
             if let Some(t) = self.active.get_mut(&key) {
-                t.next = held.len() / FILE_CHUNK_BYTES;
-                t.bytes = held;
+                t.bytes = store;
+                if usable {
+                    for part in bytes.chunks(FILE_CHUNK_BYTES) {
+                        t.bytes.push(part);
+                    }
+                    t.held = bytes.len();
+                    t.next = bytes.len() / FILE_CHUNK_BYTES;
+                }
             }
         }
         outcome
     }
 
-    /// The bytes received so far, in whole chunks, with the SHA-256 the offer promised: what a checkpoint keeps.
-    pub fn partial(&self, id: &MessageId) -> Option<(&FileOffer, &[u8])> {
+    /// Whether this is the very file already being received (same id, size and hash): a sender that offers it again after
+    /// its retry timer ran out is not starting over.
+    pub fn holds(&self, offer: &FileOffer) -> bool {
+        self.active
+            .get(offer.message_id.as_str())
+            .is_some_and(|t| t.offer.sha256 == offer.sha256 && t.offer.size == offer.size)
+    }
+
+    /// The transfer's offer and chunks `from..to` of what has been received so far (what a checkpoint keeps).
+    pub fn partial(&self, id: &MessageId, from: usize, to: usize) -> Option<(&FileOffer, Vec<u8>)> {
         let t = self.active.get(id.as_str())?;
-        (t.next > 0).then_some((&t.offer, t.bytes.as_slice()))
+        (t.next > 0).then(|| (&t.offer, t.bytes.range(from, to.min(t.next))))
     }
 
     /// Ids of the transfers in progress.
@@ -422,25 +478,26 @@ impl FileAssembler {
         } else {
             FILE_CHUNK_BYTES
         };
-        if frame.index != t.next || data.len() != expected_len || t.bytes.len() + data.len() > size
-        {
+        if frame.index != t.next || data.len() != expected_len || t.held + data.len() > size {
             self.active.remove(&key);
             return AssembleResult::Failed(DeclineReason::BadFile);
         }
-        t.bytes.extend_from_slice(&data);
+        t.bytes.push(&data);
+        t.held += data.len();
         t.next += 1;
-        if t.bytes.len() < size {
+        if t.held < size {
             return AssembleResult::More;
         }
-        let Some(done) = self.active.remove(&key) else {
+        let Some(mut done) = self.active.remove(&key) else {
             return AssembleResult::Failed(DeclineReason::BadFile);
         };
-        if sha256_b64(&done.bytes) != done.offer.sha256 {
+        let bytes = done.bytes.take();
+        if sha256_b64(&bytes) != done.offer.sha256 {
             return AssembleResult::Failed(DeclineReason::BadFile);
         }
         AssembleResult::Done {
             offer: Box::new(done.offer),
-            bytes: done.bytes,
+            bytes,
         }
     }
 
@@ -452,7 +509,7 @@ impl FileAssembler {
     /// 0.0 to 1.0, or `None` if there is no such transfer.
     pub fn progress(&self, id: &MessageId) -> Option<f64> {
         let t = self.active.get(id.as_str())?;
-        Some(t.bytes.len() as f64 / t.offer.size as f64)
+        Some(t.held as f64 / t.offer.size as f64)
     }
 
     pub fn abort(&mut self, id: &MessageId) {

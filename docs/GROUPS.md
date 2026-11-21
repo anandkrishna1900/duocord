@@ -69,7 +69,9 @@ Existing direct-chat frames (`message`, `ack`, `read`, `ping`, `pong`) are uncha
 | Frame | Meaning |
 |---|---|
 | `declined {messageId, reason}` | The receiver refused (`direct_not_accepted`, `too_large`, `bad_file`, `busy`). |
-| `file_offer {messageId, groupId?, name, mime, size<=8 MiB, sha256, clientCreatedAt, replyTo?}` | Starts a file transfer. |
+| `file_offer {messageId, groupId?, name, mime, size<=50 MiB, sha256, clientCreatedAt, replyTo?}` | Starts a file transfer. |
+| `file_have {messageId, next}` | The receiver's answer to an offer: the number of the next chunk it needs (0, or further if it kept part of an earlier try). A sender that gets none within 10 s sends a file of 8 MiB or less whole. |
+| `file_ack {messageId, next}` | The receiver, after every 32 chunks: how far it got. The sender keeps at most 64 chunks beyond it in flight. |
 | `file_chunk {messageId, index, data}` | 12 KiB of the file, base64url, strictly in order. |
 
 Files: sent to each recipient over the already-authenticated WebRTC link (not Bluetooth, not the relay),

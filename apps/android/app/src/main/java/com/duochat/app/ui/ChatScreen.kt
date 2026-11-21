@@ -1408,7 +1408,7 @@ private fun Composer(
                 // The clip sits centred on the first line (a one-line field is 56 dp tall) and stays there as text grows.
                 if (!isChannel) Box(Modifier.height(56.dp), contentAlignment = Alignment.Center) {
                     IconButton(onClick = { picker.launch("*/*") }, modifier = Modifier.size(48.dp)) {
-                        Icon(Icons.Filled.AttachFile, contentDescription = "Send a file (up to 8 MB)", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(Icons.Filled.AttachFile, contentDescription = "Send a file (up to 50 MB)", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 androidx.compose.material3.TextField(
@@ -1558,7 +1558,7 @@ fun avatarHue(seed: String): Int {
 
 private class PickedFile(val name: String, val mime: String, val bytes: ByteArray)
 
-/** Reads a file the user picked, refusing anything over the 8 MB limit before it is loaded into memory. */
+/** Reads a file the user picked, refusing anything over the 50 MB limit before it is loaded into memory. */
 private fun readPicked(context: android.content.Context, uri: Uri): PickedFile {
     var name = "file"
     var size = -1L
@@ -1572,17 +1572,33 @@ private fun readPicked(context: android.content.Context, uri: Uri): PickedFile {
     // Photos are shrunk before sending, so a big original may be read; anything else must fit as it is.
     val limit = if (isShrinkable(type)) PHOTO_READ_LIMIT else MAX_FILE_BYTES.toLong()
     if (size > limit) throw IllegalArgumentException("Files can be at most ${formatBytes(MAX_FILE_BYTES)}.")
-    val bytes = context.contentResolver.openInputStream(uri)?.use { input ->
-        val out = java.io.ByteArrayOutputStream()
-        val buffer = ByteArray(64 * 1024)
-        while (true) {
-            val n = input.read(buffer)
-            if (n < 0) break
-            out.write(buffer, 0, n)
-            if (out.size() > limit) throw IllegalArgumentException("Files can be at most ${formatBytes(MAX_FILE_BYTES)}.")
-        }
-        out.toByteArray()
-    } ?: throw IllegalStateException("Could not open that file.")
+    val bytes = try {
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            if (size in 1..limit) {
+                // The size is known: one buffer of exactly that size, so a big file is never copied while it grows.
+                val buf = ByteArray(size.toInt())
+                var off = 0
+                while (off < buf.size) {
+                    val n = input.read(buf, off, buf.size - off)
+                    if (n < 0) break
+                    off += n
+                }
+                if (off == buf.size) buf else buf.copyOf(off)
+            } else {
+                val out = java.io.ByteArrayOutputStream()
+                val buffer = ByteArray(64 * 1024)
+                while (true) {
+                    val n = input.read(buffer)
+                    if (n < 0) break
+                    out.write(buffer, 0, n)
+                    if (out.size() > limit) throw IllegalArgumentException("Files can be at most ${formatBytes(MAX_FILE_BYTES)}.")
+                }
+                out.toByteArray()
+            }
+        } ?: throw IllegalStateException("Could not open that file.")
+    } catch (e: OutOfMemoryError) {
+        throw IllegalStateException("This phone does not have enough free memory to send a file this big. Try a smaller one.")
+    }
     val shrunk = if (isShrinkable(type) && bytes.size > SHRINK_ABOVE) shrinkPhoto(bytes, name) else null
     val picked = shrunk ?: PickedFile(name, type, bytes)
     if (picked.bytes.size > MAX_FILE_BYTES) throw IllegalArgumentException("Files can be at most ${formatBytes(MAX_FILE_BYTES)}.")

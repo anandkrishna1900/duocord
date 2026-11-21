@@ -407,8 +407,9 @@ SectionTitle("Appearance")
                 }
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "With no server there is no push service: without the setting above you are notified only while the " +
-                        "app is open and a direct connection is active.",
+                    "There is no push service (that would need a server that knows when you get a message). Instead, " +
+                        "PrivCord asks the relays for waiting messages about every 15 minutes even when it is closed, and " +
+                        "continuously while it is open or \"Keep running\" is on. Messages wait on the relays for 7 days.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

@@ -49,7 +49,7 @@ const FEATURE_GROUPS = [
   { t: 'Everyday chat', i: 'users', items: [
     ['Groups of up to 10', 'Add Ben, Ben adds Cat, and you and Cat connect directly without sharing any code. Only an admin changes the group.'],
     ['Replies, reactions, search, delete for everyone', 'The things you expect, kept on your device.'],
-    ['Files, photos and voice notes', 'Up to 8 MB, sent straight to the other device. Photos and videos preview in the chat, voice notes show a waveform and play at your speed.'],
+    ['Files, photos and voice notes', 'Up to 50 MB, sent straight to the other device. Photos and videos preview in the chat, voice notes show a waveform and play at your speed.'],
     ['Undo send and send later', 'A few seconds to take a message back. Schedule one with quick picks (in an hour, this evening, tomorrow morning) in your own time zone.'],
     ['Pin, archive, mute, quiet hours', 'Pin chats, archive the noisy ones, mute for an hour, 8 hours, until tomorrow or for good, mark a chat silent, and set quiet hours. They follow you to every device.'],
     ['Delivery details', 'See, per device, whether a message was delivered or read, and which route it took.'],
@@ -68,7 +68,7 @@ const FEATURE_GROUPS = [
 
 const NUMBERS = [
   ['Group size', '10 people (a full mesh, so 9 links per device)'],
-  ['File size', '8 MB, device to device'],
+  ['File size', '50 MB, device to device'],
   ['Bluetooth mesh', 'Up to 7 hops, Android only, experimental'],
   ['Six-word invite', 'Valid for 15 minutes while the app stays open'],
   ['Device removal', 'Takes effect after 24 hours (cancel any time), or at once with the recovery phrase'],
@@ -277,7 +277,7 @@ const MORE_FAQ = [
   ['What is the 12-word recovery phrase?', 'It is your account. The same words restore you on a new device. They are never stored anywhere else, so write them down and keep them safe. Anyone with them can be you.'],
   ['What if I forget my recovery phrase and lose my device?', 'Then the account cannot be recovered. There is no server and no reset, which is also why nobody else can take it over.'],
   ['What do backups contain, and who can open them?', 'Your chats, files and old groups, encrypted with a key made from your passphrase (Argon2id, 12 characters minimum). Without the passphrase they cannot be opened.'],
-  ['How big can files be?', 'Up to 8 MB. They go straight from device to device, so both need a live link; a file for someone offline waits and sends when they reconnect.'],
+  ['How big can files be?', 'Up to 50 MB. They go straight from device to device, so both need a live link; a file for someone offline waits and sends when they reconnect.'],
   ['How many people can be in a group?', 'Up to 10. Every member links directly to every other, so 10 people means 9 links per device.'],
   ['Does it cost anything?', 'No. It is free. The source is public under the PC-NC licence, which does not allow commercial use without permission.'],
   ['Can I stop people messaging me?', 'Yes. "Stay group-only with people I meet in groups" blocks new direct chats with people you only know through a group. It is a courtesy between honest apps, not a guarantee against a modified one.'],

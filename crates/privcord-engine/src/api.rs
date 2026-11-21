@@ -288,7 +288,8 @@ pub enum EngineEvent {
         name: String,
         size: usize,
     },
-    /// A file has been handed to the link for `peer`: `frames` frames, the first of which is the offer.
+    /// Older versions: a file has been handed to the link for `peer`, `frames` frames, the first of which is the offer.
+    /// Files now go in windows, so this is no longer sent; the sender's progress comes as `FileProgress`.
     FileQueued {
         peer: UserId,
         message_id: MessageId,

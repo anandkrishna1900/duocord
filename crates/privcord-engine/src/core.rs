@@ -60,6 +60,7 @@ use zeroize::Zeroizing;
 
 mod backup;
 mod devices;
+mod filestream;
 mod health;
 mod invites;
 mod keys;
@@ -266,6 +267,12 @@ pub struct Core {
     sealed: signaling::SealedState,
     /// Files offered again whose receiver has not said where it is yet: (who, message) -> when to send it all.
     file_waits: std::collections::HashMap<(UserId, MessageId), i64>,
+    /// Files being sent, sealed in memory (shared by every recipient of the message).
+    file_sends: std::collections::HashMap<MessageId, filestream::FileSend>,
+    /// How far each recipient has got with a file, so the next window can go.
+    file_streams: std::collections::HashMap<(UserId, MessageId), filestream::FileStream>,
+    /// Seals what the engine holds of files and history in memory.
+    ram_seal: Arc<privcord_crypto::ramseal::RamSeal>,
     /// Channel mailboxes we are listening on (the adapter opens the sockets).
     channel_subscribed: HashSet<String>,
     /// The name each person gave in a channel message (they are not contacts).
@@ -325,7 +332,10 @@ impl Core {
             identity: None,
             uid: None,
             contacts: BTreeMap::new(),
-            messages: message_store::MessageStore::new(seal),
+            messages: message_store::MessageStore::new(seal.clone()),
+            ram_seal: seal,
+            file_sends: std::collections::HashMap::new(),
+            file_streams: std::collections::HashMap::new(),
             outbox: Vec::new(),
             peers: HashMap::new(),
             group_only: false,
@@ -1297,6 +1307,7 @@ impl Core {
             Some("file_offer") => self.on_file_offer(peer, frame),
             Some("file_chunk") => self.on_file_chunk(peer, frame),
             Some("file_have") => self.on_file_have(peer, frame),
+            Some("file_ack") => self.on_file_ack(peer, frame),
             Some("devices") => self.on_device_notice(peer, frame),
             Some("privacy") => {
                 self.note_devices(peer, frame);
@@ -1414,6 +1425,17 @@ impl Core {
         let ours = self.is_ours_to(&id, who);
         if !ours {
             return;
+        }
+        // The receiver has the whole file: the transfer is over, and its progress bar goes.
+        if self
+            .file_streams
+            .remove(&(peer.clone(), id.clone()))
+            .is_some()
+        {
+            self.hub.publish(EngineEvent::FileProgress {
+                message_id: id.clone(),
+                percent: 100,
+            });
         }
         self.record_receipt(&id, peer, state == DeliveryState::Read);
         let Some(current) = self.messages.meta(&id).map(|m| m.delivery_state) else {
@@ -1652,43 +1674,40 @@ impl Core {
             .cloned()
             .collect();
         for entry in due {
-            let Some(frames) = self.outbox_frames(&entry.message_id) else {
-                continue;
-            };
             let Some(row) = self.messages.meta(&entry.message_id) else {
                 continue;
             };
             let was_queued = row.delivery_state == DeliveryState::Queued;
-            let file_frames = (row.kind == MessageKind::File)
-                .then(|| u32::try_from(frames.len()).unwrap_or(u32::MAX));
-            // A file is hundreds of frames: give the whole transfer time to finish before sending it again.
-            let wait = if row.kind == MessageKind::File {
+            let is_file = row.kind == MessageKind::File;
+            // A file goes as its offer alone: the receiver says where it is (`file_have`, which may be part way if it kept
+            // some of an earlier try) and the chunks follow in windows, each answered by `file_ack`. A receiver that never
+            // answers is sent a small file whole by `tick_file_waits`. A file is hundreds of frames: give the whole
+            // transfer time to finish before offering it again.
+            let frames = if is_file {
+                match self.file_offer_frame(&entry.message_id) {
+                    Some(offer) => vec![offer],
+                    None => continue,
+                }
+            } else {
+                match self.outbox_frames(&entry.message_id) {
+                    Some(f) => f,
+                    None => continue,
+                }
+            };
+            let wait = if is_file {
                 FILE_RETRY_AFTER_MS
             } else {
                 RETRY_AFTER_MS
             };
-            // A file offered again goes as its offer alone: the receiver may hold part of it already and says where it
-            // is (`file_have`); `tick_file_waits` sends it all if no answer comes.
-            let again = file_frames.is_some() && entry.attempts > 0;
-            let all_sent = frames
-                .iter()
-                .take(if again { 1 } else { usize::MAX })
-                .all(|f| self.send_secure(peer, f));
+            let all_sent = frames.iter().all(|f| self.send_secure(peer, f));
             if !all_sent {
                 return;
             }
-            if again {
+            if is_file {
                 self.file_waits.insert(
                     (peer.clone(), entry.message_id.clone()),
-                    now + resume::HAVE_WAIT_MS,
+                    now + filestream::HAVE_WAIT_MS,
                 );
-            }
-            if let Some(frames) = file_frames {
-                self.hub.publish(EngineEvent::FileQueued {
-                    peer: peer.clone(),
-                    message_id: entry.message_id.clone(),
-                    frames,
-                });
             }
             let next = OutboxEntry {
                 attempts: entry.attempts + 1,
@@ -2594,12 +2613,19 @@ impl Core {
             self.send_ack(peer, &id, at);
             return;
         }
-        let held = self.take_partial(&offer);
-        let outcome = self
-            .peers
-            .get_mut(peer)
-            .map(|p| p.files.begin_from(offer, held))
-            .unwrap_or(BeginOutcome::Busy);
+        // The same file offered again while it is arriving (the sender's retry timer ran out) is not a new start: say where
+        // we are and carry on. Otherwise start from what an earlier try left (nothing if there is none).
+        let continuing = self.peers.get(peer).is_some_and(|p| p.files.holds(&offer));
+        let outcome = if continuing {
+            BeginOutcome::Ok
+        } else {
+            let held = self.take_partial(&offer);
+            let store = Box::new(filestream::SealedChunks::new(self.ram_seal.clone(), &id));
+            self.peers
+                .get_mut(peer)
+                .map(|p| p.files.begin_with(offer, held, store))
+                .unwrap_or(BeginOutcome::Busy)
+        };
         match outcome {
             BeginOutcome::Ok => {
                 let conversation = match group {
@@ -2641,8 +2667,13 @@ impl Core {
         match result {
             AssembleResult::More => {
                 let next = self.peers.get(peer).and_then(|p| p.files.next_index(&id));
-                if next.is_some_and(|n| n % resume::PART_EVERY == 0) {
-                    self.save_partial(peer, &id);
+                if let Some(n) = next {
+                    if n % privcord_domain::limits::FILE_ACK_EVERY == 0 {
+                        self.send_ack_progress(peer, &id, n);
+                    }
+                    if n % resume::PART_EVERY == 0 {
+                        self.save_partial(peer, &id);
+                    }
                 }
                 let fraction = self
                     .peers

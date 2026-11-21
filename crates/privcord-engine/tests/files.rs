@@ -261,7 +261,7 @@ fn bad_sizes_and_unwanted_files_are_refused() {
             &b.uid,
             "big",
             "text/plain",
-            vec![1; 8 * 1024 * 1024 + 1],
+            vec![1; 50 * 1024 * 1024 + 1],
             None
         ),
         Err(privcord_engine::ErrorCode::BadFile)
@@ -524,7 +524,7 @@ fn erasing_a_chat_also_erases_a_saved_part_of_a_file() {
             &b.uid,
             "big.bin",
             "application/octet-stream",
-            sample(12_288 * 130),
+            sample(12_288 * 300),
             None,
         )
         .unwrap();
@@ -533,10 +533,10 @@ fn erasing_a_chat_also_erases_a_saved_part_of_a_file() {
     b.transport.set_connected(&au, true);
     a.core.link_up(&bu, ConnectionPath::DirectLan).unwrap();
     b.core.link_up(&au, ConnectionPath::DirectLan).unwrap();
-    pump_limited(&mut a, &mut b, 100);
+    pump_limited(&mut a, &mut b, 150);
     let held = || {
         b.storage
-            .kv(&format!("file.part.{id}.d"))
+            .kv(&format!("file.part.{id}.s0"))
             .unwrap()
             .is_some_and(|v| !v.is_empty())
     };
@@ -622,4 +622,119 @@ fn a_chat_longer_than_the_in_memory_window_still_works_for_its_old_messages() {
         .collect();
     assert_eq!(after.len(), n - 1);
     assert_eq!(after.last(), full.last());
+}
+
+#[test]
+fn a_file_above_the_old_limit_arrives_intact_in_windows() {
+    let clock = FakeClock::at(1_700_000_000_000);
+    let (mut a, mut b) = (node("alice", &clock), node("bob", &clock));
+    befriend(&mut a, &mut b);
+    let data = sample(9 * 1024 * 1024 + 123); // over the 8 MiB older versions took
+    let id = a
+        .core
+        .send_file(
+            &b.uid,
+            "video.bin",
+            "application/octet-stream",
+            data.clone(),
+            None,
+        )
+        .unwrap();
+    let mut all = [&mut a, &mut b];
+    link(&mut all, 0, 1);
+    let [a, b] = all;
+    assert_eq!(file_of(b, &id).expect("file arrived").bytes, data);
+    assert_eq!(state_of(a, &id), DeliveryState::Delivered);
+}
+
+#[test]
+fn the_sender_never_has_more_than_one_window_in_flight_until_the_receiver_answers() {
+    let clock = FakeClock::at(1_700_000_000_000);
+    let (mut a, mut b) = (node("alice", &clock), node("bob", &clock));
+    befriend(&mut a, &mut b);
+    let id = a
+        .core
+        .send_file(
+            &b.uid,
+            "big.bin",
+            "application/octet-stream",
+            sample(12_288 * 300),
+            None,
+        )
+        .unwrap();
+    let (au, bu) = (a.uid.clone(), b.uid.clone());
+    a.transport.set_connected(&bu, true);
+    b.transport.set_connected(&au, true);
+    a.core.link_up(&bu, ConnectionPath::DirectLan).unwrap();
+    b.core.link_up(&au, ConnectionPath::DirectLan).unwrap();
+    // The link sets itself up, Alice offers the file and Bob says where he is (five rounds, both ways); from then on Bob's
+    // answers are lost, so nothing but the first window can go.
+    let mut chunks = 0;
+    for round in 0..40 {
+        for (_, f) in a.transport.drain() {
+            if round >= 5 && f.len() > 10_000 {
+                chunks += 1;
+            }
+            b.core.frame_received(&au, &f);
+        }
+        for (_, f) in b.transport.drain() {
+            if round < 5 {
+                a.core.frame_received(&bu, &f);
+            }
+        }
+    }
+    assert_eq!(chunks, 64, "one window of 64 chunks, then it waits");
+    assert!(file_of(&b, &id).is_none());
+}
+
+#[test]
+fn files_up_to_fifty_megabytes_are_accepted_and_more_is_refused() {
+    let clock = FakeClock::at(1_700_000_000_000);
+    let (mut a, mut b) = (node("alice", &clock), node("bob", &clock));
+    befriend(&mut a, &mut b);
+    assert!(a
+        .core
+        .send_file(
+            &b.uid,
+            "ok.bin",
+            "application/octet-stream",
+            vec![7; 50 * 1024 * 1024],
+            None
+        )
+        .is_ok());
+    assert_eq!(
+        a.core.send_file(
+            &b.uid,
+            "no.bin",
+            "application/octet-stream",
+            vec![7; 50 * 1024 * 1024 + 1],
+            None
+        ),
+        Err(privcord_engine::ErrorCode::BadFile)
+    );
+}
+
+#[test]
+fn zz_full_fifty_megabytes() {
+    let clock = FakeClock::at(1_700_000_000_000);
+    let (mut a, mut b) = (node("alice", &clock), node("bob", &clock));
+    befriend(&mut a, &mut b);
+    let data = sample(50 * 1024 * 1024);
+    let id = a
+        .core
+        .send_file(
+            &b.uid,
+            "huge.bin",
+            "application/octet-stream",
+            data.clone(),
+            None,
+        )
+        .unwrap();
+    let t = std::time::Instant::now();
+    let mut all = [&mut a, &mut b];
+    link(&mut all, 0, 1);
+    let [a, b] = all;
+    eprintln!("ELAPSED={:?}", t.elapsed());
+    assert_eq!(file_of(b, &id).expect("file arrived").bytes, data);
+    assert_eq!(state_of(a, &id), DeliveryState::Delivered);
 }

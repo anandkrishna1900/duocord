@@ -44,7 +44,7 @@ shared by both apps.
 - **Chat one-to-one** with end-to-end encryption, including a post-quantum hybrid handshake (ML-KEM-768 with P-256). Messages go straight from device to device.
 - **Use one account on several devices.** Link your phone, laptop or tablet with a QR code; chats, contacts and read state stay in step with no server in between, and the account key stays on the first device. Remove a lost device in 24 hours (or at once with your recovery phrase). See [multi-device sync](#multi-device-sync-one-account-on-your-phone-and-your-pc).
 - **Reply** to any message. The quote shows for everyone, in chats and groups.
-- **Send files up to 8 MB.** Photos and videos show a preview you can open; every file can be saved.
+- **Send files up to 50 MB.** Photos and videos show a preview you can open; every file can be saved.
   They go straight to the other device, free, with no upload to anyone's server.
 - **Send later.** Write a message now and schedule it for a time you pick; reply to a message from its notification (Android).
 - **Join public channels** like #general (no account, anyone who types the same name is in the same room). Messages are signed, so nobody can speak as someone else, but anyone who knows the name can read them.
@@ -91,7 +91,7 @@ The full design is in [docs/design/syncengine.md](docs/design/syncengine.md).
 
 - **A private chat app that does not need a phone number.** Create an identity from a 12-word phrase and chat with friends who scan your QR code. No SIM, email, username database or sign-up.
 - **An encrypted messenger for Windows and Android** with one account on your phone and your PC, and no cloud account to trust.
-- **Peer-to-peer chat and file sharing** over WebRTC: photos, videos and files up to 8 MB go straight to the other device, with no upload to a server.
+- **Peer-to-peer chat and file sharing** over WebRTC: photos, videos and files up to 50 MB go straight to the other device, with no upload to a server.
 - **Group chat without a server in the middle.** Groups of up to 10 are kept in step by the members' own devices.
 - **Messaging with no internet or in a blackout.** Nearby phones pass sealed messages along over a Bluetooth mesh, up to 7 hops (Android, experimental).
 - **A self-hosted, privacy-first alternative to WhatsApp, Telegram, Discord and Signal.** Run your own signaling relay and TURN server, or use none and keep to Bluetooth and the local network.
@@ -222,7 +222,7 @@ the TypeScript tests open, and open vectors the TypeScript code produced. CI che
 | **Links** | One authenticated, encrypted channel per contact: a WebRTC data channel, or Bluetooth LE with its own forward-secret secure channel. After connecting, both sides prove they hold the pinned keys. A ping and a liveness timer drop dead links. |
 | **Finding each other** | Sealed (encrypted and signed) connection setup delivered through signaling: Nostr relays or your own relay, or through a mutual friend. Optional store-and-forward for offline friends. |
 | **Groups** | A signed event log every member holds and folds the same way. Members can add members (up to 10); an added member's card is the introduction, so everyone connects automatically. Messages go to each member over that member's own link. |
-| **Files, channels, mesh** | 8 MB files in 12 KiB chunks over direct links. Public channels keyed by name. A Bluetooth mesh that floods sealed blobs for up to 7 hops (Android). |
+| **Files, channels, mesh** | 50 MB files in 12 KiB chunks over direct links, sent in windows and resumed after a cut-off. Public channels keyed by name. A Bluetooth mesh that floods sealed blobs for up to 7 hops (Android). |
 | **Storage** | Local SQLite (schema v3) with message text encrypted at rest on desktop. An outbox keeps unsent messages per recipient and resends when the link opens. |
 
 ### Data flow for one message
@@ -278,7 +278,7 @@ Everything below is implemented in `crates/privcord-crypto` (and mirrored in Typ
 | Nostr signaling | BIP-340 Schnorr events on secp256k1 signed with a throwaway key per event; kinds 21733 (live) and 31733 (stored), `t` tag = mailbox, `expiration` tag; only valid, unexpired, unseen events become blobs |
 | Group log | Signed events (create, add, remove, rename) that name the events they follow; every device folds them in one deterministic order, so every device reaches the same roster with no server. Events from non-members or breaking a rule (admins only remove others, 10 members) have no effect |
 | Mesh | Flooding with a 7-hop limit; seen-set against loops; carry for 30 minutes; at most 30 new messages per minute per sender; 8 KB packets; at most 5 stranger links. Relays carry only sealed or signed blobs and need no keys |
-| Files | 8 MB maximum, 12 KiB chunks, SHA-256 checked, at most 2 incoming per peer, direct links only |
+| Files | 50 MB maximum, 12 KiB chunks in windows of 64 answered by the receiver, resumable, SHA-256 checked, at most 2 incoming per peer, direct links only |
 | X3DH + Double Ratchet | HKDF-SHA-256 chains, AES-256-GCM with derived IV, bounded skipped keys (1000), envelopes and epoch-keyed group messages. **Ported and tested in both directions, but no app calls them yet** ([ADR-009](docs/rust/adr/ADR-009-x3dh-ratchet.md)) |
 
 Other rules: text up to 4,000 characters; groups up to 10; reactions from a fixed set of six emoji; delete for everyone

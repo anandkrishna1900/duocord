@@ -1121,7 +1121,7 @@ class RustChatEngine(
         is uniffi.privcord_ffi.FfiException.InvalidCard -> "That is not a valid invite. Check the words, or ask your friend to share it again."
         is uniffi.privcord_ffi.FfiException.OwnCard -> "That is your own invite. Send it to a friend instead."
         is uniffi.privcord_ffi.FfiException.UnknownContact -> "Unknown friend."
-        is uniffi.privcord_ffi.FfiException.BadFile -> "That file cannot be sent. It must not be empty and can be 8 MB at most."
+        is uniffi.privcord_ffi.FfiException.BadFile -> "That file cannot be sent. It must not be empty and can be 50 MB at most."
         is uniffi.privcord_ffi.FfiException.Busy -> "The app is busy. Try again in a moment."
         is uniffi.privcord_ffi.FfiException.GroupFull -> "That group is full (10 members at most)."
         is uniffi.privcord_ffi.FfiException.NoSuchGroup -> "That group no longer exists."
@@ -1383,6 +1383,8 @@ class RustChatEngine(
 
     override suspend fun clearLocalData() {
         call { wipeEverything() }
+        // Nothing is left to check for: the periodic check stays off until the app is opened again.
+        com.duochat.app.notifications.BackgroundCheck.cancel(app)
         secure.deleteIdentity()
         // The database (erased in place above) and its Keystore key go too. It must be closed first, so this engine
         // stops here and waits for the close; the caller starts a fresh one. (A delayed delete on the engine's scope was

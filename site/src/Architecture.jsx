@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Head, Next } from './Pages.jsx';
 import DotGrid from './rb/DotGrid.jsx';
@@ -384,7 +385,7 @@ function Graph() {
         </ol>
       </div>
 
-      {modal && (
+      {modal && createPortal(
         <div className={`arch-modal${closing ? ' out' : ''}`} onClick={closeModal}>
           <aside className="arch-card" ref={cardRef} role="dialog" aria-modal="true" aria-label={node.label} style={{ '--h': LAYERS.find((l) => l.id === node.layer)?.hue }} onClick={(e) => e.stopPropagation()}>
             <button type="button" className="close round" aria-label="Close" onClick={closeModal}>×</button>
@@ -401,9 +402,11 @@ function Graph() {
                   <button key={id} type="button" className="chip" onClick={() => { setSel(id); setModal((m) => ({ ...m, id })); }}>{NODE[id].label}</button>
                 ))}
               </div>
+              <button type="button" className="btn-close" onClick={closeModal}>Close</button>
             </div>
           </aside>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

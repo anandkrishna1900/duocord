@@ -28,9 +28,10 @@ A private peer-to-peer messenger (formerly DuoChat / DuoCord).
 For any UI work use the design skills (ui-ux-pro-max, impeccable) and take ideas from React Bits, 21st.dev, uiverse, mobbin, magicui, ui.watermelon.sh, untitledui, jitter, reactbits.dev. Respect `prefers-reduced-motion`, check licences. The site shows no React Bits credit, but keep licence notices in source and `site/THIRD_PARTY.md`. Never put the user's email on the website.
 
 ## State at the end of this chat
-- Merged: the Windows/Android UI audit, the PrivCord rename, engine speed-ups (snapshot grouping, about 10%), Architecture page, Donate and About pages.
-- Open PR [#129](https://github.com/raiden6767/PrivCord/pull/129): floating architecture map plus animated page backdrop (site-only). The merge was refused by the classifier; the user must say "merge 129" or merge it. Then verify https://raiden6767.github.io/PrivCord/architecture/.
-- Open PR (this branch `claude/themes`): retuned built-in themes on desktop (`apps/desktop/src/lib/themes.ts`) and Android (`apps/android/.../data/Themes.kt`). The two lists must stay identical. Added Gruvbox and Latte, kept all old ids so saved settings still work. `themes.test.ts` enforces 4.5:1 contrast on every theme.
+All PRs are merged; none are open. Merging is allowed without asking (the user said so): merge when CI is green.
+- Site: floating Architecture map with a page-wide animated backdrop; clicking a part opens an animated detail tile (rendered above the header, sticky × plus a bottom Close button, "Connected to" hop buttons); smooth timeline expand; no Play button; no chip rows above the map.
+- Themes: both apps use the same 18 palettes (`apps/desktop/src/lib/themes.ts`, `apps/android/.../data/Themes.kt`; ids kept, Gruvbox and Latte added). `themes.test.ts` and the Android `ThemesTest` / `ThemeContrastTest` enforce contrast: Android needs text/bg >= 7, muted text >= 3.5, raw accent on bg >= 3.0. Keep the two lists identical.
+- CI lessons: changing a Kotlin file changes the migration map (run `python3 docs/rust/tools/gen_migration_map.py`); run `cargo fmt --all` before pushing Rust (the storage perf test once failed fmt on main); a one-second `deploy-pages` failure is an overlap with the previous deploy, re-run it once.
 - Security: `npm audit` shows 0 vulnerabilities (root, relay, site). `cargo audit` shows only unmaintained warnings (Tauri, uniffi). GitHub Security alerts cannot be read from here, so check the repo's Security tab.
 
 ## For the user to do

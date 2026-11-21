@@ -11,10 +11,10 @@ Status meanings: **Ported, tested** = the Rust implementation exists and is chec
 | Ported, tested | 66 | 9861 |
 | Partly ported | 1 | 2312 |
 | Not yet ported | 0 | 0 |
-| Stays (UI) | 99 | 17741 |
+| Stays (UI) | 99 | 17744 |
 | Stays (platform adapter) | 67 | 12807 |
 | Replaced by a library | 4 | 333 |
-| **All mapped files** | **237** | **43054** |
+| **All mapped files** | **237** | **43057** |
 
 Ported does not mean retired: the TypeScript and Kotlin versions stay in production until the apps call the Rust engine (M7 desktop, M8 Android) and the compatibility gates pass (PRD section 16).
 
@@ -84,7 +84,7 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 | `apps/desktop/src/components/MessageList.tsx` | 660 | `MessageList` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/Modal.tsx` | 103 | `Modal` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/NetworkSettings.tsx` | 289 | `NetworkSettings` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
-| `apps/desktop/src/components/NetworkTransparency.tsx` | 59 | `NetworkTransparency` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
+| `apps/desktop/src/components/NetworkTransparency.tsx` | 60 | `NetworkTransparency` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/PersonDialog.tsx` | 161 | `PersonDialog` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/PrivacyCheckup.tsx` | 109 | `LAST_BACKUP_KEY`, `PrivacyCheckup` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
 | `apps/desktop/src/components/QrCode.tsx` | 18 | `QrCode` | React components and hooks | UI | UI | Stays (UI) | Stays; hooks become thin wrappers over Tauri commands in M7 | n/a |
@@ -134,7 +134,7 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 | `apps/desktop/src/lib/killSwitchFactory.ts` | 60 | `buildKillSwitchDeps`, `clearPersistedKillSwitchReport` | Emergency erase steps for the webview (local storage, IndexedDB, files, Tauri commands) | engine::core::privacy runs the plan and the report; these files only call web and OS APIs | Adapter | Stays (platform adapter) | Stays | n/a |
 | `apps/desktop/src/lib/localDb.ts` | 423 | `OutboxRow`, `FileMeta`, `StoredMessage`, `LocalStore` | Desktop SQLite schema, encrypted columns, file store | storage::SqliteStorage; privcord-import (desktop importer) | Storage | Ported, tested | M7: after the importer has run on every install | importer and migration tests on generated fixtures (docs/legacy-fixtures.json); the browser file store stays in the adapter |
 | `apps/desktop/src/lib/network.ts` | 85 | `BUILTIN_TURN`, `loadTorMode`, `torModeActive`, `setTorMode`, `loadNetworkConfig`, `saveNetworkConfig` +2 | WebRTC peer connection and BLE link on the desktop | Transport adapters (stay); link policy moves to engine | Adapter | Stays (platform adapter) | Stays | n/a |
-| `apps/desktop/src/lib/networkHosts.ts` | 35 | `HostRow`, `networkHosts` | Small pure helpers for the screens: privacy checkup, pinned chats, the hosts the app contacts | Desktop UI | UI | Stays (UI) | Stays | n/a |
+| `apps/desktop/src/lib/networkHosts.ts` | 36 | `HostRow`, `networkHosts` | Small pure helpers for the screens: privacy checkup, pinned chats, the hosts the app contacts | Desktop UI | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/lib/notifications.ts` | 60 | `takeRecentNotified`, `ensureNotificationPermission`, `notifyIncoming` | Presentation helpers, UI settings, themes, notifications bridge | UI / adapter (stays) | UI | Stays (UI) | Stays | n/a |
 | `apps/desktop/src/lib/outbox.test.ts` | 15 | (none) | Retry/outbox policy | engine::core delivery | Engine | Ported, tested | M7 | engine tests |
 | `apps/desktop/src/lib/outbox.ts` | 6 | `needsDelivery` | Retry/outbox policy | engine::core delivery | Engine | Ported, tested | M7 | engine tests |
@@ -265,7 +265,7 @@ Ported does not mean retired: the TypeScript and Kotlin versions stay in product
 | `apps/android/app/src/main/java/com/duochat/app/ui/MemoryMedia.kt` | 30 | `BytesMediaDataSource`, `memoryMediaSource` | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/ui/Motion.kt` | 182 | `Motion`, `routeDepth`, `screenTransition`, `arrive`, `pressScale`, `SwipeToReply` | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/ui/Onboarding.kt` | 343 | `Step`, `OnboardingScreen`, `ShowPhrase`, `ConfirmPhrase`, `RestorePhrase`, `Fact` +1 | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
-| `apps/android/app/src/main/java/com/duochat/app/ui/PrivacyCards.kt` | 226 | `PrivacyCheckupCard`, `NetworkHostsCard`, `formatSize`, `StorageByChatCard`, `SealedChip`, `DevicesStrip` +2 | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
+| `apps/android/app/src/main/java/com/duochat/app/ui/PrivacyCards.kt` | 227 | `PrivacyCheckupCard`, `NetworkHostsCard`, `formatSize`, `StorageByChatCard`, `SealedChip`, `DevicesStrip` +2 | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/ui/QrDecode.kt` | 48 | `QrDecode` | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/ui/QrScanner.kt` | 364 | `rememberQrScanner`, `QrScannerScreen`, `ScanFrame`, `analyze`, `decodeCaptured`, `decodeImage` +2 | Compose screens | UI | UI | Stays (UI) | Stays | n/a |
 | `apps/android/app/src/main/java/com/duochat/app/ui/QrUtils.kt` | 35 | `qrBitmap` | Compose screens | UI | UI | Stays (UI) | Stays | n/a |

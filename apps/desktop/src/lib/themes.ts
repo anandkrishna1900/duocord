@@ -32,7 +32,7 @@ export const THEMES: ThemeDef[] = [
   { id: 'paper', name: 'Paper', dark: false, bg: '#f4efe6', surface: '#fffcf6', text: '#2b2620', accent: '#b45f06' },
   { id: 'sky', name: 'Sky', dark: false, bg: '#eaf3fb', surface: '#ffffff', text: '#10222e', accent: '#1478c8' },
   { id: 'mint', name: 'Mint', dark: false, bg: '#e9f6f0', surface: '#ffffff', text: '#10261c', accent: '#14805a' },
-  { id: 'latte', name: 'Latte', dark: false, bg: '#eff1f5', surface: '#ffffff', text: '#3b3e57', accent: '#8839ef' },
+  { id: 'latte', name: 'Latte', dark: false, bg: '#eff1f5', surface: '#ffffff', text: '#262940', accent: '#8839ef' },
   { id: 'solarized-light', name: 'Solarized light', dark: false, bg: '#fdf6e3', surface: '#eee8d5', text: '#073642', accent: '#1f78b4' },
 ];
 

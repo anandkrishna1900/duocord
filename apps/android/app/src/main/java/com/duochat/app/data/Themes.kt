@@ -28,7 +28,7 @@ val THEMES: List<ThemeDef> = listOf(
     ThemeDef("paper", "Paper", false, 0xFFF4EFE6.toInt(), 0xFFFFFCF6.toInt(), 0xFF2B2620.toInt(), 0xFFB45F06.toInt()),
     ThemeDef("sky", "Sky", false, 0xFFEAF3FB.toInt(), 0xFFFFFFFF.toInt(), 0xFF10222E.toInt(), 0xFF1478C8.toInt()),
     ThemeDef("mint", "Mint", false, 0xFFE9F6F0.toInt(), 0xFFFFFFFF.toInt(), 0xFF10261C.toInt(), 0xFF14805A.toInt()),
-    ThemeDef("latte", "Latte", false, 0xFFEFF1F5.toInt(), 0xFFFFFFFF.toInt(), 0xFF3B3E57.toInt(), 0xFF8839EF.toInt()),
+    ThemeDef("latte", "Latte", false, 0xFFEFF1F5.toInt(), 0xFFFFFFFF.toInt(), 0xFF262940.toInt(), 0xFF8839EF.toInt()),
     ThemeDef("solarized-light", "Solarized light", false, 0xFFFDF6E3.toInt(), 0xFFEEE8D5.toInt(), 0xFF073642.toInt(), 0xFF1F78B4.toInt()),
 )
 

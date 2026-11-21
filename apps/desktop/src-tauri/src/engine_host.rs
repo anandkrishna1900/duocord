@@ -180,6 +180,22 @@ fn network_file_key(create: bool) -> Option<[u8; 32]> {
     }
 }
 
+/// What the page keeps as settings ("settings", "network"), saved encrypted so nothing of them sits on disk as plain text.
+#[tauri::command]
+pub fn settings_get(app: AppHandle, name: String) -> Result<Option<String>, String> {
+    let (Some(dir), Some(key)) = (app.path().app_data_dir().ok(), network_file_key(false)) else {
+        return Ok(None);
+    };
+    Ok(sealed_file::read_blob(&dir, &key, &name))
+}
+
+#[tauri::command]
+pub fn settings_set(app: AppHandle, name: String, text: String) -> Result<(), String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let key = network_file_key(true).ok_or("the credential store is not available")?;
+    sealed_file::write_blob(&dir, &key, &name, &text)
+}
+
 /// Saves the settings encrypted. With no credential store to hold the key nothing is written (and any older plain-text
 /// copy is removed): the page hands the settings over again at every start.
 fn save_network(app: &AppHandle, saved: &Value) -> Result<(), String> {

@@ -2,6 +2,9 @@ package com.duochat.app.data
 
 import android.content.Context
 import com.duochat.app.AppConfig
+import com.duochat.app.security.LocalCrypto
+import org.json.JSONArray
+import org.json.JSONObject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -49,8 +52,15 @@ val ACCENTS: List<Pair<String, String>> = listOf(
 )
 
 class SettingsRepository(context: Context) {
-    private val prefs = context.applicationContext
-        .getSharedPreferences("duochat.settings.v1", Context.MODE_PRIVATE)
+    private val appContext = context.applicationContext
+    private val prefs = appContext.getSharedPreferences("duochat.settings.v1", Context.MODE_PRIVATE)
+
+    /**
+     * The settings (your name, the relay and TURN settings with their password, the app-lock and panic-wipe switches) are
+     * kept as one value encrypted by the Android Keystore. If the Keystore cannot be used they are not kept at all: they
+     * are never written as plain text.
+     */
+    private val crypto = runCatching { LocalCrypto(appContext, "settings") }.getOrNull()
 
     // One copy for the whole process: the screen and the background service read and change the same settings.
     private val _settings = synchronized(SettingsRepository) { shared ?: MutableStateFlow(load()).also { shared = it } }
@@ -59,27 +69,62 @@ class SettingsRepository(context: Context) {
     fun update(patch: AppSettings.() -> AppSettings) {
         val next = _settings.value.patch()
         _settings.update { next }
-        prefs.edit()
-            .putString("theme", next.theme)
-            .putString("accent", next.accent)
-            .putString("palette", next.palette)
-            .putBoolean("notificationsEnabled", next.notificationsEnabled)
-            .putBoolean("notificationPreviews", next.notificationPreviews)
-            .putString("peerNickname", next.peerNickname)
-            .putString("displayName", next.displayName)
-            .putBoolean("groupOnly", next.groupOnly)
-            .putBoolean("mesh", next.mesh)
-            .putBoolean("keepRunning", next.keepRunning)
-            .putBoolean("panicWipe", next.panicWipe)
-            .putBoolean("appLock", next.appLock)
-            .putStringSet("mutedChats", next.mutedChats)
-            .putLong("lastBackupAt", next.lastBackupAt)
-            .putString("lastSeenVersion", next.lastSeenVersion)
-            .putString("network", next.network.toJson())
-            .apply()
+        save(next)
     }
 
+    private fun save(s: AppSettings) {
+        val sealed = runCatching { crypto?.encrypt(toJson(s).toString()) }.getOrNull() ?: return
+        // The older plain-text keys go in the same write that stores the encrypted copy.
+        prefs.edit().clear().putString(SEALED, sealed).apply()
+    }
+
+    private fun toJson(s: AppSettings): JSONObject = JSONObject()
+        .put("theme", s.theme).put("accent", s.accent).put("palette", s.palette)
+        .put("notificationsEnabled", s.notificationsEnabled).put("notificationPreviews", s.notificationPreviews)
+        .put("peerNickname", s.peerNickname).put("displayName", s.displayName)
+        .put("groupOnly", s.groupOnly).put("mesh", s.mesh).put("keepRunning", s.keepRunning)
+        .put("panicWipe", s.panicWipe).put("appLock", s.appLock)
+        .put("mutedChats", JSONArray(s.mutedChats.toList()))
+        .put("lastBackupAt", s.lastBackupAt).put("lastSeenVersion", s.lastSeenVersion)
+        .put("network", s.network.toJson())
+
     private fun load(): AppSettings {
+        val sealed = prefs.getString(SEALED, null)
+        if (sealed != null) {
+            val opened = runCatching { crypto?.decrypt(sealed) }.getOrNull()
+            val parsed = opened?.let { runCatching { fromJson(JSONObject(it)) }.getOrNull() }
+            return parsed ?: AppSettings(network = AppConfig.defaultNetworkConfig())
+        }
+        // An older version kept each setting as plain text: read them once and keep them encrypted from now on.
+        val legacy = loadLegacy()
+        save(legacy)
+        return legacy
+    }
+
+    private fun fromJson(o: JSONObject): AppSettings {
+        val theme = o.optString("theme", "system")
+        val accent = o.optString("accent", ACCENTS.first().second)
+        return AppSettings(
+            theme = if (theme in setOf("system", "dark", "light")) theme else "system",
+            accent = if (Regex("^#[0-9a-fA-F]{6}$").matches(accent)) accent else ACCENTS.first().second,
+            palette = o.optString("palette", CLASSIC_PALETTE).let { if (it == CLASSIC_PALETTE || themeById(it) != null) it else CLASSIC_PALETTE },
+            notificationsEnabled = o.optBoolean("notificationsEnabled", true),
+            notificationPreviews = o.optBoolean("notificationPreviews", true),
+            peerNickname = o.optString("peerNickname", "").trim().take(40),
+            displayName = o.optString("displayName", "").trim().take(40),
+            groupOnly = o.optBoolean("groupOnly", false),
+            mesh = o.optBoolean("mesh", false),
+            keepRunning = o.optBoolean("keepRunning", false),
+            panicWipe = o.optBoolean("panicWipe", false),
+            appLock = o.optBoolean("appLock", true),
+            mutedChats = o.optJSONArray("mutedChats")?.let { a -> (0 until a.length()).map { a.getString(it) }.toSet() } ?: emptySet(),
+            lastBackupAt = o.optLong("lastBackupAt", 0L),
+            lastSeenVersion = o.optString("lastSeenVersion", ""),
+            network = NetworkConfig.fromJson(o.optString("network", "").ifEmpty { null }, fallback = AppConfig.defaultNetworkConfig()),
+        )
+    }
+
+    private fun loadLegacy(): AppSettings {
         val theme = prefs.getString("theme", "system") ?: "system"
         val accent = prefs.getString("accent", ACCENTS.first().second) ?: ACCENTS.first().second
         return AppSettings(
@@ -106,6 +151,7 @@ class SettingsRepository(context: Context) {
     }
 
     private companion object {
+        const val SEALED = "sealed"
         @Volatile var shared: MutableStateFlow<AppSettings>? = null
     }
 

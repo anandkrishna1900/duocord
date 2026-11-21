@@ -277,6 +277,8 @@ pub fn run() {
         engine_host::engine_signal_status,
         engine_host::engine_signal_online,
         engine_host::engine_network,
+        engine_host::settings_get,
+        engine_host::settings_set,
         autobackup::auto_backup_status,
         autobackup::auto_backup_enable,
         autobackup::auto_backup_disable,

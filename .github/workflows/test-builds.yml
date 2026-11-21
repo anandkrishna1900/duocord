@@ -1,8 +1,12 @@
 name: Test builds
 
-# Manual: builds UNSIGNED installers you can download and try (Actions run > Artifacts).
-# Not for distribution: see docs/DEPLOYMENT.md for signed releases.
+# Builds UNSIGNED installers you can try (Actions run > Artifacts). Every merge to main (except site/ and root .md
+# changes) also replaces the files on the Android and Windows releases, which the website links to. A manual run
+# publishes only if "publish" is ticked. Not a signed release: see docs/DEPLOYMENT.md.
 on:
+  push:
+    branches: [main]
+    paths-ignore: ['site/**', '*.md']
   workflow_dispatch:
     inputs:
       publish:
@@ -12,6 +16,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: test-builds
+  cancel-in-progress: false
 
 jobs:
   windows:
@@ -80,7 +88,7 @@ jobs:
 
   publish:
     name: Replace the release files
-    if: inputs.publish
+    if: github.event_name == 'push' || inputs.publish
     needs: [windows, android]
     runs-on: ubuntu-latest
     permissions:

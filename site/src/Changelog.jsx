@@ -7,10 +7,15 @@ const FILTERS = [['all', 'All'], ['android', 'Android'], ['windows', 'Windows'],
 const LABEL = { android: 'Android', windows: 'Windows', engine: 'Engine', security: 'Security', site: 'Website', fix: 'Fix', maintenance: 'Dependencies' };
 const DAYS_PAGE = 18;
 
-const day = (iso) => iso.slice(0, 10);
-const at = (d) => new Date(`${d}T12:00:00Z`);
-const tile = (d) => at(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
-const month = (d) => at(d).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+// Every moment is stored in UTC and shown in the visitor's own time zone, so a "day" is the visitor's day.
+const pad = (n) => String(n).padStart(2, '0');
+const day = (iso) => { const d = new Date(iso); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+const at = (k) => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d, 12); };
+const tile = (k) => at(k).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+const month = (k) => at(k).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+const clock = (iso) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+const zone = (iso) => new Intl.DateTimeFormat('en-US', { timeZoneName: 'short' }).formatToParts(new Date(iso)).find((p) => p.type === 'timeZoneName')?.value ?? '';
+const stamp = (iso) => `${tile(day(iso))}, ${clock(iso)} ${zone(iso)}`;
 const tagsOf = (e) => [...e.areas, ...(e.kind === 'fix' || e.kind === 'maintenance' ? [e.kind] : [])];
 
 /** The most important change of a day: what touches users or security first, bigger changes over small ones, dependency bumps last. */
@@ -81,6 +86,7 @@ export function ChangelogPage({ Go, repo }) {
             <label className="cl-toggle"><input type="checkbox" checked={deps} onChange={(e) => reset(setDeps)(e.target.checked)} /> Show dependency updates</label>
           </div>
           <p className="fine cl-count" role="status">{count} {count === 1 ? 'change' : 'changes'} on {days.length} {days.length === 1 ? 'day' : 'days'}{last ? <> · latest {tile(last)}</> : null}</p>
+          <p className="fine cl-tz">Times are shown in your time zone ({zone(log.generated)}). {log.generated ? <>Page updated <time dateTime={log.generated}>{stamp(log.generated)}</time>.</> : null}</p>
 
           {months.length === 0 ? <p className="fine">Nothing matches. Try another filter or clear the dates.</p> : months.map(({ m, days: list }) => (
             <section key={m} className="cl-month" aria-label={m}>
@@ -92,7 +98,7 @@ export function ChangelogPage({ Go, repo }) {
                   return (
                     <details key={d} className="cl-tile">
                       <summary>
-                        <time dateTime={d} className="cl-tdate">{tile(d)}{d === last && filter === 'all' && !from && !to ? <span className="cl-new">Latest</span> : null}</time>
+                        <time dateTime={d} className="cl-tdate">{tile(d)}<span className="cl-time">{clock(items[0].date)}</span>{d === last && filter === 'all' && !from && !to ? <span className="cl-new">Latest</span> : null}</time>
                         <span className="cl-head">{head.title}</span>
                         <span className="cl-meta"><Tags e={head} /><span>{more > 0 ? `+${more} more · ${items.length} changes` : '1 change'}</span></span>
                       </summary>
@@ -100,6 +106,7 @@ export function ChangelogPage({ Go, repo }) {
                         <ul>
                           {items.map((e) => (
                             <li key={e.sha}>
+                              <p className="cl-at"><time dateTime={e.date}>{clock(e.date)} {zone(e.date)}</time></p>
                               <h3>{e.title}</h3>
                               <Tags e={e} />
                               {e.summary ? <p className="cl-sum">{e.summary}</p> : null}

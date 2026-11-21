@@ -55,7 +55,8 @@ export function parse(record) {
   if (/secur|encrypt|\bsealed?\b|codeql|cryptograph|post-quantum|\baudit|privacy|hide my ip|\btor\b|kill switch|panic|cleartext|plain text|signing|signed/.test(text)) areas.push('security');
   if (/^site\b|landing page|website|\bsite:/i.test(title)) areas.push('site');
   const kind = /^bump |dependabot|dependency (bumps|updates)/i.test(title) ? 'maintenance' : /(^|[\s:(])(fix|fixes|fixed)\b/i.test(title) ? 'fix' : 'change';
-  return { sha, date, title, pr, summary, details, areas, kind };
+  // The moment in UTC: the page shows it in the visitor's own time zone.
+  return { sha, date: new Date(date).toISOString(), title, pr, summary, details, areas, kind };
 }
 
 let entries = null;

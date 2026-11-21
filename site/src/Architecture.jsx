@@ -143,7 +143,7 @@ function Graph() {
   const info = useRef({});
   const dot = useRef(null);
   const svg = useRef(null);
-  const panelRef = useRef(null);
+  const cardRef = useRef(null);
   const [sel, setSel] = useState('core');
   const [layer, setLayer] = useState(null);
   const [sc, setSc] = useState(0);
@@ -152,6 +152,8 @@ function Graph() {
   const [seen, setSeen] = useState(false);
   const [hold, setHold] = useState(false);
   const [pop, setPop] = useState(null);
+  const [modal, setModal] = useState(null); // { id, from: {x,y} of the clicked part }
+  const [closing, setClosing] = useState(false);
   const scenario = SCENARIOS[sc];
   const current = scenario.steps[step][0];
   const prev = step > 0 ? scenario.steps[step - 1][0] : null;
@@ -276,17 +278,43 @@ function Graph() {
     return () => cancelAnimationFrame(raf);
   }, [prev, current]);
 
-  const pick = (id) => {
+  const pick = (id, el) => {
     setSel(id);
     setPlay(false);
     setPop(id);
     setTimeout(() => setPop((p) => (p === id ? null : p)), 700);
-    const p = panelRef.current;
-    if (p && matchMedia('(max-width: 999px)').matches) requestAnimationFrame(() => p.scrollIntoView({ block: 'nearest', behavior: reduced() ? 'auto' : 'smooth' }));
+    const r = el?.getBoundingClientRect();
+    setClosing(false);
+    setModal({ id, from: r ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null });
   };
+  const closeModal = useCallback(() => {
+    if (reduced()) { setModal(null); return; }
+    setClosing(true);
+    setTimeout(() => { setModal(null); setClosing(false); }, 240);
+  }, []);
+  const openFrom = modal?.id;
+
+  // The card grows out of the part that was clicked: its transform origin is that part's centre.
+  useLayoutEffect(() => {
+    const c = cardRef.current;
+    if (!c || !modal?.from) return;
+    const r = c.getBoundingClientRect();
+    c.style.transformOrigin = `${(modal.from.x - r.left).toFixed(0)}px ${(modal.from.y - r.top).toFixed(0)}px`;
+  }, [openFrom]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!modal) return undefined;
+    const key = (e) => { if (e.key === 'Escape') closeModal(); };
+    addEventListener('keydown', key);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    cardRef.current?.querySelector('.close')?.focus();
+    return () => { removeEventListener('keydown', key); document.body.style.overflow = prevOverflow; };
+  }, [!!modal, closeModal]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const go = (i) => { setStep(i); setPlay(false); };
   const chooseScenario = (i) => { setSc(i); setStep(0); setPlay(true); };
-  const node = NODE[sel];
+  const node = NODE[modal?.id || sel];
   const linked = useMemo(() => new Set(PAIRS.filter(([a, b]) => a === sel || b === sel).flatMap(([a, b]) => [a, b])), [sel]);
   const visited = useMemo(() => new Set(scenario.steps.slice(0, step + 1).map((s) => s[0])), [scenario, step]);
 
@@ -328,7 +356,7 @@ function Graph() {
                     className={`arch-node${sel === n.id ? ' sel' : ''}${linked.has(n.id) && sel !== n.id ? ' linked' : ''}${current === n.id ? ' now' : ''}${visited.has(n.id) ? ' seen' : ''}${pop === n.id ? ' pop' : ''}`}
                     style={{ '--dur': `${4.6 + ((n.id.length * 7 + i * 3) % 9) * 0.35}s`, '--delay': `${-((n.id.charCodeAt(0) + i * 5) % 11) * 0.45}s` }}
                     aria-pressed={sel === n.id}
-                    onClick={() => pick(n.id)}
+                    onClick={(e) => pick(n.id, e.currentTarget)}
                   >
                     <strong>{n.label}</strong>
                     <span>{n.sub}</span>
@@ -339,20 +367,11 @@ function Graph() {
           ))}
         </div>
 
-        <aside className="arch-panel" ref={panelRef} aria-live="polite" aria-label="Details of the selected part">
-          <p className="eyebrow">{LAYERS.find((l) => l.id === node.layer)?.label}</p>
-          <h3>{node.label}</h3>
-          <p>{node.what}</p>
-          <ul>{node.facts.map((f) => <li key={f}>{f}</li>)}</ul>
-          <p className="where"><b>Where:</b> {node.where}</p>
-          <p className="limit"><b>Honest limit:</b> {node.limit}</p>
-        </aside>
       </div>
 
       <div className="arch-steps">
         <div className="arch-stepbar">
           <button type="button" className="round" aria-label="Previous step" onClick={() => go((step + scenario.steps.length - 1) % scenario.steps.length)}>←</button>
-          <button type="button" className="chip play" aria-pressed={play} onClick={() => setPlay(!play)}>{play ? 'Pause' : 'Play'}</button>
           <button type="button" className="round" aria-label="Next step" onClick={() => go((step + 1) % scenario.steps.length)}>→</button>
           <span className="arch-count">{scenario.title}: step {step + 1} of {scenario.steps.length}</span>
         </div>
@@ -364,6 +383,28 @@ function Graph() {
           ))}
         </ol>
       </div>
+
+      {modal && (
+        <div className={`arch-modal${closing ? ' out' : ''}`} onClick={closeModal}>
+          <aside className="arch-card" ref={cardRef} role="dialog" aria-modal="true" aria-label={node.label} style={{ '--h': LAYERS.find((l) => l.id === node.layer)?.hue }} onClick={(e) => e.stopPropagation()}>
+            <button type="button" className="close round" aria-label="Close" onClick={closeModal}>×</button>
+            <div key={node.id} className="card-in">
+              <p className="eyebrow">{LAYERS.find((l) => l.id === node.layer)?.label}</p>
+              <h3>{node.label}</h3>
+              <p>{node.what}</p>
+              <ul>{node.facts.map((f) => <li key={f}>{f}</li>)}</ul>
+              <p className="where"><b>Where:</b> {node.where}</p>
+              <p className="limit"><b>Honest limit:</b> {node.limit}</p>
+              <div className="hop">
+                <span>Connected to</span>
+                {[...linked].filter((id) => id !== node.id).map((id) => (
+                  <button key={id} type="button" className="chip" onClick={() => { setSel(id); setModal((m) => ({ ...m, id })); }}>{NODE[id].label}</button>
+                ))}
+              </div>
+            </div>
+          </aside>
+        </div>
+      )}
     </div>
   );
 }
@@ -419,7 +460,7 @@ function Timeline() {
           <button type="button" aria-expanded={open === i} aria-controls={`step-${i}`} onClick={() => setOpen(open === i ? -1 : i)}>
             <b>{i + 1}</b><span>{s.t}</span><i aria-hidden="true">{open === i ? '−' : '+'}</i>
           </button>
-          <div id={`step-${i}`} className="tl-body" hidden={open !== i}><p>{s.d}</p><p className="why"><b>Why:</b> {s.why}</p></div>
+          <div id={`step-${i}`} className="tl-wrap" inert={open !== i ? "" : undefined} aria-hidden={open !== i}><div className="tl-body"><p>{s.d}</p><p className="why"><b>Why:</b> {s.why}</p></div></div>
         </li>
       ))}
     </ol>
